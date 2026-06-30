@@ -7,11 +7,12 @@
     <style>
         :root {
             --bg-color: #0b0d10;
-            --card-bg: rgba(19, 23, 34, 0.85); /* Lekko prześwitujące karty */
+            --card-bg: rgba(19, 23, 34, 0.85);
             --card-border: #2a2e39;
             --accent-gold: #f3a63b;
             --accent-green: #00c087;
             --accent-red: #ff4d4d;
+            --accent-blue: #26a5e4;
             --text-main: #f0f2f5;
             --text-muted: #848e9c;
             --modal-overlay: rgba(0, 0, 0, 0.85);
@@ -26,8 +27,7 @@
 
         body {
             background-color: var(--bg-color);
-            /* NOWE TŁO Z PRZYCIEMNIENIEM */
-            background-image: linear-gradient(rgba(11, 13, 16, 0.80), rgba(11, 13, 16, 0.95)), url('50z3n.jpg');
+            background-image: linear-gradient(rgba(11, 13, 16, 0.85), rgba(11, 13, 16, 0.98)), url('50z3n.jpg');
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
@@ -42,24 +42,69 @@
             padding: 0 24px;
         }
 
-        /* Header */
+        /* Navigation Header */
         header {
-            padding: 30px 0;
-            border-bottom: 1px solid rgba(42, 46, 57, 0.5);
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(42, 46, 57, 0.4);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 99;
+            background: rgba(11, 13, 16, 0.7);
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .logo {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 800;
             letter-spacing: 2px;
             color: var(--text-main);
-            display: flex;
-            align-items: center;
-            gap: 10px;
         }
 
         .logo span {
             color: var(--accent-gold);
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-btn:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.05);
+        }
+
+        .nav-btn.active {
+            border-color: var(--accent-gold);
+            color: var(--accent-gold);
+            background: rgba(243, 166, 59, 0.05);
+        }
+
+        /* Pages control */
+        .page-content {
+            display: none;
+        }
+
+        .page-content.active {
+            display: block;
         }
 
         /* Hero Section */
@@ -105,7 +150,6 @@
             backdrop-filter: blur(5px);
         }
 
-        /* Main CTA Button */
         .btn-primary {
             display: inline-block;
             background-color: var(--accent-gold);
@@ -118,495 +162,363 @@
             cursor: pointer;
             transition: all 0.2s ease;
             box-shadow: 0 4px 15px rgba(243, 166, 59, 0.3);
-            text-decoration: none;
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(243, 166, 59, 0.5);
             background-color: #f4b356;
         }
 
-        /* Features Section */
-        .features {
-            padding: 60px 0;
-        }
-
+        /* Features */
+        .features { padding: 40px 0; }
         .section-title {
             font-size: 28px;
             font-weight: 700;
             text-align: center;
             margin-bottom: 40px;
             position: relative;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
         }
-
         .section-title::after {
-            content: '';
-            display: block;
-            width: 50px;
-            height: 3px;
-            background-color: var(--accent-gold);
-            margin: 10px auto 0 auto;
-            border-radius: 2px;
+            content: ''; display: block; width: 50px; height: 3px; background-color: var(--accent-gold); margin: 10px auto 0 auto;
         }
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+        .feature-card { background-color: var(--card-bg); border: 1px solid var(--card-border); padding: 30px; border-radius: 12px; backdrop-filter: blur(10px); }
+        .feature-card h3 { margin: 12px 0; color: #fff; }
 
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 24px;
-        }
+        /* Pricing */
+        .pricing { padding: 40px 0 80px 0; }
+        .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; max-width: 1000px; margin: 0 auto; }
+        .pricing-card { background-color: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 40px 30px; position: relative; display: flex; flex-direction: column; backdrop-filter: blur(10px); }
+        .pricing-card.featured { border-color: var(--accent-gold); }
+        .pricing-card.telecom { border-color: var(--accent-blue); }
+        .badge-premium { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); background-color: var(--accent-gold); color: #000; padding: 4px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+        .badge-telecom { background-color: var(--accent-blue); color: #fff; }
+        .pricing-card h3 { font-size: 20px; text-align: center; margin-bottom: 10px; }
+        .pricing-card .price { font-size: 32px; font-weight: 800; text-align: center; margin: 15px 0; color: #fff; }
+        .pricing-card .price span { font-size: 14px; color: var(--text-muted); font-weight: 400; }
+        .pricing-card .desc { font-size: 14px; color: var(--text-muted); text-align: center; margin-bottom: 25px; min-height: 50px; }
+        .pricing-list { list-style: none; margin-bottom: 30px; flex-grow: 1; }
+        .pricing-list li { font-size: 14px; margin-bottom: 10px; padding-left: 20px; position: relative; }
+        .pricing-list li::before { content: "✓"; position: absolute; left: 0; color: var(--accent-green); font-weight: 700; }
+        .btn-card { width: 100%; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; border: 1px solid var(--card-border); background: transparent; color: #fff; transition: all 0.2s ease; }
+        .pricing-card.featured .btn-card { background: var(--accent-gold); color: #000; border: none; }
+        .pricing-card.telecom .btn-card { background: var(--accent-blue); color: #fff; border: none; }
 
-        .feature-card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--card-border);
-            padding: 30px;
-            border-radius: 12px;
-            transition: border-color 0.2s ease;
-            backdrop-filter: blur(10px);
-        }
-
-        .feature-card:hover {
-            border-color: rgba(243, 166, 59, 0.4);
-        }
-
-        .feature-icon {
-            font-size: 28px;
-            margin-bottom: 16px;
-            display: inline-block;
-        }
-
-        .feature-card h3 {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 12px;
-            color: #fff;
-        }
-
-        .feature-card p {
-            font-size: 14px;
-            color: var(--text-muted);
-            line-height: 1.5;
-        }
-
-        /* Pricing Section */
-        .pricing {
-            padding: 60px 0 100px 0;
-        }
-
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 30px;
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        .pricing-card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
-            padding: 40px 30px;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            backdrop-filter: blur(10px);
-        }
-
-        .pricing-card.promo {
-            border-color: var(--accent-red);
-            box-shadow: 0 4px 25px rgba(255, 77, 77, 0.15);
-        }
-
-        .badge-premium {
-            position: absolute;
-            top: -15px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: var(--accent-gold);
-            color: #000;
-            padding: 4px 16px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            white-space: nowrap;
-        }
-
-        .badge-promo {
-            background-color: var(--accent-red);
-            color: #fff;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(255, 77, 77, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 77, 77, 0); }
-        }
-
-        .pricing-card h3 {
-            font-size: 22px;
-            margin-bottom: 10px;
-            text-align: center;
-        }
-
-        .pricing-card .price {
-            font-size: 32px;
-            font-weight: 800;
-            text-align: center;
-            color: #fff;
-            margin: 15px 0;
-        }
-
-        .pricing-card .price .old-price {
-            font-size: 18px;
-            color: var(--text-muted);
-            text-decoration: line-through;
-            font-weight: 500;
-            display: block;
-            margin-bottom: -5px;
-        }
-
-        .pricing-card .price span {
-            font-size: 16px;
-            color: var(--text-muted);
-            font-weight: 400;
-        }
-
-        .pricing-card .desc {
-            font-size: 14px;
-            color: var(--text-muted);
-            text-align: center;
-            margin-bottom: 25px;
-            min-height: 45px;
-        }
-
-        .pricing-list {
-            list-style: none;
-            margin-bottom: 30px;
-            flex-grow: 1;
-        }
-
-        .pricing-list li {
-            font-size: 14px;
-            margin-bottom: 12px;
-            position: relative;
-            padding-left: 24px;
-            color: var(--text-main);
-        }
-
-        .pricing-list li::before {
-            content: "✓";
-            position: absolute;
-            left: 0;
-            color: var(--accent-green);
-            font-weight: 700;
-        }
-
-        .pricing-card .btn-card {
-            background: transparent;
-            border: 1px solid var(--card-border);
-            color: var(--text-main);
-            padding: 12px;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            width: 100%;
-            transition: all 0.2s ease;
-            text-align: center;
-        }
-
-        .pricing-card.promo .btn-card {
-            background-color: var(--accent-red);
-            color: #fff;
-            border: none;
-        }
-
-        .pricing-card .btn-card:hover {
-            background-color: rgba(255, 255, 255, 0.05);
-            border-color: var(--text-muted);
-        }
-
-        .pricing-card.promo .btn-card:hover {
-            background-color: #e63939;
-            transform: translateY(-1px);
-        }
-
-        /* Footer */
-        footer {
-            text-align: center;
+        /* DASHBOARD STYLES */
+        .dashboard-container {
             padding: 40px 0;
-            border-top: 1px solid rgba(42, 46, 57, 0.5);
-            color: var(--text-muted);
-            font-size: 13px;
         }
-
-        footer a {
-            color: var(--text-muted);
-            text-decoration: underline;
-            cursor: pointer;
-        }
-
-        /* Modal Structure */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: var(--modal-overlay);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s ease;
-            padding: 20px;
-            backdrop-filter: blur(8px);
-        }
-
-        .modal-overlay.active {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .modal-box {
-            background-color: var(--card-bg);
+        .db-header-panel {
+            background: var(--card-bg);
             border: 1px solid var(--card-border);
-            width: 100%;
-            max-width: 650px;
-            max-height: 85vh;
-            border-radius: 16px;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            animation: slideUp 0.3s ease;
-        }
-
-        @keyframes slideUp {
-            from { transform: translateY(20px); }
-            to { transform: translateY(0); }
-        }
-
-        .modal-header {
-            padding: 20px 24px;
-            border-bottom: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            backdrop-filter: blur(10px);
         }
-
-        .modal-header h2 {
-            font-size: 18px;
-            font-weight: 700;
-            color: #fff;
-        }
-
-        .close-modal {
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            font-size: 22px;
-            cursor: pointer;
-        }
-
-        .close-modal:hover {
-            color: #fff;
-        }
-
-        .modal-body {
-            padding: 24px;
-            overflow-y: auto;
-            font-size: 14px;
-            color: var(--text-main);
-            border-bottom: 1px solid var(--card-border);
-        }
-
-        .modal-body h3 {
-            font-size: 15px;
-            margin: 20px 0 8px 0;
-            color: var(--accent-gold);
-        }
+        .user-info h2 { font-size: 22px; color: #fff; }
+        .user-info p { color: var(--text-muted); font-size: 14px; }
         
-        .modal-body h3:first-of-type {
-            margin-top: 0;
-        }
-
-        .modal-body p {
-            margin-bottom: 12px;
-            color: #cbd5e1;
-        }
-
-        .modal-body ul {
-            margin-bottom: 12px;
-            padding-left: 20px;
-            color: #cbd5e1;
-        }
-
-        .modal-footer {
-            padding: 20px 24px;
-            background-color: rgba(0,0,0,0.3);
-            border-bottom-left-radius: 16px;
-            border-bottom-right-radius: 16px;
-        }
-
-        .accept-container {
+        /* Status Indicator (Lampka) */
+        .status-box {
             display: flex;
-            align-items: flex-start;
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-
-        .accept-container input[type="checkbox"] {
-            margin-top: 4px;
-            width: 16px;
-            height: 16px;
-            accent-color: var(--accent-gold);
-            cursor: pointer;
-        }
-
-        .accept-container label {
-            font-size: 13px;
-            color: var(--text-muted);
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .accept-container label span {
-            color: #fff;
-        }
-
-        .btn-tg {
-            width: 100%;
-            background-color: #26a5e4;
-            color: #fff;
-            border: none;
-            padding: 14px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex;
-            justify-content: center;
             align-items: center;
-            gap: 8px;
-            transition: all 0.2s ease;
-            opacity: 0.5;
-            pointer-events: none;
+            gap: 12px;
+            background: rgba(0,0,0,0.3);
+            padding: 10px 20px;
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.05);
         }
+        .status-lamp {
+            width: 12px;
+            height: 12px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 10px var(--accent-green);
+            animation: blink 2s infinite;
+        }
+        @keyframes blink {
+            0% { opacity: 0.4; box-shadow: 0 0 4px var(--accent-green); }
+            50% { opacity: 1; box-shadow: 0 0 14px var(--accent-green); }
+            100% { opacity: 0.4; box-shadow: 0 0 4px var(--accent-green); }
+        }
+        .status-text { font-size: 14px; font-weight: 700; color: #fff; }
 
-        .btn-tg.enabled {
-            opacity: 1;
-            pointer-events: auto;
+        /* DB Grid layout */
+        .db-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
         }
+        @media (max-width: 900px) { .db-grid { grid-template-columns: 1fr; } }
 
-        .btn-tg.enabled:hover {
-            background-color: #1e94d2;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(38, 165, 228, 0.3);
+        .db-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
         }
+        .db-card h3 { font-size: 18px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; color: #fff; }
 
-        /* Responsive Breakpoints */
-        @media (max-width: 768px) {
-            .hero h1 { font-size: 32px; }
-            .hero p { font-size: 15px; }
-            .pricing-grid { grid-template-columns: 1fr; }
+        /* Info blocks inside Dashboard */
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
+        .info-label { color: var(--text-muted); }
+        .info-value { font-weight: 600; color: #fff; }
+        .info-value.active-status { color: var(--accent-green); }
+
+        /* Affiliate/Referral styles */
+        .referral-box {
+            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--card-border);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
         }
+        .referral-link { font-family: monospace; font-size: 13px; color: var(--accent-gold); word-break: break-all; }
+        .btn-copy { background: var(--card-border); border: none; color: #fff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; }
+        .btn-copy:hover { background: rgba(255,255,255,0.1); }
+        
+        .affiliate-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .stat-box { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; text-align: center; }
+        .stat-num { font-size: 24px; font-weight: 800; color: var(--accent-gold); }
+        .stat-num.green { color: var(--accent-green); }
+        .stat-label { font-size: 12px; color: var(--text-muted); }
+
+        /* Modals */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--modal-overlay); display: flex; justify-content: center; align-items: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; backdrop-filter: blur(8px); }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-box { background-color: #131722; border: 1px solid var(--card-border); width: 100%; max-width: 650px; max-height: 85vh; border-radius: 16px; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h2 { font-size: 18px; color: #fff; }
+        .close-modal { background: transparent; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; }
+        .modal-body { padding: 24px; overflow-y: auto; font-size: 14px; color: #cbd5e1; }
+        .modal-body h3 { font-size: 15px; margin: 20px 0 8px 0; color: var(--accent-gold); }
+        .modal-footer { padding: 20px 24px; background-color: rgba(0,0,0,0.3); border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
+        .accept-container { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+        .accept-container input[type="checkbox"] { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--accent-gold); cursor: pointer; }
+        .accept-container label { font-size: 13px; color: var(--text-muted); }
+        .btn-tg { width: 100%; background-color: #26a5e4; color: #fff; border: none; padding: 14px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; opacity: 0.5; pointer-events: none; }
+        .btn-tg.enabled { opacity: 1; pointer-events: auto; }
+
+        footer { text-align: center; padding: 40px 0; border-top: 1px solid rgba(42, 46, 57, 0.4); color: var(--text-muted); font-size: 13px; margin-top: 40px; }
+        footer a { color: var(--text-muted); text-decoration: underline; cursor: pointer; }
     </style>
 </head>
 <body>
 
+    <!-- Header Navigation -->
     <header>
-        <div class="container">
+        <div class="container header-container">
             <div class="logo">🏴‍☠️ CZARNA <span>PERŁA</span></div>
+            <div class="nav-tabs">
+                <button class="nav-btn active" onclick="switchPage('landing', this)">Strona Główna</button>
+                <button class="nav-btn" onclick="switchPage('dashboard', this)">Panel Inwestora</button>
+            </div>
         </div>
     </header>
 
-    <section class="hero">
-        <div class="container">
-            <div class="stats-badge-container">
-                <div class="stats-badge">WinRate > 80% na rynku rzeczywistym</div>
-                <div class="stats-badge">Niskie obsunięcia kapitału (Drawdown)</div>
+    <!-- PAGE 1: LANDING PAGE -->
+    <div id="landingPage" class="page-content active">
+        <section class="hero">
+            <div class="container">
+                <div class="stats-badge-container">
+                    <div class="stats-badge">WinRate > 80% na rynku rzeczywistym</div>
+                    <div class="stats-badge">Niskie obsunięcia kapitału (Drawdown)</div>
+                </div>
+                <h1>Twój kapitał pod pełną kontrolą algorytmu</h1>
+                <p>
+                    Większość detalicznych botów tradingowych przegrywa, bo opierają się na przestarzałych, sztywnych wskaźnikach. Czarna Perła to autorski system oparty na logice Smart Money Concepts (SMC) oraz analizie wolumenowej (CVD).
+                </p>
+                <button class="btn-primary" onclick="openTermsModal()">Dołącz do projektu</button>
             </div>
-            <h1>Twój kapitał pod pełną kontrolą algorytmu</h1>
-            <p>
-                Większość detalicznych botów tradingowych przegrywa, bo opierają się na przestarzałych, sztywnych wskaźnikach i generują potężne poślizgi cenowe. Czarna Perła to autorski, w pełni zautomatyzowany system tradingowy zaprojektowany do precyzyjnego pozycjonowania się na rynku przy użyciu logiki Smart Money Concepts (SMC) oraz analizy przepływu wolumenu (CVD).
-            </p>
-            <button class="btn-primary" onclick="openTermsModal()">Dołącz do projektu</button>
-        </div>
-    </section>
+        </section>
 
-    <section class="features">
-        <div class="container">
-            <h2 class="section-title">Dlaczego ten system generuje powtarzalny zysk?</h2>
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">🎯</div>
-                    <h3>Wielointerwałowa precyzja</h3>
-                    <p>Wejścia w pozycję na interwale 15-minutowym są restrykcyjnie filtrowane przez strukturę rynkową z wyższych ram czasowych (4H oraz 1D). Algorytm gra wyłącznie z głównym trendem.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
-                    <h3>Zero poślizgów cenowych (Slippage)</h3>
-                    <p>Bot nie goni rynku. System cierpliwie ustawia oczekujące zlecenia Limit w wyznaczonych strefach płynności i Order Blockach. Transakcja wykonuje się po idealnej cenie albo wcale.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">📈</div>
-                    <h3>Pełna skalowalność kapitału</h3>
-                    <p>System precyzyjnie przelicza ryzyko, dzięki czemu działa skutecznie na mikro-kapitale, jak i na dużych portfelach. Zlecenia Limit gwarantują zachowanie precyzji przy zwiększaniu depozytu.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🛡️</div>
-                    <h3>Żelazne zarządzanie ryzykiem</h3>
-                    <p>Strategia precyzyjnie ucina straty i bezwzględnie księguje wypracowany profit, zamykając 100% pozycji na wyznaczonym poziomie Take Profit (brak częściowych, niepewnych realizacji).</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="pricing">
-        <div class="container">
-            <h2 class="section-title">Wybierz model współpracy</h2>
-            <div class="pricing-grid">
-                
-                <!-- Pakiet Miesięczny -->
-                <div class="pricing-card">
-                    <h3>📈 PAKIET MIESIĘCZNY</h3>
-                    <div class="price">100$ <span>/ miesiąc</span></div>
-                    <div class="desc">Idealny na start, aby przetestować skuteczność algorytmu na własnym koncie. Odnawiasz, kiedy chcesz.</div>
-                    <ul class="pricing-list">
-                        <li>Dostęp do algorytmu na 30 dni</li>
-                        <li>Pełna konfiguracja techniczna na serwerze</li>
-                        <li>Dopasowanie parametrów ryzyka do portfela</li>
-                        <li>Brak prowizji od wygenerowanych zysków</li>
-                    </ul>
-                    <button class="btn-card" onclick="openTermsModal()">Wybierz Miesięczny</button>
-                </div>
-
-                <!-- Pakiet Roczny Promocja -->
-                <div class="pricing-card promo featured">
-                    <div class="badge-premium badge-promo">🔥 LIMIT 10 MIEJSC 🔥</div>
-                    <h3>💎 PAKIET ROCZNY (PROMOCJA)</h3>
-                    <div class="price">
-                        <span class="old-price">1200$</span>
-                        1000$ <span>/ rok</span>
+        <section class="features">
+            <div class="container">
+                <h2 class="section-title">Dlaczego ten system generuje powtarzalny zysk?</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">🎯</div>
+                        <h3>Wielointerwałowa precyzja</h3>
+                        <p>Wejścia w pozycję na interwale 15-minutowym są restrykcyjnie filtrowane przez strukturę rynkową z wyższych ram czasowych (4H oraz 1D).</p>
                     </div>
-                    <div class="desc">Pełna opieka "Pod Klucz" na 12 miesięcy. Oszczędzasz 200$. Dostępne tylko dla 10 pierwszych osób.</div>
-                    <ul class="pricing-list">
-                        <li>Dostęp do algorytmu na pełne 12 miesięcy</li>
-                        <li>Ciągły nadzór nad stabilnością środowiska</li>
-                        <li>Priorytetowe wsparcie techniczne</li>
-                        <li>Zintegrowane przez API Bitget (kapitał zostaje u Ciebie)</li>
-                    </ul>
-                    <button class="btn-card" onclick="openTermsModal()">Zarezerwuj Miejsce</button>
+                    <div class="feature-card">
+                        <div class="feature-icon">⚡</div>
+                        <h3>Zero poślizgów cenowych</h3>
+                        <p>Bot nie goni rynku. System ustawia oczekujące zlecenia Limit w wyznaczonych strefach płynności i Order Blockach.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🛡️</div>
+                        <h3>Zarządzanie ryzykiem</h3>
+                        <p>Strategia precyzyjnie ucina straty i bezwzględnie realizuje wyznaczony cel, zamykając 100% pozycji na poziomie Take Profit.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="pricing">
+            <div class="container">
+                <h2 class="section-title">Wybierz model współpracy</h2>
+                <div class="pricing-grid">
+                    
+                    <!-- Pakiet Telecom Promocja -->
+                    <div class="pricing-card telecom">
+                        <div class="badge-premium badge-telecom">🔥 PROMOCJA SIECIOWA 🔥</div>
+                        <h3>📱 SUBSKRYPCJA STARTOWA</h3>
+                        <div class="price">1. miesiąc 0$ <span>następnie 50$ / mc</span></div>
+                        <div class="desc">Promocja wzorowana na operatorach komórkowych. Testujesz pełną wersję zupełnie za darmo!</div>
+                        <ul class="pricing-list">
+                            <li><strong>Pierwszy miesiąc całkowicie GRATIS (0$)</strong></li>
+                            <li>Kolejne 3 miesiące z rabatem **-50%** (tylko 50$/mc)</li>
+                            <li>Standardowa cena 100$/mc wchodzi dopiero od 5. miesiąca</li>
+                            <li>Pełna automatyzacja na giełdzie przez klucze API</li>
+                            <li>Możliwość rezygnacji w dowolnym momencie</li>
+                        </ul>
+                        <button class="btn-card" onclick="openTermsModal()">Aktywuj promocję</button>
+                    </div>
+
+                    <!-- Pakiet Roczny -->
+                    <div class="pricing-card featured">
+                        <div class="badge-premium">🔥 LIMIT 10 MIEJSC 🔥</div>
+                        <h3>💎 PAKIET ROCZNY (PROMO)</h3>
+                        <div class="price"><span style="font-size:18px; text-decoration:line-through; color:var(--text-muted);">1200$</span> 1000$ <span>/ rok</span></div>
+                        <div class="desc">Pełna roczna licencja "Pod Klucz" bez prowizji od zysków. Oszczędzasz najwięcej.</div>
+                        <ul class="pricing-list">
+                            <li>Dostęp do algorytmu na pełne 12 miesięcy</li>
+                            <li>Pełna konfiguracja techniczna i nadzór nad serwerem</li>
+                            <li>Indywidualne dopasowanie parametrów zarządzania ryzykiem</li>
+                            <li>Zintegrowane z Bitget (kapitał cały czas na Twoim koncie)</li>
+                        </ul>
+                        <button class="btn-card" onclick="openTermsModal()">Zarezerwuj roczny</button>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- PAGE 2: USER DASHBOARD -->
+    <div id="dashboardPage" class="page-content">
+        <div class="container dashboard-container">
+            
+            <!-- Panel główny użytkownika -->
+            <div class="db-header-panel">
+                <div class="user-info">
+                    <h2>Witaj w Panelu Inwestora</h2>
+                    <p>Zarządzaj swoimi licencjami i śledź status połączenia bota.</p>
+                </div>
+                <div class="status-box">
+                    <span class="status-lamp"></span>
+                    <span class="status-text">BOT STATUS: AKTYWNY</span>
+                </div>
+            </div>
+
+            <div class="db-grid">
+                <!-- Lewa kolumna: Subskrypcje i zakup -->
+                <div>
+                    <div class="db-card">
+                        <h3>Twoja aktywna licencja</h3>
+                        <div class="info-row">
+                            <span class="info-label">Aktualny plan:</span>
+                            <span class="info-value" style="color:var(--accent-blue);">Subskrypcja Startowa (Promocja)</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Status rozliczenia:</span>
+                            <span class="info-value">Okres darmowy (1. miesiąc Gratis)</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Giełda docelowa:</span>
+                            <span class="info-value">Bitget (API)</span>
+                        </div>
+                        <div class="info-row" style="margin-top: 20px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.05);">
+                            <span class="info-label" style="font-weight: 700;">Wygaśnięcie subskrypcji:</span>
+                            <span class="info-value" style="color:var(--accent-red); font-weight:700;">30.07.2026 (za 30 dni)</span>
+                        </div>
+                    </div>
+
+                    <div class="db-card">
+                        <h3>Przedłuż abonament lub kup nowy pakiet</h3>
+                        <p style="font-size:14px; color:var(--text-muted); margin-bottom: 20px;">Wybierz pakiet poniżej, aby automatycznie przedłużyć działanie bota bez przerw w tradingu.</p>
+                        <div class="pricing-grid" style="grid-template-columns: 1fr 1fr; gap:20px;">
+                            <div class="pricing-card" style="padding: 20px;">
+                                <h4 style="color:#fff; text-align:center;">Odnowienie Miesięczne</h4>
+                                <div class="price" style="font-size: 24px; margin: 10px 0;">100$ <span>/ mc</span></div>
+                                <button class="btn-card" onclick="openTermsModal()" style="font-size:13px; padding:8px;">Kup Abonament</button>
+                            </div>
+                            <div class="pricing-card featured" style="padding: 20px;">
+                                <h4 style="color:var(--accent-gold); text-align:center;">Licencja Roczna VIP</h4>
+                                <div class="price" style="font-size: 24px; margin: 10px 0;">1000$ <span>/ rok</span></div>
+                                <button class="btn-card" onclick="openTermsModal()" style="font-size:13px; padding:8px;">Kup Pakiet Roczny</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
+                <!-- Prawa kolumna: Giełda i Afiliacja -->
+                <div>
+                    <!-- Lampka połączenia z giełdą -->
+                    <div class="db-card">
+                        <h3>Połączenie z giełdą</h3>
+                        <div class="info-row">
+                            <span class="info-label">Połączenie Bitget:</span>
+                            <span class="info-value active-status" style="display:flex; align-items:center; gap:6px;">
+                                <span class="status-lamp" style="animation:none; width:8px; height:8px;"></span> POŁĄCZONO
+                            </span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Klucz API:</span>
+                            <span class="info-value" style="font-family: monospace;">msliw..._czp</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Ograniczenie wypłat:</span>
+                            <span class="info-value" style="color:var(--accent-green);">WŁĄCZONE (Bezpieczny)</span>
+                        </div>
+                    </div>
+
+                    <!-- Program poleceń -->
+                    <div class="db-card">
+                        <h3>Zarabiaj przez polecanie (Dożywotnie 15%)</h3>
+                        <p style="font-size:13px; color:var(--text-muted); margin-bottom: 10px;">Zaproś znajomych do bota. Otrzymasz 15% z każdej ich wpłaty abonamentowej tak długo, jak korzystają z systemu!</p>
+                        
+                        <label style="font-size:12px; color:var(--text-muted);">Twój link polecający:</label>
+                        <div class="referral-box">
+                            <span class="referral-link" id="refLink">https://czarnaperla.bot/?ref=user610</span>
+                            <button class="btn-copy" onclick="copyRefLink()">Kopiuj</button>
+                        </div>
+
+                        <div class="affiliate-stats">
+                            <div class="stat-box">
+                                <div class="stat-num">4</div>
+                                <div class="stat-label">Poleconych osób</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-num green">150$</div>
+                                <div class="stat-label">Suma prowizji</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
+
         </div>
-    </section>
+    </div>
 
     <footer>
         <div class="container">
@@ -624,56 +536,31 @@
             </div>
             <div class="modal-body">
                 <p style="font-weight: bold; text-align: center; margin-bottom: 20px;">REGULAMIN KORZYSTANIA Z CRYPTO BOTA „CZARNA PERŁA”</p>
-                
                 <h3>§ 1 Postanowienia ogólne</h3>
                 <p>1. Niniejszy Regulamin określa zasady korzystania z Crypto Bota „Czarna Perła” (zwany dalej „Botem”).</p>
                 <p>2. Właścicielem i operatorem Bota jest Kapitan Mateusz.</p>
                 <p>3. Korzystanie z Bota jest równoznaczne z akceptacją niniejszego Regulaminu.</p>
-
                 <h3>§ 2 Definicje</h3>
                 <ul>
                     <li><strong>Bot</strong> – automatyczne narzędzie do analizy rynku kryptowalut o nazwie „Czarna Perła”.</li>
                     <li><strong>Użytkownik</strong> – osoba fizyczna korzystająca z Bota.</li>
                     <li><strong>Konto</strong> – konto na giełdzie kryptowalut, do którego Użytkownik podłącza Bota (jeśli dotyczy).</li>
                 </ul>
-
                 <h3>§ 3 Zasady korzystania</h3>
                 <p>1. Bot ma charakter wyłącznie informacyjno-edukacyjny i demonstracyjny.</p>
-                <p>2. Bot nie gwarantuje zysków i nie jest narzędziem do automatycznego tradingu (chyba że wyraźnie zaznaczysz inaczej).</p>
+                <p>2. Bot nie gwarantuje zysków i nie jest narzędziem do automatycznego tradingu.</p>
                 <p>3. Użytkownik korzysta z Bota wyłącznie na własne ryzyko.</p>
-                <p>4. Zabronione jest:</p>
-                <ul>
-                    <li>używanie Bota w sposób niezgodny z prawem,</li>
-                    <li>próby odwrócenia inżynierii, kopiowania kodu lub ingerencji w działanie Bota,</li>
-                    <li>udostępnianie Bota osobom trzecim bez zgody Operatora.</li>
-                </ul>
-
                 <h3>§ 4 Ograniczenie odpowiedzialności</h3>
-                <p><strong>Niniejszym oświadczam, że:</strong></p>
-                <ul>
-                    <li>Nie ponoszę żadnych kosztów związanych z korzystaniem z Bota.</li>
-                    <li>Nie odpowiadam za żadne straty finansowe, utratę kapitału, szkody bezpośrednie ani pośrednie poniesione przez Użytkownika w wyniku korzystania z Bota.</li>
-                    <li>Bot nie stanowi porady inwestycyjnej, rekomendacji ani oferty w rozumieniu prawa.</li>
-                    <li>Handel kryptowalutami niesie bardzo wysokie ryzyko utraty kapitału.</li>
-                </ul>
-
-                <h3>§ 5 Dane osobowe</h3>
-                <p>1. Bot nie zbiera ani nie przechowuje danych osobowych Użytkownika (jeśli nie podłączysz API kluczy – wtedy klucze są przechowywane tylko lokalnie lub na Twoim koncie).</p>
-                <p>2. Użytkownik ponosi pełną odpowiedzialność za bezpieczeństwo swoich kluczy API.</p>
-
-                <h3>§ 6 Postanowienia końcowe</h3>
-                <p>1. Regulamin może zostać zmieniony w każdym czasie. Aktualna wersja jest zawsze dostępna przy Bocie.</p>
-                <p>2. W sprawach nieuregulowanych niniejszym Regulaminem stosuje się odpowiednie przepisy prawa polskiego.</p>
-                <p>3. Wszelkie spory będą rozstrzygane polubownie, a w razie braku porozumienia – przez sąd właściwy dla siedziby Operatora.</p>
+                <p>• Nie odpowiadam za żadne straty finansowe poniesione przez Użytkownika w wyniku korzystania z Bota.</p>
+                <p>• Bot nie stanowi porady inwestycyjnej, rekomendacji ani oferty w rozumieniu prawa.</p>
                 <p style="margin-top: 15px; font-weight: bold;">Data wejścia w życie: 30.06.2026</p>
             </div>
             <div class="modal-footer">
                 <div class="accept-container">
                     <input type="checkbox" id="acceptCheckbox" onchange="toggleTgButton()">
-                    <label heavyweight for="acceptCheckbox">Oświadczam, że przeczytałem(-am) i w pełni akceptuję postanowienia regulaminu bota <span>„Czarna Perła”</span> oraz chcę przejść do aplikacji Telegram.</label>
+                    <label for="acceptCheckbox">Oświadczam, że przeczytałem(-am) i w pełni akceptuję postanowienia regulaminu bota <span>„Czarna Perła”</span> oraz chcę przejść do aplikacji Telegram.</label>
                 </div>
                 <button class="btn-tg" id="tgButton" onclick="redirectToTelegram()">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="fill: currentColor;"><path d="M21.147 2.007a2.122 2.122 0 0 0-2.146-.073l-16.5 7.5a2.115 2.115 0 0 0-.056 3.842l3.935 1.747 2.114 6.342a2.118 2.118 0 0 0 3.702.528l2.67-3.56 4.316 3.19a2.11 2.11 0 0 0 3.298-1.406l3-15.5a2.118 2.118 0 0 0-2.332-2.61z"/></svg>
                     Przejdź do Telegrama
                 </button>
             </div>
@@ -682,6 +569,19 @@
 
     <script>
         const TELEGRAM_LINK = "https://t.me/+QumQey-BSYNkYTlk";
+
+        // Funkcja do przełączania stron zakładkami
+        function switchPage(pageName, btn) {
+            document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            
+            if(pageName === 'landing') {
+                document.getElementById('landingPage').classList.add('active');
+            } else if(pageName === 'dashboard') {
+                document.getElementById('dashboardPage').classList.add('active');
+            }
+            btn.classList.add('active');
+        }
 
         function openTermsModal() {
             document.getElementById('termsModal').classList.add('active');
@@ -709,6 +609,12 @@
                 window.open(TELEGRAM_LINK, '_blank');
                 closeTermsModal();
             }
+        }
+
+        function copyRefLink() {
+            const linkText = document.getElementById('refLink').innerText;
+            navigator.clipboard.writeText(linkText);
+            alert("Link polecający skopiowany do schowka!");
         }
 
         document.getElementById('termsModal').addEventListener('click', function(e) {
