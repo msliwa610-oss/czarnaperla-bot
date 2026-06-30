@@ -1,5 +1,4 @@
-[index.html](https://github.com/user-attachments/files/29517133/index.html)
-# czarnaperla-bot<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
@@ -12,6 +11,7 @@
             --card-border: #2a2e39;
             --accent-gold: #f3a63b;
             --accent-green: #00c087;
+            --accent-red: #ff4d4d;
             --text-main: #f0f2f5;
             --text-muted: #848e9c;
             --modal-overlay: rgba(0, 0, 0, 0.85);
@@ -203,9 +203,9 @@
             flex-direction: column;
         }
 
-        .pricing-card.featured {
-            border-color: var(--accent-gold);
-            box-shadow: 0 4px 25px rgba(243, 166, 59, 0.1);
+        .pricing-card.promo {
+            border-color: var(--accent-red);
+            box-shadow: 0 4px 25px rgba(255, 77, 77, 0.15);
         }
 
         .badge-premium {
@@ -221,6 +221,19 @@
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 1px;
+            white-space: nowrap;
+        }
+
+        .badge-promo {
+            background-color: var(--accent-red);
+            color: #fff;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 77, 77, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 77, 77, 0); }
         }
 
         .pricing-card h3 {
@@ -235,6 +248,15 @@
             text-align: center;
             color: #fff;
             margin: 15px 0;
+        }
+
+        .pricing-card .price .old-price {
+            font-size: 18px;
+            color: var(--text-muted);
+            text-decoration: line-through;
+            font-weight: 500;
+            display: block;
+            margin-bottom: -5px;
         }
 
         .pricing-card .price span {
@@ -286,9 +308,9 @@
             text-align: center;
         }
 
-        .pricing-card.featured .btn-card {
-            background-color: var(--accent-gold);
-            color: #000;
+        .pricing-card.promo .btn-card {
+            background-color: var(--accent-red);
+            color: #fff;
             border: none;
         }
 
@@ -297,8 +319,8 @@
             border-color: var(--text-muted);
         }
 
-        .pricing-card.featured .btn-card:hover {
-            background-color: #f4b356;
+        .pricing-card.promo .btn-card:hover {
+            background-color: #e63939;
             transform: translateY(-1px);
         }
 
@@ -538,36 +560,37 @@
         <div class="container">
             <h2 class="section-title">Wybierz model współpracy</h2>
             <div class="pricing-grid">
-                <!-- Pakiet Premium -->
-                <div class="pricing-card featured">
-                    <div class="badge-premium">Najwyższa wygoda</div>
-                    <h3>💎 PAKIET PREMIUM</h3>
-                    <div class="price">2500$ <span>/ rok</span></div>
-                    <div class="desc">Pełna opieka "Pod Klucz" dla inwestorów ceniących czas. Brak ukrytych opłat i prowizji od zysków.</div>
+                
+                <div class="pricing-card">
+                    <h3>📈 PAKIET MIESIĘCZNY</h3>
+                    <div class="price">100$ <span>/ miesiąc</span></div>
+                    <div class="desc">Idealny na start, aby przetestować skuteczność algorytmu na własnym koncie. Odnawiasz, kiedy chcesz.</div>
                     <ul class="pricing-list">
-                        <li>Dostęp do algorytmu na pełne 12 miesięcy</li>
-                        <li>Pełna konfiguracja techniczna na bezpiecznym, dedykowanym serwerze</li>
-                        <li>Indywidualne dopasowanie parametrów ryzyka do wielkości portfela</li>
-                        <li>Ciągły nadzór nad stabilnością środowiska i połączenia</li>
-                        <li>Zintegrowane przez API Bitget (kapitał zostaje u Ciebie)</li>
+                        <li>Dostęp do algorytmu na 30 dni</li>
+                        <li>Pełna konfiguracja techniczna na serwerze</li>
+                        <li>Dopasowanie parametrów ryzyka do portfela</li>
+                        <li>Brak prowizji od wygenerowanych zysków</li>
                     </ul>
-                    <button class="btn-card" onclick="openTermsModal()">Wybierz Premium</button>
+                    <button class="btn-card" onclick="openTermsModal()">Wybierz Miesięczny</button>
                 </div>
 
-                <!-- Model Partnerski -->
-                <div class="pricing-card">
-                    <h3>🤝 MODEL PARTNERSKI</h3>
-                    <div class="price">500$ <span>/ rok + 25% Profit-Share</span></div>
-                    <div class="desc">Oferta zamknięta – wyłącznie dla znajomych i osób z zaufanego otoczenia. Współpraca oparta na wynikach.</div>
+                <div class="pricing-card promo featured">
+                    <div class="badge-premium badge-promo">🔥 LIMIT 10 MIEJSC 🔥</div>
+                    <h3>💎 PAKIET ROCZNY (PROMOCJA)</h3>
+                    <div class="price">
+                        <span class="old-price">1200$</span>
+                        1000$ <span>/ rok</span>
+                    </div>
+                    <div class="desc">Pełna opieka "Pod Klucz" na 12 miesięcy. Oszczędzasz 200$. Dostępne tylko dla 10 pierwszych osób.</div>
                     <ul class="pricing-list">
-                        <li>Możliwość startu od dowolnego, nawet najmniejszego depozytu</li>
-                        <li>Podpięcie kapitału pod dedykowaną, gotową infrastrukturę bota</li>
-                        <li>Opłata aktywacyjna pokrywa jedynie koszty wdrożenia i serwera</li>
-                        <li>Pobieram 25% wyłącznie od czystego zysku wygenerowanego przez bota</li>
-                        <li>Pełna przejrzystość wyników – zarabiasz Ty, zarabiam ja</li>
+                        <li>Dostęp do algorytmu na pełne 12 miesięcy</li>
+                        <li>Ciągły nadzór nad stabilnością środowiska</li>
+                        <li>Priorytetowe wsparcie techniczne</li>
+                        <li>Zintegrowane przez API Bitget (kapitał zostaje u Ciebie)</li>
                     </ul>
-                    <button class="btn-card" onclick="openTermsModal()">Aplikuj do modelu</button>
+                    <button class="btn-card" onclick="openTermsModal()">Zarezerwuj Miejsce</button>
                 </div>
+
             </div>
         </div>
     </section>
@@ -579,7 +602,6 @@
         </div>
     </footer>
 
-    <!-- Terms of Service Modal -->
     <div class="modal-overlay" id="termsModal">
         <div class="modal-box">
             <div class="modal-header">
@@ -636,7 +658,6 @@
                     <input type="checkbox" id="acceptCheckbox" onchange="toggleTgButton()">
                     <label heavyweight for="acceptCheckbox">Oświadczam, że przeczytałem(-am) i w pełni akceptuję postanowienia regulaminu bota <span>„Czarna Perła”</span> oraz chcę przejść do aplikacji Telegram.</label>
                 </div>
-                <!-- ZMIEŃ TUTAJ LINK DO TWOJEGO TELEGRAMA -->
                 <button class="btn-tg" id="tgButton" onclick="redirectToTelegram()">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="fill: currentColor;"><path d="M21.147 2.007a2.122 2.122 0 0 0-2.146-.073l-16.5 7.5a2.115 2.115 0 0 0-.056 3.842l3.935 1.747 2.114 6.342a2.118 2.118 0 0 0 3.702.528l2.67-3.56 4.316 3.19a2.11 2.11 0 0 0 3.298-1.406l3-15.5a2.118 2.118 0 0 0-2.332-2.61z"/></svg>
                     Przejdź do Telegrama
@@ -646,7 +667,6 @@
     </div>
 
     <script>
-        // TUTAJ WPISZ SWÓJ LINK DO TELEGRAMA (np. link do profilu lub grupy)
         const TELEGRAM_LINK = "https://t.me/+QumQey-BSYNkYTlk";
 
         function openTermsModal() {
@@ -677,7 +697,6 @@
             }
         }
 
-        // Zamknięcie modala po kliknięciu poza ramkę
         document.getElementById('termsModal').addEventListener('click', function(e) {
             if(e.target === this) {
                 closeTermsModal();
