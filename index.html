@@ -36,145 +36,45 @@
             overflow-x: hidden;
         }
 
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 0 24px;
-        }
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 
         /* Navigation Header */
-        header {
-            padding: 20px 0;
-            border-bottom: 1px solid rgba(42, 46, 57, 0.4);
-            backdrop-filter: blur(10px);
-            position: sticky;
-            top: 0;
-            z-index: 99;
-            background: rgba(11, 13, 16, 0.7);
-        }
+        header { padding: 20px 0; border-bottom: 1px solid rgba(42, 46, 57, 0.4); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 99; background: rgba(11, 13, 16, 0.7); }
+        .header-container { display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 22px; font-weight: 800; letter-spacing: 2px; color: var(--text-main); }
+        .logo span { color: var(--accent-gold); }
+        .nav-tabs { display: flex; gap: 10px; }
+        .nav-btn { background: transparent; border: 1px solid transparent; color: var(--text-muted); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s ease; }
+        .nav-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+        .nav-btn.active { border-color: var(--accent-gold); color: var(--accent-gold); background: rgba(243, 166, 59, 0.05); }
 
-        .header-container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .logo {
-            font-size: 22px;
-            font-weight: 800;
-            letter-spacing: 2px;
-            color: var(--text-main);
-        }
-
-        .logo span {
-            color: var(--accent-gold);
-        }
-
-        .nav-tabs {
-            display: flex;
-            gap: 10px;
-        }
-
-        .nav-btn {
-            background: transparent;
-            border: 1px solid transparent;
-            color: var(--text-muted);
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 14px;
-            transition: all 0.2s ease;
-        }
-
-        .nav-btn:hover {
-            color: #fff;
-            background: rgba(255,255,255,0.05);
-        }
-
-        .nav-btn.active {
-            border-color: var(--accent-gold);
-            color: var(--accent-gold);
-            background: rgba(243, 166, 59, 0.05);
-        }
-
-        /* Pages control */
-        .page-content {
-            display: none;
-        }
-
-        .page-content.active {
-            display: block;
-        }
+        .page-content { display: none; }
+        .page-content.active { display: block; }
 
         /* Hero Section */
-        .hero {
-            padding: 80px 0 60px 0;
-            text-align: center;
-        }
-
-        .hero h1 {
-            font-size: 42px;
-            font-weight: 800;
-            line-height: 1.2;
-            margin-bottom: 20px;
-            background: linear-gradient(135deg, #fff 0%, var(--accent-gold) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .hero p {
-            font-size: 18px;
-            color: #cbd5e1;
-            max-width: 800px;
-            margin: 0 auto 40px auto;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-        }
-
-        .stats-badge-container {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            flex-wrap: wrap;
-            margin-bottom: 40px;
-        }
-
-        .stats-badge {
-            background: rgba(0, 192, 135, 0.15);
-            border: 1px solid var(--accent-green);
-            color: var(--accent-green);
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 14px;
-            backdrop-filter: blur(5px);
-        }
+        .hero { padding: 80px 0 60px 0; text-align: center; }
+        .hero h1 { font-size: 42px; font-weight: 800; line-height: 1.2; margin-bottom: 20px; background: linear-gradient(135deg, #fff 0%, var(--accent-gold) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .hero p { font-size: 18px; color: #cbd5e1; max-width: 800px; margin: 0 auto 40px auto; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+        .stats-badge-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 40px; }
+        .stats-badge { background: rgba(0, 192, 135, 0.15); border: 1px solid var(--accent-green); color: var(--accent-green); padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 14px; backdrop-filter: blur(5px); }
 
         /* Features */
         .features { padding: 40px 0; }
-        .section-title {
-            font-size: 28px;
-            font-weight: 700;
-            text-align: center;
-            margin-bottom: 40px;
-            position: relative;
-        }
-        .section-title::after {
-            content: ''; display: block; width: 50px; height: 3px; background-color: var(--accent-gold); margin: 10px auto 0 auto;
-        }
+        .section-title { font-size: 28px; font-weight: 700; text-align: center; margin-bottom: 40px; position: relative; }
+        .section-title::after { content: ''; display: block; width: 50px; height: 3px; background-color: var(--accent-gold); margin: 10px auto 0 auto; }
         .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
         .feature-card { background-color: var(--card-bg); border: 1px solid var(--card-border); padding: 30px; border-radius: 12px; backdrop-filter: blur(10px); }
-        .feature-card h3 { margin: 12px 0; color: #fff; }
         .feature-icon { font-size: 28px; margin-bottom: 16px; display: inline-block; }
+        .feature-card h3 { font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #fff; }
         .feature-card p { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
 
         /* Pricing */
         .pricing { padding: 40px 0 80px 0; }
         .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; max-width: 1000px; margin: 0 auto; }
         .pricing-card { background-color: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 40px 30px; position: relative; display: flex; flex-direction: column; backdrop-filter: blur(10px); }
-        .pricing-card.featured { border-color: var(--accent-gold); }
+        .pricing-card.featured { border-color: var(--accent-gold); box-shadow: 0 4px 25px rgba(243, 166, 59, 0.1); }
         .pricing-card.telecom { border-color: var(--accent-blue); }
-        .badge-premium { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); background-color: var(--accent-gold); color: #000; padding: 4px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
+        .badge-premium { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); background-color: var(--accent-gold); color: #000; padding: 4px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; white-space: nowrap;}
         .badge-telecom { background-color: var(--accent-blue); color: #fff; }
         .pricing-card h3 { font-size: 20px; text-align: center; margin-bottom: 10px; }
         .pricing-card .price { font-size: 32px; font-weight: 800; text-align: center; margin: 15px 0; color: #fff; }
@@ -182,14 +82,13 @@
         .pricing-card .price span { font-size: 14px; color: var(--text-muted); font-weight: 400; }
         .pricing-card .desc { font-size: 14px; color: var(--text-muted); text-align: center; margin-bottom: 25px; min-height: 50px; }
         .pricing-list { list-style: none; margin-bottom: 30px; flex-grow: 1; }
-        .pricing-list li { font-size: 14px; margin-bottom: 10px; padding-left: 20px; position: relative; color: var(--text-main); }
+        .pricing-list li { font-size: 14px; margin-bottom: 10px; padding-left: 20px; position: relative; }
         .pricing-list li::before { content: "✓"; position: absolute; left: 0; color: var(--accent-green); font-weight: 700; }
         .btn-card { width: 100%; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; border: 1px solid var(--card-border); background: transparent; color: #fff; transition: all 0.2s ease; text-align: center; }
         .pricing-card.featured .btn-card { background: var(--accent-gold); color: #000; border: none; }
         .pricing-card.telecom .btn-card { background: var(--accent-blue); color: #fff; border: none; }
         .pricing-card .btn-card:hover { background-color: rgba(255, 255, 255, 0.05); border-color: var(--text-muted); }
         .pricing-card.featured .btn-card:hover { background-color: #f4b356; transform: translateY(-1px); }
-        .pricing-card.telecom .btn-card:hover { background-color: #1e94d2; transform: translateY(-1px); }
 
         /* DASHBOARD STYLES */
         .dashboard-container { padding: 40px 0; }
@@ -230,20 +129,14 @@
         .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; }
         .modal-header h2 { font-size: 18px; color: #fff; }
         .close-modal { background: transparent; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; }
-        .close-modal:hover { color: #fff; }
         .modal-body { padding: 24px; overflow-y: auto; font-size: 14px; color: #cbd5e1; }
         .modal-body h3 { font-size: 15px; margin: 20px 0 8px 0; color: var(--accent-gold); }
-        .modal-body h3:first-of-type { margin-top: 0; }
-        .modal-body p, .modal-body ul { margin-bottom: 12px; }
-        .modal-body ul { padding-left: 20px; }
         .modal-footer { padding: 20px 24px; background-color: rgba(0,0,0,0.3); border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
         .accept-container { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
         .accept-container input[type="checkbox"] { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--accent-gold); cursor: pointer; }
-        .accept-container label { font-size: 13px; color: var(--text-muted); cursor: pointer; user-select: none; }
-        .accept-container label span { color: #fff; }
-        .btn-tg { width: 100%; background-color: #26a5e4; color: #fff; border: none; padding: 14px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; opacity: 0.5; pointer-events: none; transition: all 0.2s ease; }
+        .accept-container label { font-size: 13px; color: var(--text-muted); }
+        .btn-tg { width: 100%; background-color: #26a5e4; color: #fff; border: none; padding: 14px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; opacity: 0.5; pointer-events: none; }
         .btn-tg.enabled { opacity: 1; pointer-events: auto; }
-        .btn-tg.enabled:hover { background-color: #1e94d2; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(38, 165, 228, 0.3); }
 
         footer { text-align: center; padding: 40px 0; border-top: 1px solid rgba(42, 46, 57, 0.4); color: var(--text-muted); font-size: 13px; margin-top: 40px; }
         footer a { color: var(--text-muted); text-decoration: underline; cursor: pointer; }
@@ -251,6 +144,7 @@
 </head>
 <body>
 
+    <!-- Header Navigation -->
     <header>
         <div class="container header-container">
             <div class="logo">🏴‍☠️ CZARNA <span>PERŁA</span></div>
@@ -261,6 +155,7 @@
         </div>
     </header>
 
+    <!-- PAGE 1: LANDING PAGE -->
     <div id="landingPage" class="page-content active">
         <section class="hero">
             <div class="container">
@@ -270,9 +165,10 @@
                 </div>
                 <h1>Twój kapitał pod pełną kontrolą algorytmu</h1>
                 <p>
-                    Większość detalicznych botów tradingowych przegrywa, bo opierają się na przestarzałych, sztywnych wskaźnikach. Czarna Perła to autorski system oparty na logice Smart Money Concepts (SMC) oraz zaawansowanej analizie wolumenowej (CVD).
+                    Większość detalicznych botów tradingowych przegrywa, bo opierają się na przestarzałych, sztywnych wskaźnikach. Czarna Perła to autorski system oparty na logice Smart Money Concepts (SMC) oraz analizie wolumenowej (CVD).
                 </p>
                 
+                <!-- TUTAJ JEST DODANY WIDGET TELEGRAMA (Nazwa bota wpisana) -->
                 <script async src="https://telegram.org/js/telegram-widget.js?22" 
                         data-telegram-login="czarna_perla_auth_bot" 
                         data-size="large" 
@@ -290,17 +186,17 @@
                     <div class="feature-card">
                         <div class="feature-icon">🎯</div>
                         <h3>Wielointerwałowa precyzja</h3>
-                        <p>Wejścia w pozycję na interwale 15-minutowym są restrykcyjnie filtrowane przez główną strukturę rynkową z wyższych ram czasowych (4H oraz 1D).</p>
+                        <p>Wejścia w pozycję na interwale 15-minutowym są restrykcyjnie filtrowane przez strukturę rynkową z wyższych ram czasowych (4H oraz 1D).</p>
                     </div>
                     <div class="feature-card">
                         <div class="feature-icon">⚡</div>
                         <h3>Zero poślizgów cenowych</h3>
-                        <p>Bot nie goni rynku. System cierpliwie ustawia oczekujące zlecenia Limit w wyznaczonych strefach płynności i Order Blockach.</p>
+                        <p>Bot nie goni rynku. System ustawia oczekujące zlecenia Limit w wyznaczonych strefach płynności i Order Blockach.</p>
                     </div>
                     <div class="feature-card">
                         <div class="feature-icon">🛡️</div>
-                        <h3>Żelazne zarządzanie ryzykiem</h3>
-                        <p>Strategia bezwzględnie księguje wypracowany profit, zamykając 100% pozycji od razu na wyznaczonym poziomie Take Profit.</p>
+                        <h3>Zarządzanie ryzykiem</h3>
+                        <p>Strategia precyzyjnie ucina straty i bezwzględnie realizuje wyznaczony cel, zamykając 100% pozycji na poziomie Take Profit.</p>
                     </div>
                 </div>
             </div>
@@ -311,6 +207,7 @@
                 <h2 class="section-title">Wybierz model współpracy</h2>
                 <div class="pricing-grid">
                     
+                    <!-- Pakiet Telecom Promocja -->
                     <div class="pricing-card telecom">
                         <div class="badge-premium badge-telecom">🔥 PROMOCJA SIECIOWA 🔥</div>
                         <h3>📱 SUBSKRYPCJA STARTOWA</h3>
@@ -320,19 +217,17 @@
                             <li><strong>Pierwszy miesiąc całkowicie GRATIS (0$)</strong></li>
                             <li>Kolejne 3 miesiące z rabatem **-50%** (tylko 50$/mc)</li>
                             <li>Standardowa cena 100$/mc wchodzi dopiero od 5. miesiąca</li>
-                            <li>Pełna automatyzacja na giełdzie Bitget przez klucze API</li>
+                            <li>Pełna automatyzacja na giełdzie przez klucze API</li>
                             <li>Możliwość rezygnacji w dowolnym momencie</li>
                         </ul>
                         <button class="btn-card" onclick="openTermsModal()">Aktywuj promocję</button>
                     </div>
 
+                    <!-- Pakiet Roczny -->
                     <div class="pricing-card featured">
                         <div class="badge-premium">🔥 LIMIT 10 MIEJSC 🔥</div>
                         <h3>💎 PAKIET ROCZNY (PROMO)</h3>
-                        <div class="price">
-                            <span class="old-price">1200$</span>
-                            1000$ <span>/ rok</span>
-                        </div>
+                        <div class="price"><span style="font-size:18px; text-decoration:line-through; color:var(--text-muted);">1200$</span> 1000$ <span>/ rok</span></div>
                         <div class="desc">Pełna roczna licencja "Pod Klucz" bez prowizji od zysków. Oszczędzasz najwięcej.</div>
                         <ul class="pricing-list">
                             <li>Dostęp do algorytmu na pełne 12 miesięcy</li>
@@ -348,12 +243,14 @@
         </section>
     </div>
 
+    <!-- PAGE 2: USER DASHBOARD -->
     <div id="dashboardPage" class="page-content">
         <div class="container dashboard-container">
             
+            <!-- Panel główny użytkownika -->
             <div class="db-header-panel">
                 <div class="user-info">
-                    <h2>Witaj, <span id="db-username" style="color:var(--accent-gold);">Zaloguj się z Telegramem</span></h2>
+                    <h2>Witaj, <span id="db-username" style="color:var(--accent-gold);">Zaloguj się przez Telegram</span></h2>
                     <p>Zarządzaj swoimi licencjami i śledź status połączenia bota.</p>
                 </div>
                 <div class="status-box">
@@ -363,6 +260,7 @@
             </div>
 
             <div class="db-grid">
+                <!-- Lewa kolumna: Subskrypcje i zakup -->
                 <div>
                     <div class="db-card">
                         <h3>Twoja aktywna licencja</h3>
@@ -402,7 +300,9 @@
                     </div>
                 </div>
 
+                <!-- Prawa kolumna: Giełda i Afiliacja -->
                 <div>
+                    <!-- Lampka połączenia z giełdą -->
                     <div class="db-card">
                         <h3>Połączenie z giełdą</h3>
                         <div class="info-row">
@@ -418,6 +318,7 @@
                         </div>
                     </div>
 
+                    <!-- Program poleceń -->
                     <div class="db-card">
                         <h3>Zarabiaj przez polecanie (Dożywotnie 15%)</h3>
                         <p style="font-size:13px; color:var(--text-muted); margin-bottom: 10px;">Zaproś znajomych do bota. Otrzymasz 15% z każdej ich wpłaty abonamentowej tak długo, jak korzystają z systemu!</p>
@@ -452,6 +353,7 @@
         </div>
     </footer>
 
+    <!-- Terms of Service Modal -->
     <div class="modal-overlay" id="termsModal">
         <div class="modal-box">
             <div class="modal-header">
@@ -464,19 +366,16 @@
                 <p>1. Niniejszy Regulamin określa zasady korzystania z Crypto Bota „Czarna Perła” (zwany dalej „Botem”).</p>
                 <p>2. Właścicielem i operatorem Bota jest Kapitan Mateusz.</p>
                 <p>3. Korzystanie z Bota jest równoznaczne z akceptacją niniejszego Regulaminu.</p>
-                
                 <h3>§ 2 Definicje</h3>
                 <ul>
                     <li><strong>Bot</strong> – automatyczne narzędzie do analizy rynku kryptowalut o nazwie „Czarna Perła”.</li>
                     <li><strong>Użytkownik</strong> – osoba fizyczna korzystająca z Bota.</li>
-                    <li><strong>Konto</strong> – konto na giełdzie kryptowalut (np. Bitget), do którego Użytkownik podłącza Bota.</li>
+                    <li><strong>Konto</strong> – konto na giełdzie kryptowalut, do którego Użytkownik podłącza Bota (jeśli dotyczy).</li>
                 </ul>
-                
                 <h3>§ 3 Zasady korzystania</h3>
                 <p>1. Bot ma charakter wyłącznie informacyjno-edukacyjny i demonstracyjny.</p>
                 <p>2. Bot nie gwarantuje zysków i nie jest narzędziem do automatycznego tradingu.</p>
                 <p>3. Użytkownik korzysta z Bota wyłącznie na własne ryzyko.</p>
-                
                 <h3>§ 4 Ograniczenie odpowiedzialności</h3>
                 <p>• Nie odpowiadam za żadne straty finansowe poniesione przez Użytkownika w wyniku korzystania z Bota.</p>
                 <p>• Bot nie stanowi porady inwestycyjnej, rekomendacji ani oferty w rozumieniu prawa.</p>
