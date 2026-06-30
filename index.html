@@ -18,11 +18,27 @@
             --modal-overlay: rgba(0, 0, 0, 0.85);
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-        body { background-color: var(--bg-color); background-image: linear-gradient(rgba(11, 13, 16, 0.85), rgba(11, 13, 16, 0.98)), url('50z3n.jpg'); background-size: cover; background-position: center; background-attachment: fixed; color: var(--text-main); line-height: 1.6; overflow-x: hidden; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: linear-gradient(rgba(11, 13, 16, 0.85), rgba(11, 13, 16, 0.98)), url('50z3n.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            color: var(--text-main);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
         .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
-        
-        /* Navigation */
+
+        /* Navigation Header */
         header { padding: 20px 0; border-bottom: 1px solid rgba(42, 46, 57, 0.4); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 99; background: rgba(11, 13, 16, 0.7); }
         .header-container { display: flex; justify-content: space-between; align-items: center; }
         .logo { font-size: 22px; font-weight: 800; letter-spacing: 2px; color: var(--text-main); }
@@ -35,7 +51,7 @@
         .page-content { display: none; }
         .page-content.active { display: block; }
 
-        /* Hero */
+        /* Hero Section */
         .hero { padding: 80px 0 60px 0; text-align: center; }
         .hero h1 { font-size: 42px; font-weight: 800; line-height: 1.2; margin-bottom: 20px; background: linear-gradient(135deg, #fff 0%, var(--accent-gold) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .hero p { font-size: 18px; color: #cbd5e1; max-width: 800px; margin: 0 auto 40px auto; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
@@ -94,11 +110,6 @@
         .info-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
         .info-label { color: var(--text-muted); }
         .info-value { font-weight: 600; color: #fff; }
-        
-        /* Form Inputs */
-        .api-input { width: 100%; padding: 10px; border-radius: 6px; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); color: #fff; font-family: monospace; font-size: 13px; margin-top: 4px;}
-        .api-input:focus { outline: none; border-color: var(--accent-gold); }
-        .form-group { margin-bottom: 15px; }
 
         .referral-box { background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); padding: 15px; border-radius: 8px; margin-top: 15px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
         .referral-link { font-family: monospace; font-size: 13px; color: var(--accent-gold); word-break: break-all; }
@@ -133,6 +144,7 @@
 </head>
 <body>
 
+    <!-- Header Navigation -->
     <header>
         <div class="container header-container">
             <div class="logo">🏴‍☠️ CZARNA <span>PERŁA</span></div>
@@ -143,7 +155,7 @@
         </div>
     </header>
 
-    <!-- LANDING PAGE -->
+    <!-- PAGE 1: LANDING PAGE -->
     <div id="landingPage" class="page-content active">
         <section class="hero">
             <div class="container">
@@ -156,22 +168,86 @@
                     Większość detalicznych botów tradingowych przegrywa, bo opierają się na przestarzałych, sztywnych wskaźnikach. Czarna Perła to autorski system oparty na logice Smart Money Concepts (SMC) oraz analizie wolumenowej (CVD).
                 </p>
                 
+                <!-- TUTAJ JEST DODANY WIDGET TELEGRAMA (Nazwa bota wpisana) -->
                 <script async src="https://telegram.org/js/telegram-widget.js?22" 
                         data-telegram-login="czarna_perla_auth_bot" 
                         data-size="large" 
                         data-onauth="onTelegramAuth(user)" 
                         data-request-access="write">
                 </script>
+
             </div>
         </section>
 
-        <!-- (Sekcje informacyjne wycięte dla przejrzystości pliku w tym etapie) -->
+        <section class="features">
+            <div class="container">
+                <h2 class="section-title">Dlaczego ten system generuje powtarzalny zysk?</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">🎯</div>
+                        <h3>Wielointerwałowa precyzja</h3>
+                        <p>Wejścia w pozycję na interwale 15-minutowym są restrykcyjnie filtrowane przez strukturę rynkową z wyższych ram czasowych (4H oraz 1D).</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">⚡</div>
+                        <h3>Zero poślizgów cenowych</h3>
+                        <p>Bot nie goni rynku. System ustawia oczekujące zlecenia Limit w wyznaczonych strefach płynności i Order Blockach.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🛡️</div>
+                        <h3>Zarządzanie ryzykiem</h3>
+                        <p>Strategia precyzyjnie ucina straty i bezwzględnie realizuje wyznaczony cel, zamykając 100% pozycji na poziomie Take Profit.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="pricing">
+            <div class="container">
+                <h2 class="section-title">Wybierz model współpracy</h2>
+                <div class="pricing-grid">
+                    
+                    <!-- Pakiet Telecom Promocja -->
+                    <div class="pricing-card telecom">
+                        <div class="badge-premium badge-telecom">🔥 PROMOCJA SIECIOWA 🔥</div>
+                        <h3>📱 SUBSKRYPCJA STARTOWA</h3>
+                        <div class="price">1. miesiąc 0$ <span>następnie 50$ / mc</span></div>
+                        <div class="desc">Promocja wzorowana na operatorach komórkowych. Testujesz pełną wersję zupełnie za darmo!</div>
+                        <ul class="pricing-list">
+                            <li><strong>Pierwszy miesiąc całkowicie GRATIS (0$)</strong></li>
+                            <li>Kolejne 3 miesiące z rabatem **-50%** (tylko 50$/mc)</li>
+                            <li>Standardowa cena 100$/mc wchodzi dopiero od 5. miesiąca</li>
+                            <li>Pełna automatyzacja na giełdzie przez klucze API</li>
+                            <li>Możliwość rezygnacji w dowolnym momencie</li>
+                        </ul>
+                        <button class="btn-card" onclick="openTermsModal()">Aktywuj promocję</button>
+                    </div>
+
+                    <!-- Pakiet Roczny -->
+                    <div class="pricing-card featured">
+                        <div class="badge-premium">🔥 LIMIT 10 MIEJSC 🔥</div>
+                        <h3>💎 PAKIET ROCZNY (PROMO)</h3>
+                        <div class="price"><span style="font-size:18px; text-decoration:line-through; color:var(--text-muted);">1200$</span> 1000$ <span>/ rok</span></div>
+                        <div class="desc">Pełna roczna licencja "Pod Klucz" bez prowizji od zysków. Oszczędzasz najwięcej.</div>
+                        <ul class="pricing-list">
+                            <li>Dostęp do algorytmu na pełne 12 miesięcy</li>
+                            <li>Pełna konfiguracja techniczna i nadzór nad serwerem</li>
+                            <li>Indywidualne dopasowanie parametrów zarządzania ryzykiem</li>
+                            <li>Zintegrowane z Bitget (kapitał cały czas na Twoim koncie)</li>
+                        </ul>
+                        <button class="btn-card" onclick="openTermsModal()">Zarezerwuj roczny</button>
+                    </div>
+
+                </div>
+            </div>
+        </section>
     </div>
 
-    <!-- USER DASHBOARD -->
+    <!-- PAGE 2: USER DASHBOARD -->
     <div id="dashboardPage" class="page-content">
         <div class="container dashboard-container">
             
+            <!-- Panel główny użytkownika -->
             <div class="db-header-panel">
                 <div class="user-info">
                     <h2>Witaj, <span id="db-username" style="color:var(--accent-gold);">Zaloguj się przez Telegram</span></h2>
@@ -184,52 +260,49 @@
             </div>
 
             <div class="db-grid">
-                <!-- Lewa kolumna -->
+                <!-- Lewa kolumna: Subskrypcje i zakup -->
                 <div>
-                    <!-- KARTA API I RYZYKA (NOWOŚĆ) -->
-                    <div class="db-card" style="border-color: var(--accent-gold);">
-                        <h3>Ustawienia Handlowe (Bitget API)</h3>
-                        <p style="font-size:13px; color:var(--text-muted); margin-bottom: 20px;">Wprowadź klucze API z Bitget oraz dostosuj parametry ryzyka dla swojego portfela. Klucze są szyfrowane na serwerze.</p>
-                        
-                        <div class="form-group">
-                            <label style="font-size:12px; color:var(--text-muted);">Klucz API (API Key)</label>
-                            <input type="text" id="api_key" class="api-input" placeholder="Wklej API Key">
+                    <div class="db-card">
+                        <h3>Twoja aktywna licencja</h3>
+                        <div class="info-row">
+                            <span class="info-label">Aktualny plan:</span>
+                            <span id="db-plan" class="info-value" style="color:var(--accent-blue);">Brak danych</span>
                         </div>
-                        <div class="form-group">
-                            <label style="font-size:12px; color:var(--text-muted);">Sekret API (API Secret)</label>
-                            <input type="password" id="api_secret" class="api-input" placeholder="Wklej API Secret">
+                        <div class="info-row">
+                            <span class="info-label">Status rozliczenia:</span>
+                            <span class="info-value">Brak danych</span>
                         </div>
-                        <div class="form-group">
-                            <label style="font-size:12px; color:var(--text-muted);">Hasło API (Passphrase)</label>
-                            <input type="password" id="api_passphrase" class="api-input" placeholder="Wklej Passphrase">
+                        <div class="info-row">
+                            <span class="info-label">Giełda docelowa:</span>
+                            <span class="info-value">Bitget (API)</span>
                         </div>
-                        
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:5px;">
-                            <div class="form-group">
-                                <label style="font-size:12px; color:var(--text-muted);">Margin (Kwota na pozycję w USDT)</label>
-                                <input type="number" id="trade_margin" class="api-input" placeholder="np. 50">
-                            </div>
-                            <div class="form-group">
-                                <label style="font-size:12px; color:var(--text-muted);">Dźwignia (Lewar, np. 10x)</label>
-                                <input type="number" id="trade_leverage" class="api-input" placeholder="np. 10">
-                            </div>
+                        <div class="info-row" style="margin-top: 20px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.05);">
+                            <span class="info-label" style="font-weight: 700;">Wygaśnięcie subskrypcji:</span>
+                            <span class="info-value" style="color:var(--text-muted); font-weight:700;">---</span>
                         </div>
-
-                        <button onclick="saveApiSettings()" style="width:100%; margin-top:10px; background:var(--accent-gold); color:#000; border:none; padding:12px; border-radius:6px; font-weight:bold; cursor:pointer; transition: 0.2s;">
-                            Zapisz Ustawienia i Zaktualizuj API
-                        </button>
-                        <div id="save_status" style="font-size:14px; margin-top:10px; text-align:center; font-weight:bold;"></div>
                     </div>
 
                     <div class="db-card">
-                        <h3>Twoja aktywna licencja</h3>
-                        <div class="info-row"><span class="info-label">Aktualny plan:</span><span id="db-plan" class="info-value" style="color:var(--accent-blue);">Brak danych</span></div>
-                        <div class="info-row"><span class="info-label">Status rozliczenia:</span><span class="info-value">Okres darmowy</span></div>
+                        <h3>Przedłuż abonament lub kup nowy pakiet</h3>
+                        <p style="font-size:14px; color:var(--text-muted); margin-bottom: 20px;">Wybierz pakiet poniżej, aby automatycznie przedłużyć działanie bota bez przerw w tradingu.</p>
+                        <div class="pricing-grid" style="grid-template-columns: 1fr 1fr; gap:20px;">
+                            <div class="pricing-card" style="padding: 20px;">
+                                <h4 style="color:#fff; text-align:center;">Odnowienie Miesięczne</h4>
+                                <div class="price" style="font-size: 24px; margin: 10px 0;">100$ <span>/ mc</span></div>
+                                <button class="btn-card" onclick="openTermsModal()" style="font-size:13px; padding:8px;">Kup Abonament</button>
+                            </div>
+                            <div class="pricing-card featured" style="padding: 20px;">
+                                <h4 style="color:var(--accent-gold); text-align:center;">Licencja Roczna VIP</h4>
+                                <div class="price" style="font-size: 24px; margin: 10px 0;">1000$ <span>/ rok</span></div>
+                                <button class="btn-card" onclick="openTermsModal()" style="font-size:13px; padding:8px;">Kup Pakiet Roczny</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Prawa kolumna -->
+                <!-- Prawa kolumna: Giełda i Afiliacja -->
                 <div>
+                    <!-- Lampka połączenia z giełdą -->
                     <div class="db-card">
                         <h3>Połączenie z giełdą</h3>
                         <div class="info-row">
@@ -240,21 +313,31 @@
                             </span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label">Twoja dźwignia:</span>
-                            <span class="info-value" id="db-display-lev">Brak danych</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Kwota Margin:</span>
-                            <span class="info-value" id="db-display-mar">Brak danych</span>
+                            <span class="info-label">Ograniczenie wypłat:</span>
+                            <span class="info-value" style="color:var(--text-muted);">Oczekuje na klucze</span>
                         </div>
                     </div>
 
+                    <!-- Program poleceń -->
                     <div class="db-card">
                         <h3>Zarabiaj przez polecanie (Dożywotnie 15%)</h3>
+                        <p style="font-size:13px; color:var(--text-muted); margin-bottom: 10px;">Zaproś znajomych do bota. Otrzymasz 15% z każdej ich wpłaty abonamentowej tak długo, jak korzystają z systemu!</p>
+                        
                         <label style="font-size:12px; color:var(--text-muted);">Twój link polecający:</label>
                         <div class="referral-box">
                             <span class="referral-link" id="db-ref-link">Zaloguj się, aby pobrać link</span>
                             <button class="btn-copy" onclick="copyRefLink()">Kopiuj</button>
+                        </div>
+
+                        <div class="affiliate-stats">
+                            <div class="stat-box">
+                                <div class="stat-num">0</div>
+                                <div class="stat-label">Poleconych osób</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-num green">0$</div>
+                                <div class="stat-label">Suma prowizji</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -263,132 +346,165 @@
         </div>
     </div>
 
-    <!-- Modale (Regulamin wycięty na chwilę dla uproszczenia kodu) -->
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 Crypto Bot „Czarna Perła”. Wszelkie prawa zastrzeżone.</p>
+            <p style="margin-top: 10px;"><a onclick="openTermsModal()">Przeczytaj Regulamin Korzystania</a></p>
+        </div>
+    </footer>
+
+    <!-- Terms of Service Modal -->
+    <div class="modal-overlay" id="termsModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2>Regulamin i Warunki Korzystania</h2>
+                <button class="close-modal" onclick="closeTermsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-weight: bold; text-align: center; margin-bottom: 20px;">REGULAMIN KORZYSTANIA Z CRYPTO BOTA „CZARNA PERŁA”</p>
+                <h3>§ 1 Postanowienia ogólne</h3>
+                <p>1. Niniejszy Regulamin określa zasady korzystania z Crypto Bota „Czarna Perła” (zwany dalej „Botem”).</p>
+                <p>2. Właścicielem i operatorem Bota jest Kapitan Mateusz.</p>
+                <p>3. Korzystanie z Bota jest równoznaczne z akceptacją niniejszego Regulaminu.</p>
+                <h3>§ 2 Definicje</h3>
+                <ul>
+                    <li><strong>Bot</strong> – automatyczne narzędzie do analizy rynku kryptowalut o nazwie „Czarna Perła”.</li>
+                    <li><strong>Użytkownik</strong> – osoba fizyczna korzystająca z Bota.</li>
+                    <li><strong>Konto</strong> – konto na giełdzie kryptowalut, do którego Użytkownik podłącza Bota (jeśli dotyczy).</li>
+                </ul>
+                <h3>§ 3 Zasady korzystania</h3>
+                <p>1. Bot ma charakter wyłącznie informacyjno-edukacyjny i demonstracyjny.</p>
+                <p>2. Bot nie gwarantuje zysków i nie jest narzędziem do automatycznego tradingu.</p>
+                <p>3. Użytkownik korzysta z Bota wyłącznie na własne ryzyko.</p>
+                <h3>§ 4 Ograniczenie odpowiedzialności</h3>
+                <p>• Nie odpowiadam za żadne straty finansowe poniesione przez Użytkownika w wyniku korzystania z Bota.</p>
+                <p>• Bot nie stanowi porady inwestycyjnej, rekomendacji ani oferty w rozumieniu prawa.</p>
+                <p style="margin-top: 15px; font-weight: bold;">Data wejścia w życie: 30.06.2026</p>
+            </div>
+            <div class="modal-footer">
+                <div class="accept-container">
+                    <input type="checkbox" id="acceptCheckbox" onchange="toggleTgButton()">
+                    <label for="acceptCheckbox">Oświadczam, że przeczytałem(-am) i w pełni akceptuję postanowienia regulaminu bota <span>„Czarna Perła”</span> oraz chcę przejść do aplikacji Telegram.</label>
+                </div>
+                <button class="btn-tg" id="tgButton" onclick="redirectToTelegram()">
+                    Przejdź do Telegrama
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const TELEGRAM_LINK = "https://t.me/+QumQey-BSYNkYTlk";
-        let CURRENT_USER_ID = null;
 
+        // GŁÓWNA FUNKCJA ŁĄCZĄCA SIĘ Z SERWEREM PYTHON
         async function fetchDashboardData(telegramId) {
-            CURRENT_USER_ID = telegramId;
             try {
+                // Odpytujemy serwer lokalny
                 const response = await fetch(`http://127.0.0.1:8000/api/dashboard/${telegramId}`);
                 const data = await response.json();
                 
                 if (data.status === 'success') {
+                    // Podmieniamy teksty w HTML na te z bazy danych
                     document.getElementById('db-username').innerText = data.username;
                     document.getElementById('db-plan').innerText = data.plan_name;
                     document.getElementById('db-ref-link').innerText = `https://czarnaperla.bot/?ref=${data.referral_code}`;
-                    
-                    // Wpisujemy w inputy pobrany z bazy margin i lewar
-                    document.getElementById('trade_margin').value = data.margin;
-                    document.getElementById('trade_leverage').value = data.leverage;
-                    
-                    // Pokazujemy dane w prawej kolumnie informacyjnej
-                    document.getElementById('db-display-mar').innerText = data.margin + " USDT";
-                    document.getElementById('db-display-lev').innerText = data.leverage + "x";
 
-                    updateStatusLamps(data.api_connected);
+                    // Obsługa graficzna "Lampki API"
+                    const bigLamp = document.getElementById('db-api-lamp');
+                    const smallLamp = document.getElementById('db-api-small-lamp');
+                    const bigStatusText = document.getElementById('db-api-status');
+                    const smallStatusText = document.getElementById('db-api-status-word');
+
+                    if (data.api_connected) {
+                        bigLamp.style.backgroundColor = 'var(--accent-green)';
+                        bigLamp.style.boxShadow = '0 0 10px var(--accent-green)';
+                        bigLamp.style.animation = 'blink 2s infinite';
+                        smallLamp.style.backgroundColor = 'var(--accent-green)';
+                        
+                        bigStatusText.innerText = 'BOT STATUS: POŁĄCZONY';
+                        smallStatusText.innerText = 'POŁĄCZONO';
+                        smallStatusText.style.color = 'var(--accent-green)';
+                    } else {
+                        bigLamp.style.backgroundColor = 'var(--accent-red)';
+                        bigLamp.style.boxShadow = '0 0 10px var(--accent-red)';
+                        bigLamp.style.animation = 'none';
+                        smallLamp.style.backgroundColor = 'var(--accent-red)';
+                        
+                        bigStatusText.innerText = 'BOT STATUS: BRAK API';
+                        bigStatusText.style.color = 'var(--accent-red)';
+                        smallStatusText.innerText = 'ROZŁĄCZONO';
+                        smallStatusText.style.color = 'var(--accent-red)';
+                    }
                 }
             } catch (error) {
-                console.error("Błąd:", error);
+                console.error("Błąd połączenia z serwerem:", error);
+                document.getElementById('db-username').innerText = "Błąd Połączenia";
             }
         }
 
-        // NOWA FUNKCJA ZAPISUJĄCA DANE DO PYTHON!
-        async function saveApiSettings() {
-            if (!CURRENT_USER_ID) {
-                alert("Musisz się najpierw zalogować!");
-                return;
-            }
-
-            const key = document.getElementById('api_key').value;
-            const secret = document.getElementById('api_secret').value;
-            const phrase = document.getElementById('api_passphrase').value;
-            const lev = document.getElementById('trade_leverage').value;
-            const mar = document.getElementById('trade_margin').value;
-
-            const payload = {
-                telegram_id: CURRENT_USER_ID,
-                api_key: key,
-                api_secret: secret,
-                api_passphrase: phrase,
-                leverage: parseInt(lev) || 10,
-                margin: parseFloat(mar) || 50.0
-            };
-
-            try {
-                const response = await fetch("http://127.0.0.1:8000/api/save_settings", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
-                });
-                
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    const statusText = document.getElementById('save_status');
-                    statusText.innerText = result.message;
-                    statusText.style.color = "var(--accent-green)";
-                    
-                    // Po pomyślnym zapisie, odświeżamy dane i zapalamy zieloną lampkę!
-                    fetchDashboardData(CURRENT_USER_ID);
-                }
-            } catch (error) {
-                console.error("Błąd zapisu:", error);
-                document.getElementById('save_status').innerText = "Błąd komunikacji z serwerem!";
-                document.getElementById('save_status').style.color = "var(--accent-red)";
-            }
-        }
-
-        function updateStatusLamps(isConnected) {
-            const bigLamp = document.getElementById('db-api-lamp');
-            const smallLamp = document.getElementById('db-api-small-lamp');
-            const bigStatusText = document.getElementById('db-api-status');
-            const smallStatusText = document.getElementById('db-api-status-word');
-
-            if (isConnected) {
-                bigLamp.style.backgroundColor = 'var(--accent-green)';
-                bigLamp.style.boxShadow = '0 0 10px var(--accent-green)';
-                bigLamp.style.animation = 'blink 2s infinite';
-                smallLamp.style.backgroundColor = 'var(--accent-green)';
-                
-                bigStatusText.innerText = 'BOT STATUS: POŁĄCZONY';
-                smallStatusText.innerText = 'POŁĄCZONO';
-                smallStatusText.style.color = 'var(--accent-green)';
-            } else {
-                bigLamp.style.backgroundColor = 'var(--accent-red)';
-                bigLamp.style.boxShadow = '0 0 10px var(--accent-red)';
-                bigLamp.style.animation = 'none';
-                smallLamp.style.backgroundColor = 'var(--accent-red)';
-                
-                bigStatusText.innerText = 'BOT STATUS: BRAK API';
-                bigStatusText.style.color = 'var(--accent-red)';
-                smallStatusText.innerText = 'ROZŁĄCZONO';
-                smallStatusText.style.color = 'var(--accent-red)';
-            }
-        }
-
+        // Funkcja wywoływana automatycznie po udanym logowaniu przez Widget Telegrama
         function onTelegramAuth(user) {
+            // Przełączamy widok na Dashboard
             document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             document.getElementById('dashboardPage').classList.add('active');
+            
+            // Ustawiamy napis pobierania i pytamy Pythona o dane
+            document.getElementById('db-username').innerText = "Pobieranie danych...";
             fetchDashboardData(user.id);
         }
 
         function switchPage(pageName, btn) {
             document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            if(pageName === 'landing') document.getElementById('landingPage').classList.add('active');
-            else if(pageName === 'dashboard') document.getElementById('dashboardPage').classList.add('active');
+            
+            if(pageName === 'landing') {
+                document.getElementById('landingPage').classList.add('active');
+            } else if(pageName === 'dashboard') {
+                document.getElementById('dashboardPage').classList.add('active');
+            }
             btn.classList.add('active');
+        }
+
+        function openTermsModal() {
+            document.getElementById('termsModal').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeTermsModal() {
+            document.getElementById('termsModal').classList.remove('active');
+            document.body.style.overflow = 'auto';
+        }
+
+        function toggleTgButton() {
+            const checkbox = document.getElementById('acceptCheckbox');
+            const tgButton = document.getElementById('tgButton');
+            if(checkbox.checked) {
+                tgButton.classList.add('enabled');
+            } else {
+                tgButton.classList.remove('enabled');
+            }
+        }
+
+        function redirectToTelegram() {
+            const checkbox = document.getElementById('acceptCheckbox');
+            if(checkbox.checked) {
+                window.open(TELEGRAM_LINK, '_blank');
+                closeTermsModal();
+            }
         }
 
         function copyRefLink() {
             const linkText = document.getElementById('db-ref-link').innerText;
             navigator.clipboard.writeText(linkText);
-            alert("Link skopiowany!");
+            alert("Link polecający skopiowany do schowka!");
         }
+
+        document.getElementById('termsModal').addEventListener('click', function(e) {
+            if(e.target === this) {
+                closeTermsModal();
+            }
+        });
     </script>
 </body>
 </html>
