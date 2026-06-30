@@ -150,6 +150,25 @@
             backdrop-filter: blur(5px);
         }
 
+        .btn-primary {
+            display: inline-block;
+            background-color: var(--accent-gold);
+            color: #000;
+            font-weight: 700;
+            font-size: 18px;
+            padding: 16px 40px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 15px rgba(243, 166, 59, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            background-color: #f4b356;
+        }
+
         /* Features */
         .features { padding: 40px 0; }
         .section-title {
@@ -205,6 +224,7 @@
         .user-info h2 { font-size: 22px; color: #fff; }
         .user-info p { color: var(--text-muted); font-size: 14px; }
         
+        /* Status Indicator (Lampka) */
         .status-box {
             display: flex;
             align-items: center;
@@ -217,7 +237,7 @@
         .status-lamp {
             width: 12px;
             height: 12px;
-            background-color: var(--text-muted);
+            background-color: var(--text-muted); /* Domyślnie szare przed załadowaniem */
             border-radius: 50%;
             display: inline-block;
         }
@@ -228,6 +248,7 @@
         }
         .status-text { font-size: 14px; font-weight: 700; color: #fff; }
 
+        /* DB Grid layout */
         .db-grid {
             display: grid;
             grid-template-columns: 2fr 1fr;
@@ -245,10 +266,12 @@
         }
         .db-card h3 { font-size: 18px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; color: #fff; }
 
+        /* Info blocks inside Dashboard */
         .info-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
         .info-label { color: var(--text-muted); }
         .info-value { font-weight: 600; color: #fff; }
 
+        /* Affiliate/Referral styles */
         .referral-box {
             background: rgba(0,0,0,0.2);
             border: 1px solid var(--card-border);
@@ -320,16 +343,7 @@
                 <p>
                     Większość detalicznych botów tradingowych przegrywa, bo opierają się na przestarzałych, sztywnych wskaźnikach. Czarna Perła to autorski system oparty na logice Smart Money Concepts (SMC) oraz analizie wolumenowej (CVD).
                 </p>
-                
-                <!-- TUTAJ JEST DODANY WIDGET TELEGRAMA -->
-                <!-- Pamiętaj podmienić "czarna_perla_auth_bot" na właściwą nazwę z BotFathera -->
-                <script async src="https://telegram.org/js/telegram-widget.js?22" 
-                        data-telegram-login="czarna_perla_auth_bot" 
-                        data-size="large" 
-                        data-onauth="onTelegramAuth(user)" 
-                        data-request-access="write">
-                </script>
-
+                <button class="btn-primary" onclick="openTermsModal()">Dołącz do projektu</button>
             </div>
         </section>
 
@@ -596,17 +610,6 @@
             }
         }
 
-        // Funkcja wywoływana automatycznie po udanym logowaniu przez Widget Telegrama
-        function onTelegramAuth(user) {
-            // Przełączamy widok na Dashboard
-            document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('dashboardPage').classList.add('active');
-            
-            // Pobieramy dane z serwera Pythona dla PRAWDZIWEGO ID z Telegrama!
-            fetchDashboardData(user.id);
-        }
-
         function switchPage(pageName, btn) {
             document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -615,8 +618,10 @@
                 document.getElementById('landingPage').classList.add('active');
             } else if(pageName === 'dashboard') {
                 document.getElementById('dashboardPage').classList.add('active');
-                // Jeśli użytkownik wejdzie z palca w zakładkę, a nie jest zalogowany
-                // (wymaga uprzedniego zalogowania przyciskiem Telegram)
+                
+                // SYMULACJA ZALOGOWANIA: 
+                // Gdy wchodzimy w panel, odpalamy funkcję dla testowego ID 12345
+                fetchDashboardData(12345);
             }
             btn.classList.add('active');
         }
