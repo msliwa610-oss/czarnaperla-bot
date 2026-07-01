@@ -59,15 +59,18 @@
         .stats-badge-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 40px; }
         .stats-badge { background: rgba(0, 192, 135, 0.15); border: 1px solid var(--accent-green); color: var(--accent-green); padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 14px; backdrop-filter: blur(5px); }
 
-        /* Features */
+        /* Features / Anatomy */
         .features { padding: 40px 0; }
         .section-title { font-size: 28px; font-weight: 700; text-align: center; margin-bottom: 40px; position: relative; }
         .section-title::after { content: ''; display: block; width: 50px; height: 3px; background-color: var(--accent-gold); margin: 10px auto 0 auto; }
-        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
-        .feature-card { background-color: var(--card-bg); border: 1px solid var(--card-border); padding: 30px; border-radius: 12px; backdrop-filter: blur(10px); }
-        .feature-icon { font-size: 28px; margin-bottom: 16px; display: inline-block; }
-        .feature-card h3 { font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #fff; }
-        .feature-card p { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+        
+        .anatomy-card { background-color: var(--card-bg); border-left: 4px solid var(--accent-gold); padding: 30px; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); backdrop-filter: blur(10px); }
+        .anatomy-card h3 { color: #fff; font-size: 20px; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+        .anatomy-card h3 span { font-size: 24px; }
+        .anatomy-list { list-style: none; margin-left: 10px; }
+        .anatomy-list li { font-size: 15px; color: var(--text-muted); margin-bottom: 12px; position: relative; padding-left: 20px; line-height: 1.5; }
+        .anatomy-list li::before { content: "⚡"; position: absolute; left: -5px; font-size: 12px; top: 3px; }
+        .anatomy-list li strong { color: var(--text-main); font-weight: 600; }
 
         /* Pricing */
         .pricing { padding: 40px 0 80px 0; }
@@ -150,7 +153,6 @@
 </head>
 <body>
 
-    <!-- Header Navigation -->
     <header>
         <div class="container header-container">
             <div class="logo">🏴‍☠️ CZARNA <span>PERŁA</span></div>
@@ -161,7 +163,6 @@
         </div>
     </header>
 
-    <!-- PAGE 1: LANDING PAGE -->
     <div id="landingPage" class="page-content active">
         <section class="hero">
             <div class="container">
@@ -185,23 +186,34 @@
 
         <section class="features">
             <div class="container">
-                <h2 class="section-title">Dlaczego ten system generuje powtarzalny zysk?</h2>
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <div class="feature-icon">🎯</div>
-                        <h3>Wielointerwałowa precyzja</h3>
-                        <p>Wejścia w pozycję na interwale 15-minutowym są restrykcyjnie filtrowane przez strukturę rynkową z wyższych ram czasowych (4H oraz 1D).</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">⚡</div>
-                        <h3>Zero poślizgów cenowych</h3>
-                        <p>Bot nie goni rynku. System ustawia oczekujące zlecenia Limit w wyznaczonych strefach płynności i Order Blockach.</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">🛡️</div>
-                        <h3>Zarządzanie ryzykiem</h3>
-                        <p>Strategia precyzyjnie ucina straty i bezwzględnie realizuje wyznaczony cel, zamykając 100% pozycji na poziomie Take Profit.</p>
-                    </div>
+                <h2 class="section-title">Anatomia Algorytmu: Jak działa Czarna Perła</h2>
+                
+                <div class="anatomy-card">
+                    <h3><span>🔬</span> Wydajność i Stabilność HFT</h3>
+                    <ul class="anatomy-list">
+                        <li><strong>Asynchroniczna architektura:</strong> Skaner rynku działa w osobnym wątku niż system powiadomień. Brak opóźnień (lagów) przy jednoczesnym analizowaniu rynku i komunikacji.</li>
+                        <li><strong>Smart Handling kontraktów:</strong> Hybrydowy mechanizm obliczeniowy całkowicie eliminuje problem "ucinania" resztek kontraktów na giełdzie. System zawsze zamyka idealnie wymierzoną część pozycji – realizacja na poziomie Take Profit to bezwzględnie 100%.</li>
+                        <li><strong>Zarządzanie pamięcią (Garbage Collector):</strong> Automatyczne czyszczenie pamięci podręcznej serwera pozwala algorytmowi na stabilną, nieprzerwaną pracę przez wiele miesięcy bez restartów.</li>
+                    </ul>
+                </div>
+
+                <div class="anatomy-card" style="border-left-color: var(--accent-blue);">
+                    <h3><span>🎯</span> Rygorystyczny Protokół Wejścia (SMC)</h3>
+                    <ul class="anatomy-list">
+                        <li><strong>Zgoda Makro-Strukturalna:</strong> Algorytm nie wchodzi w ciemno. Wejścia na interwale 15-minutowym (15m) muszą mieć twarde potwierdzenie kierunku trendu z wykresów 4H oraz 1D, wsparte wskaźnikiem skumulowanego wolumenu (CVD).</li>
+                        <li><strong>Weryfikacja Płynności (Liquidity Sweep):</strong> Skanowanie ekstremów rynkowych w poszukiwaniu tzw. Pin Barów (minimum 50% knota odrzucającego cenę) – matematyczny dowód na zebranie Stop Lossów detalistów.</li>
+                        <li><strong>Siła Wybicia (Displacement & FVG):</strong> Potwierdzenie siły kapitału instytucjonalnego poprzez weryfikację luki cenowej (Fair Value Gap musi wynosić min. 0.8x średniej zmienności ATR).</li>
+                        <li><strong>Zasadzka Snajperska (OTE):</strong> Zero wchodzenia na szczytach. Zlecenie Limit ląduje bezwzględnie w strefie Optimal Trade Entry (Złota Strefa Fibonacciego: 61.8% - 78.6%).</li>
+                    </ul>
+                </div>
+
+                <div class="anatomy-card" style="border-left-color: var(--accent-green);">
+                    <h3><span>📊</span> Defensywne Zarządzanie Ryzykiem</h3>
+                    <ul class="anatomy-list">
+                        <li><strong>Skuteczność ochronna rzędu 75-85%:</strong> Niezwykle defensywny charakter bota. Ucinanie ryzyka niemal natychmiastowo poprzez błyskawiczne przestawienie pozycji na Break-Even (+0.2% zysku) po zaliczeniu pierwszej reakcji rynkowej.</li>
+                        <li><strong>Bezpieczny Stop Loss:</strong> Ukryty za knotem ekstremum z dodatkowym buforem (1.5x ATR), chroniącym Twój kapitał przed rynkowym szumem i celowymi "szpilkami" cenowymi.</li>
+                        <li><strong>Wieloetapowe księgowanie zysków:</strong> Model precyzyjnie dzieli realizację Take Profit (TP), zabezpieczając kapitał główny i wypuszczając bezryzykowne zlecenia kroczące (Trailing Stop), by "surfować" po trendzie bez górnego limitu.</li>
+                    </ul>
                 </div>
             </div>
         </section>
@@ -243,7 +255,6 @@
         </section>
     </div>
 
-    <!-- PAGE 2: USER DASHBOARD -->
     <div id="dashboardPage" class="page-content">
         <div class="container dashboard-container">
             
@@ -259,9 +270,7 @@
             </div>
 
             <div class="db-grid">
-                <!-- Lewa kolumna: Subskrypcje i zakup -->
                 <div>
-                    <!-- KARTA API I RYZYKA (NOWOŚĆ) -->
                     <div class="db-card" style="border-color: var(--accent-gold);">
                         <h3>Ustawienia Handlowe (Bitget API)</h3>
                         <p style="font-size:13px; color:var(--text-muted); margin-bottom: 20px;">Wprowadź klucze API z Bitget oraz dostosuj parametry ryzyka dla swojego portfela. Klucze są szyfrowane na serwerze.</p>
@@ -334,9 +343,7 @@
                     </div>
                 </div>
 
-                <!-- Prawa kolumna: Giełda i Afiliacja -->
                 <div>
-                    <!-- Lampka połączenia z giełdą -->
                     <div class="db-card">
                         <h3>Połączenie z giełdą</h3>
                         <div class="info-row">
@@ -356,7 +363,6 @@
                         </div>
                     </div>
 
-                    <!-- Program poleceń -->
                     <div class="db-card">
                         <h3>Zarabiaj przez polecanie (Dożywotnie 15%)</h3>
                         <p style="font-size:13px; color:var(--text-muted); margin-bottom: 10px;">Zaproś znajomych do bota. Otrzymasz 15% z każdej ich wpłaty abonamentowej tak długo, jak korzystają z systemu!</p>
@@ -391,7 +397,6 @@
         </div>
     </footer>
 
-    <!-- Terms of Service Modal -->
     <div class="modal-overlay" id="termsModal">
         <div class="modal-box">
             <div class="modal-header">
@@ -446,11 +451,9 @@
                     document.getElementById('db-plan').innerText = data.plan_name;
                     document.getElementById('db-ref-link').innerText = `https://czarnaperla.bot/?ref=${data.referral_code}`;
                     
-                    // Wpisujemy w inputy pobrany z bazy margin i lewar
                     document.getElementById('trade_margin').value = data.margin;
                     document.getElementById('trade_leverage').value = data.leverage;
                     
-                    // Pokazujemy dane w prawej kolumnie informacyjnej
                     document.getElementById('db-display-mar').innerText = data.margin + " USDT";
                     document.getElementById('db-display-lev').innerText = data.leverage + "x";
 
@@ -458,7 +461,7 @@
                 }
             } catch (error) {
                 console.error("Błąd połączenia z serwerem:", error);
-                document.getElementById('db-username').innerText = "Błąd Połączenia";
+                document.getElementById('db-username').innerText = "Błąd Połączenia z serwerem (Serwer wyłączony lub zablokowany)";
             }
         }
 
@@ -497,7 +500,6 @@
                     statusText.innerText = result.message;
                     statusText.style.color = "var(--accent-green)";
                     
-                    // Odśwież dane i zapal zieloną lampkę
                     fetchDashboardData(CURRENT_USER_ID);
                 }
             } catch (error) {
