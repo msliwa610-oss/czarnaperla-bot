@@ -197,7 +197,7 @@
             </div>
         </section>
 
-        <!-- SEKCJA WYNIKÓW (NOWA) -->
+        <!-- SEKCJA WYNIKÓW -->
         <section class="section-padding" style="background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05);">
             <div class="container">
                 <h2 class="section-title">Dowody Skuteczności (Live Results)</h2>
@@ -316,10 +316,10 @@
                 <h2 class="section-title">Wybierz model współpracy</h2>
                 <div class="pricing-grid">
                     <div class="pricing-card telecom">
-                        <div class="badge-premium badge-telecom">🔥 PROMOCJA SIECIOWA 🔥</div>
-                        <h3>📱 SUBSKRYPCJA STARTOWA</h3>
+                        <div class="badge-premium badge-telecom">🔥 STARTOWA 🔥</div>
+                        <h3>📱 PAKIET TESTOWY</h3>
                         <div class="price">1. miesiąc 0$ <span>następnie 50$ / mc</span></div>
-                        <div class="desc">Promocja wzorowana na operatorach komórkowych. Testujesz pełną wersję zupełnie za darmo!</div>
+                        <div class="desc">Pełen dostęp do algorytmu przez 30 dni bez żadnych opłat. Przetestuj skuteczność systemu na własnym kapitale.</div>
                         <ul class="pricing-list">
                             <li><strong>Pierwszy miesiąc całkowicie GRATIS (0$)</strong></li>
                             <li>Kolejne 3 miesiące z rabatem **-50%** (tylko 50$/mc)</li>
@@ -478,8 +478,6 @@
         const TELEGRAM_LINK = "https://t.me/+QumQey-BSYNkYTlk";
         let CURRENT_USER_ID = null;
 
-        // UWAGA: Zmieniłem tu już URL na Twój docelowy adres duckdns, żeby działało jak postawisz serwer. 
-        // Zanim to zrobisz (jeśli testujesz na localhost), zmień "https://czarnaperla.duckdns.org" na "http://127.0.0.1:8000"
         const API_BASE_URL = "https://czarnaperla.duckdns.org"; 
 
         async function fetchDashboardData(telegramId) {
