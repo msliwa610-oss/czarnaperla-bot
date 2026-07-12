@@ -551,10 +551,11 @@
 
         const API_BASE_URL = "https://czarnaperla.duckdns.org"; 
 
-        async function fetchDashboardData(telegramId) {
+        async function fetchDashboardData(telegramId, telegramName = "") {
             CURRENT_USER_ID = telegramId;
             try {
-                const response = await fetch(`${API_BASE_URL}/api/dashboard/${telegramId}`);
+                // Przekazujemy imię z Telegrama do serwera
+                const response = await fetch(`${API_BASE_URL}/api/dashboard/${telegramId}?name=${encodeURIComponent(telegramName)}`);
                 const data = await response.json();
                 
                 if (data.status === 'success') {
@@ -569,11 +570,11 @@
 
                     updateStatusLamps(data.api_connected);
 
-                    // Odliczanie czasu
+                    // Prawdziwe odliczanie czasu
                     if (data.subscription_end_date) {
                         calculateTimeLeft(data.subscription_end_date);
                     } else {
-                        document.getElementById('db-time-left').innerText = "Dożywotnia / Brak limitu";
+                        document.getElementById('db-time-left').innerHTML = "<span class='time-expired'>WYGASŁO! Kontakt: @Mateushpro</span>";
                     }
 
                     // Logika uprawnień Administratora
@@ -588,17 +589,17 @@
             }
         }
 
-        // Symulacja odliczania czasu
+        // Ulepszone odliczanie z prawdziwą datą i namiarem na Kapitana
         function calculateTimeLeft(endDateString) {
             const endDate = new Date(endDateString).getTime();
             const now = new Date().getTime();
             const distance = endDate - now;
 
-            if (distance < 0) {
-                document.getElementById('db-time-left').innerHTML = "<span class='time-expired'>WYGASŁO! BOT ODŁĄCZONY</span>";
+            if (distance < 0 || endDateString.includes("2099")) {
+                document.getElementById('db-time-left').innerHTML = "<span class='time-expired'>WYGASŁO! Kontakt: @Mateushpro</span>";
             } else {
                 const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-                document.getElementById('db-time-left').innerText = `Pozostało ${days} dni`;
+                document.getElementById('db-time-left').innerHTML = `Pozostało <span style="color:#fff">${days} dni</span> (do ${endDateString})`;
             }
         }
 
@@ -768,7 +769,10 @@
             
             document.getElementById('btnLogout').style.display = 'block';
             document.getElementById('db-username').innerText = "Weryfikacja danych...";
-            fetchDashboardData(user.id);
+            
+            // Pobieramy prawdziwe imię i nazwisko logującego się inwestora
+            const tgName = user.first_name + (user.last_name ? " " + user.last_name : "");
+            fetchDashboardData(user.id, tgName);
         }
 
         function logoutUser() {
