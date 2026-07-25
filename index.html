@@ -1,2031 +1,2039 @@
-"""Secure multi-exchange portal API for Czarna Perla v13.8.
-
-The browser never proves identity by sending a Telegram ID.  Identity comes
-only from a verified Telegram Login Widget payload and the resulting secure
-session cookie.  Exchange credentials are encrypted as one authenticated JSON
-object and are never returned by any endpoint.
-"""
-
-from __future__ import annotations
-
-from collections import defaultdict, deque
-from contextlib import asynccontextmanager
-from dataclasses import dataclass
-import datetime as dt
-import hashlib
-import hmac
-import json
-import math
-import os
-from pathlib import Path
-import secrets
-import threading
-import time
-from typing import Any, Literal, Mapping
-from urllib.parse import urlsplit
-
-from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
-from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-from .account_lock import acquire_account_switch_lock
-from .database import (
-    ensure_schema,
-    get_db_connection,
-    table_columns,
-    unmigrated_legacy_credential_users,
-)
-from .exchange_validation import (
-    EXCHANGE_CAPABILITIES,
-    ExchangeValidationError,
-    assert_no_open_exchange_state,
-    canonical_exchange_id,
-    run_read_only_smoke_test,
-)
-from .security import (
-    SESSION_COOKIE_NAME,
-    SecurityConfigurationError,
-    TelegramAuthError,
-    credential_aad,
-    csrf_token_matches,
-    get_credential_cipher_from_env,
-    hash_session_token,
-    issue_session_secrets,
-    require_exact_origin,
-    verify_telegram_auth,
-)
-
-
-UTC = dt.timezone.utc
-PRODUCTION_ORIGIN = "https://czarna-perla-panel.mateushpro.chatgpt.site"
-DEFAULT_TRADES_PATH = "/home/botkot/czarna_perla/trades.json"
-MAX_BODY_BYTES = 64 * 1024
-FRESH_ADMIN_SESSION_SECONDS = 10 * 60
-
-
-def _utc_now() -> dt.datetime:
-    return dt.datetime.now(UTC)
-
-
-def _iso(value: dt.datetime) -> str:
-    return value.astimezone(UTC).isoformat(timespec="seconds")
-
-
-def _parse_datetime(value: str | None) -> dt.datetime | None:
-    if not value:
-        return None
-    try:
-        parsed = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
-
-
-def _split_origins(raw: str | None) -> tuple[str, ...]:
-    values = [item.strip().rstrip("/") for item in str(raw or "").split(",")]
-    origins = tuple(dict.fromkeys(item for item in values if item))
-    origins = origins or (PRODUCTION_ORIGIN,)
-    for origin in origins:
-        parsed = urlsplit(origin)
-        if (
-            parsed.scheme != "https"
-            or not parsed.hostname
-            or parsed.username
-            or parsed.password
-            or parsed.path not in {"", "/"}
-            or parsed.query
-            or parsed.fragment
-            or "*" in origin
-            or origin == "null"
-        ):
-            raise RuntimeError(
-                "ALLOWED_ORIGINS może zawierać wyłącznie pełne originy HTTPS "
-                "bez ścieżki, wildcardów i danych logowania."
-            )
-    return origins
-
-
-@dataclass(frozen=True)
-class Settings:
-    telegram_bot_token: str
-    allowed_origins: tuple[str, ...]
-    session_ttl_seconds: int
-    trades_path: str
-    audit_hash_salt: str
-    superadmin_ids: frozenset[int]
-    bitunix_fee_policy: str | None
-    adapter_release: str
-
-    @classmethod
-    def from_env(cls) -> "Settings":
-        raw_admins = os.getenv("SUPERADMIN_TELEGRAM_IDS", "")
-        admins: set[int] = set()
-        for value in raw_admins.split(","):
-            value = value.strip()
-            if not value:
-                continue
-            try:
-                normalized = int(value)
-            except ValueError as exc:
-                raise RuntimeError(
-                    "SUPERADMIN_TELEGRAM_IDS zawiera nieprawidłową wartość."
-                ) from exc
-            if normalized <= 0:
-                raise RuntimeError(
-                    "SUPERADMIN_TELEGRAM_IDS zawiera nieprawidłową wartość."
-                )
-            admins.add(normalized)
-        ttl = int(os.getenv("SESSION_TTL_SECONDS", str(12 * 60 * 60)))
-        ttl = min(max(ttl, 15 * 60), 24 * 60 * 60)
-        bitunix_fee_policy = os.getenv("BITUNIX_FEE_POLICY", "").strip()
-        if bitunix_fee_policy not in {
-            "",
-            "deduct_positive",
-            "signed_value",
-        }:
-            raise RuntimeError(
-                "BITUNIX_FEE_POLICY ma nieprawidłową wartość."
-            )
-        return cls(
-            telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
-            allowed_origins=_split_origins(os.getenv("ALLOWED_ORIGINS")),
-            session_ttl_seconds=ttl,
-            trades_path=os.getenv("BOT_TRADES_PATH", DEFAULT_TRADES_PATH),
-            audit_hash_salt=os.getenv("AUDIT_HASH_SALT", ""),
-            superadmin_ids=frozenset(admins),
-            bitunix_fee_policy=bitunix_fee_policy or None,
-            adapter_release=(
-                os.getenv("ADAPTER_RELEASE_ID", "v13.8.0").strip()
-                or "v13.8.0"
-            )[:128],
-        )
-
-
-SETTINGS = Settings.from_env()
-
-
-class SlidingWindowLimiter:
-    """Small in-process guard; production should also rate-limit in nginx."""
-
-    def __init__(self) -> None:
-        self._events: dict[str, deque[float]] = defaultdict(deque)
-        self._lock = threading.Lock()
-
-    def check(self, key: str, limit: int, window_seconds: float) -> None:
-        now = time.monotonic()
-        cutoff = now - window_seconds
-        with self._lock:
-            events = self._events[key]
-            while events and events[0] <= cutoff:
-                events.popleft()
-            if len(events) >= limit:
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Zbyt wiele prób. Spróbuj ponownie za chwilę.",
-                    headers={"Retry-After": str(max(1, int(window_seconds)))},
-                )
-            events.append(now)
-            if len(self._events) > 20_000:
-                for old_key in list(self._events)[:2_000]:
-                    if not self._events[old_key] or self._events[old_key][-1] <= cutoff:
-                        self._events.pop(old_key, None)
-
-
-RATE_LIMITER = SlidingWindowLimiter()
-
-
-class TelegramLoginPayload(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    id: int = Field(gt=0)
-    first_name: str = Field(min_length=1, max_length=128)
-    last_name: str | None = Field(default=None, max_length=128)
-    username: str | None = Field(default=None, max_length=64)
-    photo_url: str | None = Field(default=None, max_length=2048)
-    auth_date: int = Field(ge=0)
-    hash: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
-
-
-class UserSettings(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    # Legacy fields are accepted for frontend compatibility but never used to
-    # establish identity.
-    telegram_id: str | int | None = None
-    telegram_auth: dict[str, Any] | None = None
-    exchange: str = Field(min_length=2, max_length=32)
-    api_key: str = Field(min_length=1, max_length=1024)
-    api_secret: str = Field(min_length=1, max_length=2048)
-    api_passphrase: str = Field(default="", max_length=1024)
-    api_uid: str = Field(default="", max_length=256)
-    subaccount: str = Field(default="", max_length=256)
-    margin_mode: Literal["isolated", "cross"] = "isolated"
-    leverage: int = Field(ge=1, le=100)
-    margin: float = Field(gt=0, le=1_000_000)
-    max_risk: float = Field(gt=0, le=1_000_000)
-
-    @field_validator("margin", "max_risk")
-    @classmethod
-    def finite_numbers_only(cls, value: float) -> float:
-        if not math.isfinite(value):
-            raise ValueError("wartość musi być skończona")
-        return value
-
-
-class AdminRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    admin_id: str | int | None = None
-    telegram_auth: dict[str, Any] | None = None
-
-
-class ToggleBotRequest(AdminRequest):
-    target_user: int = Field(gt=0)
-    active: bool
-
-
-class ToggleAdminRequest(AdminRequest):
-    target_user: int = Field(gt=0)
-    is_admin: bool
-
-
-class UpdateNameRequest(AdminRequest):
-    target_user: int = Field(gt=0)
-    custom_name: str = Field(min_length=1, max_length=128)
-
-
-class ApproveExchangeRequest(AdminRequest):
-    target_user: int = Field(gt=0)
-    exchange: str = Field(min_length=2, max_length=32)
-    bitunix_fee_policy: Literal["deduct_positive", "signed_value"] | None = None
-    canary_evidence: str = Field(min_length=8, max_length=512)
-
-
-class ApproveRolloutRequest(AdminRequest):
-    exchange: str = Field(min_length=2, max_length=32)
-    bitunix_fee_policy: Literal["deduct_positive", "signed_value"] | None = None
-    canary_record_id: int = Field(gt=0)
-
-
-@dataclass(frozen=True)
-class SessionUser:
-    telegram_id: int
-    is_admin: bool
-    is_superadmin: bool
-    csrf_hash: str
-    session_id: str
-    created_at: dt.datetime
-
-
-def _origin(request: Request) -> str | None:
-    return request.headers.get("origin")
-
-
-def _require_origin(request: Request) -> None:
-    try:
-        require_exact_origin(_origin(request), SETTINGS.allowed_origins)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Niedozwolone źródło żądania.",
-        ) from exc
-
-
-def _client_rate_key(request: Request) -> str:
-    # Do not blindly trust X-Forwarded-For supplied by the public internet.
-    return request.client.host if request.client else "unknown"
-
-
-def _privacy_hash(value: str) -> str | None:
-    if not value or not SETTINGS.audit_hash_salt:
-        return None
-    return hmac.new(
-        SETTINGS.audit_hash_salt.encode("utf-8"),
-        value.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-
-
-def _audit(
-    connection: Any,
-    *,
-    actor: int | None,
-    action: str,
-    outcome: str = "success",
-    target: int | None = None,
-    resource_type: str | None = None,
-    resource_id: str | None = None,
-    metadata: Mapping[str, Any] | None = None,
-    request: Request | None = None,
-) -> None:
-    safe_metadata = json.dumps(
-        dict(metadata or {}),
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    ip_hash = _privacy_hash(_client_rate_key(request)) if request else None
-    connection.execute(
-        """
-        INSERT INTO audit_log (
-            actor_telegram_id, target_telegram_id, action, resource_type,
-            resource_id, outcome, metadata_json, ip_hash
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            actor,
-            target,
-            action,
-            resource_type,
-            resource_id,
-            outcome,
-            safe_metadata,
-            ip_hash,
-        ),
-    )
-
-
-def _session_from_request(request: Request) -> SessionUser:
-    _require_origin(request)
-    raw_token = request.cookies.get(SESSION_COOKIE_NAME, "")
-    if not raw_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Brak aktywnej sesji.",
-        )
-    token_hash = hash_session_token(raw_token)
-    now = _utc_now()
-    with get_db_connection() as connection:
-        row = connection.execute(
-            """
-            SELECT s.session_id, s.csrf_hash, s.telegram_id, s.expires_at,
-                   s.revoked_at, s.created_at, s.last_seen_at, u.is_admin
-              FROM sessions AS s
-              JOIN users AS u ON u.telegram_id = s.telegram_id
-             WHERE s.token_hash = ?
-             LIMIT 1
-            """,
-            (token_hash,),
-        ).fetchone()
-        if not row:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Sesja jest nieprawidłowa.",
-            )
-        expiry = _parse_datetime(row["expires_at"])
-        if row["revoked_at"] or expiry is None or expiry <= now:
-            connection.execute(
-                "UPDATE sessions SET revoked_at = COALESCE(revoked_at, ?) "
-                "WHERE session_id = ?",
-                (_iso(now), row["session_id"]),
-            )
-            connection.commit()
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Sesja wygasła.",
-            )
-        last_seen = _parse_datetime(row["last_seen_at"])
-        if (
-            last_seen is None
-            or (now - last_seen).total_seconds() >= 5 * 60
-        ):
-            connection.execute(
-                "UPDATE sessions SET last_seen_at = ? WHERE session_id = ?",
-                (_iso(now), row["session_id"]),
-            )
-            connection.commit()
-        return SessionUser(
-            telegram_id=int(row["telegram_id"]),
-            is_admin=bool(row["is_admin"]),
-            is_superadmin=(
-                int(row["telegram_id"]) in SETTINGS.superadmin_ids
-            ),
-            csrf_hash=str(row["csrf_hash"]),
-            session_id=str(row["session_id"]),
-            created_at=(
-                _parse_datetime(row["created_at"])
-                or dt.datetime.min.replace(tzinfo=UTC)
-            ),
-        )
-
-
-def require_session(request: Request) -> SessionUser:
-    return _session_from_request(request)
-
-
-def require_mutation_session(request: Request) -> SessionUser:
-    user = _session_from_request(request)
-    supplied = request.headers.get("x-csrf-token", "")
-    if not csrf_token_matches(supplied, user.csrf_hash):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Nieprawidłowy token CSRF.",
-        )
-    RATE_LIMITER.check(
-        f"mutate:{user.telegram_id}",
-        limit=30,
-        window_seconds=60,
-    )
-    return user
-
-
-def require_admin(request: Request) -> SessionUser:
-    user = require_mutation_session(request)
-    if not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Brak uprawnień administratora.",
-        )
-    return user
-
-
-def require_superadmin(request: Request) -> SessionUser:
-    user = require_admin(request)
-    if not user.is_superadmin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Ta operacja wymaga roli SUPERADMIN.",
-        )
-    if (_utc_now() - user.created_at).total_seconds() > FRESH_ADMIN_SESSION_SECONDS:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Zaloguj się ponownie przed operacją krytyczną.",
-        )
-    return user
-
-
-def _random_referral_code() -> str:
-    return "CP-" + secrets.token_urlsafe(9).replace("-", "").replace("_", "")[:12]
-
-
-def _display_name(payload: Mapping[str, Any]) -> str:
-    first = str(payload.get("first_name") or "").strip()
-    last = str(payload.get("last_name") or "").strip()
-    return " ".join(item for item in (first, last) if item)[:128]
-
-
-@dataclass(frozen=True)
-class LicenseState:
-    active: bool
-    end_date: str | None
-    plan_name: str | None
-
-
-def _license_expiry(value: Any) -> dt.datetime | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        if len(text) == 10:
-            return dt.datetime.combine(
-                dt.date.fromisoformat(text) + dt.timedelta(days=1),
-                dt.time.min,
-                tzinfo=UTC,
-            )
-        parsed = dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
-
-
-def _license_state(
-    connection: Any,
-    telegram_id: int,
-    *,
-    require_user_enabled: bool = True,
-) -> LicenseState:
-    user = connection.execute(
-        "SELECT is_active, sub_end FROM users WHERE telegram_id = ?",
-        (telegram_id,),
-    ).fetchone()
-    if not user or (require_user_enabled and not bool(user["is_active"])):
-        return LicenseState(False, None, None)
-
-    rows = connection.execute(
-        "SELECT plan_name, end_date, is_active FROM subscriptions "
-        "WHERE telegram_id = ? ORDER BY id DESC",
-        (telegram_id,),
-    ).fetchall()
-    candidates: list[tuple[dt.datetime, str, str | None]] = []
-    if rows:
-        for row in rows:
-            if not bool(row["is_active"]):
-                continue
-            raw_expiry = row["end_date"] or user["sub_end"]
-            expiry = _license_expiry(raw_expiry)
-            if expiry is not None:
-                candidates.append(
-                    (expiry, str(raw_expiry), row["plan_name"])
-                )
-    else:
-        expiry = _license_expiry(user["sub_end"])
-        if expiry is not None:
-            candidates.append((expiry, str(user["sub_end"]), None))
-
-    if not candidates:
-        return LicenseState(False, None, None)
-    expiry, raw_expiry, plan_name = max(candidates, key=lambda item: item[0])
-    return LicenseState(expiry > _utc_now(), raw_expiry, plan_name)
-
-
-def _require_active_license(telegram_id: int) -> None:
-    with get_db_connection(readonly=True) as connection:
-        license_state = _license_state(connection, telegram_id)
-    if not license_state.active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Licencja jest nieaktywna lub wygasła.",
-        )
-
-
-def _create_or_update_authenticated_user(
-    connection: Any,
-    payload: Mapping[str, Any],
-) -> None:
-    telegram_id = int(payload["id"])
-    now = _utc_now()
-    join_date = now.date().isoformat()
-    trial_end = (now + dt.timedelta(days=30)).date().isoformat()
-    username = str(payload.get("username") or f"Inwestor_{telegram_id}")[:128]
-    custom_name = _display_name(payload)
-    existing = connection.execute(
-        "SELECT * FROM users WHERE telegram_id = ?",
-        (telegram_id,),
-    ).fetchone()
-    is_new_user = existing is None
-    if is_new_user:
-        for _ in range(5):
-            try:
-                connection.execute(
-                    """
-                    INSERT INTO users (
-                        telegram_id, username, custom_name, referral_code,
-                        join_date, sub_end, trial_used_at,
-                        is_admin, is_active,
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-                    """,
-                    (
-                        telegram_id,
-                        username,
-                        custom_name,
-                        _random_referral_code(),
-                        join_date,
-                        trial_end,
-                        _iso(now),
-                        int(telegram_id in SETTINGS.superadmin_ids),
-                        _iso(now),
-                        _iso(now),
-                    ),
-                )
-                break
-            except Exception as exc:
-                if "referral" not in str(exc).lower():
-                    raise
-        else:
-            raise RuntimeError("Nie można utworzyć unikalnego kodu polecającego.")
-    else:
-        connection.execute(
-            """
-            UPDATE users
-               SET username = ?,
-                   custom_name = COALESCE(NULLIF(custom_name, ''), ?),
-                   join_date = COALESCE(NULLIF(join_date, ''), ?),
-                   is_admin = CASE WHEN ? = 1 THEN 1 ELSE is_admin END,
-                   updated_at = ?
-             WHERE telegram_id = ?
-            """,
-            (
-                username,
-                custom_name,
-                join_date,
-                int(telegram_id in SETTINGS.superadmin_ids),
-                _iso(now),
-                telegram_id,
-            ),
-        )
-        if not existing["referral_code"]:
-            connection.execute(
-                "UPDATE users SET referral_code = ? WHERE telegram_id = ?",
-                (_random_referral_code(), telegram_id),
-            )
-    subscription_history = connection.execute(
-        "SELECT id FROM subscriptions WHERE telegram_id = ? LIMIT 1",
-        (telegram_id,),
-    ).fetchone()
-    if is_new_user and not subscription_history:
-        connection.execute(
-            """
-            INSERT INTO subscriptions (
-                telegram_id, plan_name, start_date, end_date, is_active
-            ) VALUES (?, 'Pakiet Startowy (30 dni)', ?, ?, 1)
-            """,
-            (telegram_id, _iso(now), trial_end),
-        )
-
-
-def _issue_database_session(
-    connection: Any,
-    telegram_id: int,
-    request: Request,
-) -> tuple[str, str]:
-    issued = issue_session_secrets()
-    now = _utc_now()
-    expires = now + dt.timedelta(seconds=SETTINGS.session_ttl_seconds)
-    session_id = secrets.token_hex(16)
-    user_agent = request.headers.get("user-agent", "")
-    connection.execute(
-        """
-        INSERT INTO sessions (
-            session_id, token_hash, csrf_hash, telegram_id, created_at,
-            expires_at, last_seen_at, user_agent_hash, ip_prefix_hash
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            session_id,
-            issued.session_hash,
-            issued.csrf_hash,
-            telegram_id,
-            _iso(now),
-            _iso(expires),
-            _iso(now),
-            _privacy_hash(user_agent),
-            _privacy_hash(_client_rate_key(request)),
-        ),
-    )
-    connection.execute(
-        "DELETE FROM sessions WHERE expires_at <= ? OR revoked_at IS NOT NULL",
-        (_iso(now - dt.timedelta(days=2)),),
-    )
-    # Bound session accumulation without invalidating the just-issued session.
-    rows = connection.execute(
-        """
-        SELECT session_id FROM sessions
-         WHERE telegram_id = ? AND revoked_at IS NULL
-         ORDER BY created_at DESC
-        """,
-        (telegram_id,),
-    ).fetchall()
-    for row in rows[10:]:
-        connection.execute(
-            "UPDATE sessions SET revoked_at = ? WHERE session_id = ?",
-            (_iso(now), row["session_id"]),
-        )
-    return issued.session_token, issued.csrf_token
-
-
-def _selected_account(connection: Any, telegram_id: int) -> Any:
-    return connection.execute(
-        """
-        SELECT a.*, c.account_id AS credentials_row,
-               r.leverage, r.margin, r.max_risk
-          FROM exchange_accounts AS a
-          LEFT JOIN exchange_credentials AS c ON c.account_id = a.id
-          LEFT JOIN exchange_risk_settings AS r ON r.account_id = a.id
-         WHERE a.telegram_id = ? AND a.is_selected = 1
-         LIMIT 1
-        """,
-        (telegram_id,),
-    ).fetchone()
-
-
-def _selected_credential_config(
-    connection: Any,
-    telegram_id: int,
-) -> tuple[str, dict[str, Any]] | None:
-    row = connection.execute(
-        """
-        SELECT a.exchange, a.margin_mode, a.bitunix_fee_policy,
-               c.ciphertext, c.nonce, c.key_id
-          FROM exchange_accounts AS a
-          JOIN exchange_credentials AS c ON c.account_id = a.id
-         WHERE a.telegram_id = ? AND a.is_selected = 1
-         LIMIT 1
-        """,
-        (telegram_id,),
-    ).fetchone()
-    if not row:
-        return None
-    exchange = str(row["exchange"])
-    try:
-        cipher = get_credential_cipher_from_env()
-        plaintext = cipher.decrypt(
-            bytes(row["ciphertext"]),
-            bytes(row["nonce"]),
-            str(row["key_id"]),
-            credential_aad(telegram_id, exchange, str(row["key_id"])),
-        )
-        payload = json.loads(plaintext)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Nie można bezpiecznie odczytać dotychczasowego połączenia "
-                "API. Zmiana została zablokowana."
-            ),
-        ) from exc
-    if not isinstance(payload, dict):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Dotychczasowa konfiguracja API ma nieprawidłowy format.",
-        )
-    payload["margin_mode"] = row["margin_mode"] or "isolated"
-    payload["bitunix_fee_policy"] = row["bitunix_fee_policy"]
-    return exchange, payload
-
-
-def _catalog_capabilities() -> dict[str, dict[str, Any]]:
-    """Return rollout state from SQLite while keeping MEXC fail-closed."""
-
-    capabilities = {
-        exchange: dict(value)
-        for exchange, value in EXCHANGE_CAPABILITIES.items()
-    }
-    try:
-        with get_db_connection(readonly=True) as connection:
-            rows = connection.execute(
-                "SELECT exchange, enabled, status FROM exchange_catalog"
-            ).fetchall()
-    except Exception:
-        return capabilities
-    for row in rows:
-        exchange = str(row["exchange"])
-        if exchange not in capabilities:
-            continue
-        if exchange == "mexc":
-            capabilities[exchange] = {
-                "enabled": False,
-                "status": "live_blocked",
-            }
-        else:
-            capabilities[exchange] = {
-                "enabled": bool(row["enabled"]),
-                "status": str(row["status"]),
-            }
-    return capabilities
-
-
-def _rollout_config(connection: Any, exchange: str) -> tuple[str, dict[str, Any]]:
-    row = connection.execute(
-        "SELECT status, config_json FROM exchange_catalog WHERE exchange = ?",
-        (exchange,),
-    ).fetchone()
-    if not row:
-        capability = EXCHANGE_CAPABILITIES[exchange]
-        return str(capability["status"]), {}
-    try:
-        config = json.loads(row["config_json"] or "{}")
-    except (TypeError, ValueError):
-        config = {}
-    if not isinstance(config, dict):
-        config = {}
-    return str(row["status"]), config
-
-
-def _dashboard_payload(telegram_id: int) -> dict[str, Any]:
-    with get_db_connection(readonly=True) as connection:
-        user = connection.execute(
-            "SELECT * FROM users WHERE telegram_id = ?",
-            (telegram_id,),
-        ).fetchone()
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Nie znaleziono użytkownika.",
-            )
-        user_data = dict(user)
-        subscription = connection.execute(
-            """
-            SELECT * FROM subscriptions
-             WHERE telegram_id = ? AND is_active = 1
-             ORDER BY id DESC LIMIT 1
-            """,
-            (telegram_id,),
-        ).fetchone()
-        license_state = _license_state(connection, telegram_id)
-        account = _selected_account(connection, telegram_id)
-
-        if account:
-            account_data = dict(account)
-            exchange = str(account_data["exchange"])
-            credentials_configured = bool(account_data.get("credentials_row"))
-            verification_status = str(
-                account_data.get("verification_status") or "not_configured"
-            )
-            approved = verification_status in {
-                "verified",
-                "canary_verified",
-                "manual_verified",
-                "legacy_migrated",
-            }
-            api_connected = bool(
-                license_state.active
-                and
-                user_data.get("is_active", 1)
-                and account_data.get("is_enabled")
-                and account_data.get("live_trading_enabled")
-                and credentials_configured
-                and approved
-            )
-            leverage = account_data.get("leverage") or 20
-            margin = account_data.get("margin") or 4.0
-            max_risk = account_data.get("max_risk") or 20.0
-            margin_mode = account_data.get("margin_mode") or "isolated"
-        else:
-            columns = table_columns(connection, "users")
-            legacy_key = next(
-                (
-                    user_data.get(column)
-                    for column in (
-                        "bitget_api_key",
-                        "api_key",
-                        "disabled_api_key",
-                    )
-                    if column in columns and user_data.get(column)
-                ),
-                None,
-            )
-            legacy_secret = next(
-                (
-                    user_data.get(column)
-                    for column in ("bitget_api_secret", "api_secret")
-                    if column in columns and user_data.get(column)
-                ),
-                None,
-            )
-            legacy_passphrase = next(
-                (
-                    user_data.get(column)
-                    for column in ("bitget_passphrase", "api_passphrase")
-                    if column in columns and user_data.get(column)
-                ),
-                None,
-            )
-            exchange = "bitget"
-            credentials_configured = bool(
-                legacy_key and legacy_secret and legacy_passphrase
-            )
-            verification_status = (
-                "legacy_migrated" if credentials_configured else "not_configured"
-            )
-            api_connected = bool(
-                license_state.active
-                and credentials_configured
-                and user_data.get("is_active", 1)
-            )
-            leverage = user_data.get("leverage") or 20
-            margin = user_data.get("margin") or 4.0
-            max_risk = user_data.get("max_risk") or 20.0
-            margin_mode = user_data.get("margin_mode") or "isolated"
-
-        sub_data = dict(subscription) if subscription else {}
-        return {
-            "status": "success",
-            "telegram_id": str(user_data["telegram_id"]),
-            "username": user_data.get("username") or "",
-            "custom_name": user_data.get("custom_name") or "",
-            "referral_code": user_data.get("referral_code") or "",
-            "plan_name": (
-                license_state.plan_name
-                or sub_data.get("plan_name")
-                or "Brak aktywnego pakietu"
-            ),
-            "license_active": license_state.active,
-            "api_connected": api_connected,
-            "credentials_configured": credentials_configured,
-            "verification_status": verification_status,
-            "exchange": exchange,
-            "leverage": int(leverage),
-            "margin": float(margin),
-            "max_risk": float(max_risk),
-            "margin_mode": margin_mode,
-            "subscription_end_date": (
-                license_state.end_date
-                or "Brak danych"
-            ),
-            "is_admin": bool(user_data.get("is_admin", False)),
-            "multi_exchange": True,
-        }
-
-
-def _managed_state_exists(
-    telegram_id: int,
-    *,
-    require_state_file: bool = False,
-) -> bool:
-    path = Path(SETTINGS.trades_path)
-    if not path.exists():
-        if require_state_file:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "Brakuje trades.json, więc nie można bezpiecznie "
-                    "potwierdzić braku otwartych zleceń."
-                ),
-            )
-        return False
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        # A corrupt/unreadable state file must not permit a connection switch.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Nie można bezpiecznie potwierdzić stanu otwartych zleceń. "
-                "Najpierw sprawdź trades.json."
-            ),
-        ) from exc
-    if not isinstance(payload, Mapping):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Nieprawidłowy format stanu otwartych zleceń.",
-        )
-    managed = payload.get(str(telegram_id), {})
-    return isinstance(managed, Mapping) and bool(managed)
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    with get_db_connection() as connection:
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            ensure_schema(connection)
-            unmigrated = unmigrated_legacy_credential_users(connection)
-            if unmigrated:
-                raise RuntimeError(
-                    "Wykryto kompletne stare klucze API bez bezpiecznej "
-                    "migracji. Zatrzymaj API i bota, następnie uruchom "
-                    "migrate_db.py przed startem nowej wersji. Liczba kont: "
-                    f"{len(unmigrated)}."
-                )
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-    yield
-
-
-app = FastAPI(
-    title="Czarna Perła Portal API",
-    version="13.8.0",
-    docs_url=None,
-    redoc_url=None,
-    lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=list(SETTINGS.allowed_origins),
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=[
-        "Accept",
-        "Content-Type",
-        "X-CSRF-Token",
-        "X-Telegram-Auth",
+"use client";
+
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+
+type PageName = "landing" | "dashboard" | "admin";
+type ExchangeId =
+  | "bitget"
+  | "binanceusdm"
+  | "bybit"
+  | "okx"
+  | "gate"
+  | "bitunix"
+  | "mexc";
+type ExchangeStatus = "live" | "test" | "beta" | "blocked";
+type ExchangeCapabilityStatus =
+  | "live"
+  | "canary_required"
+  | "manual_beta"
+  | "live_blocked"
+  | string;
+type BitunixFeePolicy = "deduct_positive" | "signed_value";
+
+type TelegramUser = {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+};
+
+type DashboardData = {
+  status: string;
+  username?: string;
+  custom_name?: string;
+  plan_name?: string;
+  referral_code?: string;
+  margin?: number;
+  leverage?: number;
+  max_risk?: number;
+  margin_mode?: "isolated" | "cross";
+  exchange?: ExchangeId;
+  api_connected?: boolean;
+  credentials_configured?: boolean;
+  subscription_end_date?: string;
+  is_admin?: boolean;
+  verification_status?: string;
+  multi_exchange?: boolean;
+};
+
+type AdminUser = {
+  telegram_id: string;
+  custom_name?: string;
+  join_date?: string;
+  sub_end?: string;
+  bot_active?: boolean;
+  is_admin?: boolean;
+  exchange?: ExchangeId;
+  verification_status?: string;
+};
+
+type ExchangeCapability = {
+  enabled: boolean;
+  status: ExchangeCapabilityStatus;
+};
+
+type CapabilitiesData = {
+  status?: string;
+  multi_exchange?: boolean;
+  telegram_session?: boolean;
+  exchanges?: Partial<Record<ExchangeId, ExchangeCapability>>;
+};
+
+type ExchangeConfig = {
+  id: ExchangeId;
+  name: string;
+  market: string;
+  status: ExchangeStatus;
+  statusLabel: string;
+  selectable: boolean;
+  passphrase: boolean;
+  description: string;
+  fields: string;
+  mode: string;
+  activation: string;
+  instructions: string[];
+  docsUrl?: string;
+};
+
+declare global {
+  interface Window {
+    onTelegramAuth?: (user: TelegramUser) => void;
+  }
+}
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_CP_API_BASE_URL?.replace(/\/+$/, "") ??
+  "/portal-api";
+
+const TELEGRAM_BOT =
+  process.env.NEXT_PUBLIC_CP_TELEGRAM_BOT ?? "czarna_perla_auth_bot";
+
+const TELEGRAM_GROUP = "https://t.me/+QumQey-BSYNkYTlk";
+
+const exchanges: ExchangeConfig[] = [
+  {
+    id: "bitget",
+    name: "Bitget",
+    market: "USDT Futures",
+    status: "live",
+    statusLabel: "LIVE",
+    selectable: true,
+    passphrase: true,
+    description:
+      "Natywna obsługa wejść, SL, TP, trailing stopu i dziennego PnL.",
+    fields: "API Key + API Secret + Passphrase",
+    mode: "One-way",
+    activation: "Automatyczna weryfikacja konta przed uruchomieniem.",
+    instructions: [
+      "Wejdź w zarządzanie API i utwórz nowy klucz przeznaczony wyłącznie dla Czarnej Perły.",
+      "Włącz odczyt konta oraz handel Futures. Nie włączaj wypłat ani transferów.",
+      "Ustaw białą listę IP serwera, zapisz własną Passphrase i przełącz USDT Futures na tryb One-way.",
+      "Wklej trzy dane do formularza i rozpocznij test minimalnym marginem.",
     ],
-)
+    docsUrl: "https://www.bitget.com/api-doc/common/signature",
+  },
+  {
+    id: "binanceusdm",
+    name: "Binance",
+    market: "USD-M Futures",
+    status: "test",
+    statusLabel: "LIVE PO TEŚCIE KONTA",
+    selectable: true,
+    passphrase: false,
+    description:
+      "Adapter LIVE jest gotowy; każde konto przechodzi odczytowy smoke test i minimalny canary.",
+    fields: "API Key + API Secret",
+    mode: "One-way",
+    activation: "Aktywacja po weryfikacji Futures, PnL i trybu pozycji.",
+    instructions: [
+      "W API Management utwórz oddzielny klucz dla bota.",
+      "Włącz odczyt oraz Enable Futures. Wypłaty i transfery pozostaw wyłączone.",
+      "Dodaj IP serwera do ograniczeń klucza i ustaw Position Mode na One-way.",
+      "Wklej API Key i API Secret; system wykona kontrolny odczyt przed aktywacją.",
+    ],
+    docsUrl:
+      "https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info",
+  },
+  {
+    id: "bybit",
+    name: "Bybit",
+    market: "Linear USDT",
+    status: "test",
+    statusLabel: "LIVE PO TEŚCIE KONTA",
+    selectable: true,
+    passphrase: false,
+    description:
+      "Obsługa kontraktów liniowych z weryfikacją trybu pozycji i dziennego PnL.",
+    fields: "API Key + API Secret",
+    mode: "One-way",
+    activation: "Aktywacja po autoryzowanym teście odczytowym.",
+    instructions: [
+      "Utwórz System-generated API Key w panelu API Management.",
+      "Nadaj odczyt i handel Contract/Derivatives. Nie przyznawaj uprawnienia Withdraw.",
+      "Ogranicz klucz adresem IP serwera i ustaw pozycje liniowe w trybie One-way.",
+      "Wklej API Key oraz API Secret i poczekaj na potwierdzenie testu konta.",
+    ],
+    docsUrl: "https://bybit-exchange.github.io/docs/v5/intro",
+  },
+  {
+    id: "okx",
+    name: "OKX",
+    market: "USDT Perpetual SWAP",
+    status: "test",
+    statusLabel: "LIVE PO TEŚCIE KONTA",
+    selectable: true,
+    passphrase: true,
+    description:
+      "Obsługa kontraktów SWAP; wymagane są trzy dane API i tryb pozycji Net.",
+    fields: "API Key + API Secret + Passphrase",
+    mode: "Net",
+    activation: "Aktywacja po potwierdzeniu rachunku SWAP i Net mode.",
+    instructions: [
+      "W sekcji API utwórz klucz z uprawnieniami Read oraz Trade.",
+      "Wypłaty pozostaw wyłączone, dodaj IP serwera i zapisz utworzoną Passphrase.",
+      "Dla USDT SWAP ustaw Position Mode na Net.",
+      "Wklej API Key, API Secret i Passphrase; aktywacja nastąpi po teście odczytowym.",
+    ],
+    docsUrl: "https://www.okx.com/docs-v5/en/",
+  },
+  {
+    id: "gate",
+    name: "Gate",
+    market: "USDT Perpetual",
+    status: "test",
+    statusLabel: "LIVE PO TEŚCIE KONTA",
+    selectable: true,
+    passphrase: false,
+    description:
+      "Obsługa USDT perpetual z natywnym rozliczaniem zamkniętych pozycji.",
+    fields: "API Key + API Secret",
+    mode: "Single / One-way",
+    activation: "Aktywacja po kontroli rachunku rozliczanego w USDT.",
+    instructions: [
+      "Utwórz osobny klucz APIv4 dla Czarnej Perły.",
+      "Nadaj Futures Read-Write, ale nie zezwalaj na wypłaty ani transfery.",
+      "Dodaj whitelistę IP, wybierz rozliczenie USDT i Single/One-way mode.",
+      "Wklej API Key i API Secret; system sprawdzi połączenie przed startem.",
+    ],
+    docsUrl: "https://www.gate.com/docs/developers/apiv4/en/",
+  },
+  {
+    id: "bitunix",
+    name: "Bitunix",
+    market: "USDT Futures",
+    status: "beta",
+    statusLabel: "BETA — AKTYWACJA RĘCZNA",
+    selectable: true,
+    passphrase: false,
+    description:
+      "Adapter jest gotowy, ale pierwsze konto wymaga potwierdzenia sposobu księgowania opłat.",
+    fields: "API Key + API Secret",
+    mode: "One-way",
+    activation:
+      "Administrator aktywuje konto po weryfikacji autentycznego zamkniętego zlecenia.",
+    instructions: [
+      "Utwórz klucz do USDT Futures z odczytem i handlem; wypłaty pozostaw wyłączone.",
+      "Dodaj adres IP serwera i ustaw konto w trybie One-way.",
+      "Zapisz klucze w panelu. Konto otrzyma status „oczekuje na walidację BETA”.",
+      "Pierwszy test wykonujemy minimalnym marginem i potwierdzamy prawidłowe księgowanie opłat.",
+    ],
+    docsUrl: "https://www.bitunix.com/api-docs/futures/common/introduction.html",
+  },
+  {
+    id: "mexc",
+    name: "MEXC",
+    market: "Futures / Shadow",
+    status: "blocked",
+    statusLabel: "LIVE ZABLOKOWANY",
+    selectable: false,
+    passphrase: false,
+    description:
+      "Dane rynkowe mogą być obserwowane, lecz prawdziwe zlecenia są wyłączone fail-closed.",
+    fields: "Nie wprowadzaj kluczy",
+    mode: "Shadow",
+    activation:
+      "Odblokowanie dopiero po pełnej weryfikacji endpointów zleceń i dziennego net PnL.",
+    instructions: [
+      "MEXC pozostaje dostępny wyłącznie jako informacja o planowanym rozszerzeniu.",
+      "Nie wprowadzaj kluczy API i nie próbuj uruchamiać handlu LIVE.",
+      "Shadow i analiza danych nie oznaczają zgody na składanie prawdziwych zleceń.",
+      "Panel udostępni połączenie dopiero po zakończeniu pełnej walidacji bezpieczeństwa.",
+    ],
+    docsUrl: "https://mexcdevelop.github.io/apidocs/contract_v1_en/",
+  },
+];
 
+const exchangeMap = Object.fromEntries(
+  exchanges.map((exchange) => [exchange.id, exchange]),
+) as Record<ExchangeId, ExchangeConfig>;
 
-@app.middleware("http")
-async def security_headers_and_body_limit(request: Request, call_next):
-    content_length = request.headers.get("content-length")
-    if content_length:
-        try:
-            if int(content_length) > MAX_BODY_BYTES:
-                return JSONResponse(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    content={
-                        "status": "error",
-                        "message": "Żądanie jest zbyt duże.",
-                    },
-                )
-        except ValueError:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={"status": "error", "message": "Błędny Content-Length."},
-            )
-    if request.method in {"POST", "PUT", "PATCH"}:
-        chunks: list[bytes] = []
-        received = 0
-        async for chunk in request.stream():
-            received += len(chunk)
-            if received > MAX_BODY_BYTES:
-                return JSONResponse(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    content={
-                        "status": "error",
-                        "message": "Żądanie jest zbyt duże.",
-                    },
-                )
-            chunks.append(chunk)
-        # Starlette reuses this cached body in the endpoint parser.
-        request._body = b"".join(chunks)
-    try:
-        response = await call_next(request)
-    finally:
-        switch_lock = getattr(
-            getattr(request, "state", None),
-            "account_switch_lock",
-            None,
-        )
-        if switch_lock is not None:
-            switch_lock.release()
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Cache-Control"] = "no-store"
-    response.headers["Permissions-Policy"] = (
-        "camera=(), microphone=(), geolocation=(), payment=()"
-    )
-    response.headers["Strict-Transport-Security"] = (
-        "max-age=63072000; includeSubDomains"
-    )
-    response.headers.append("Vary", "Origin")
-    return response
+const statusClass: Record<ExchangeStatus, string> = {
+  live: "status-live",
+  test: "status-test",
+  beta: "status-beta",
+  blocked: "status-blocked",
+};
 
+function formatTimeLeft(endDateString?: string) {
+  if (!endDateString || endDateString === "Brak danych") {
+    return "Brak aktywnej licencji";
+  }
+  const endDate = new Date(endDateString);
+  if (Number.isNaN(endDate.getTime())) return "Nieprawidłowa data";
+  if (endDate.getFullYear() >= 2099) return "Licencja bezterminowa";
+  const distance = endDate.getTime() - Date.now();
+  if (distance <= 0) return "WYGASŁA — kontakt: @Mateushpro";
+  const days = Math.ceil(distance / 86_400_000);
+  return `${days} dni (do ${endDate.toLocaleDateString("pl-PL")})`;
+}
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(_: Request, exc: HTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"status": "error", "message": str(exc.detail)},
-        headers=exc.headers,
-    )
+async function readJson(response: Response) {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Serwer zwrócił nieprawidłową odpowiedź (${response.status}).`);
+  }
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.message || data?.detail || `Błąd HTTP ${response.status}`);
+  }
+  return data;
+}
 
+function verificationMessage(
+  result: Record<string, unknown>,
+  exchange: ExchangeConfig,
+) {
+  if (typeof result.message === "string" && result.message.trim()) {
+    return result.message;
+  }
+  if (result.verification_status === "verified") {
+    return `${exchange.name}: klucze i tryb ${exchange.mode} zostały potwierdzone.`;
+  }
+  if (result.verification_status === "manual_beta") {
+    return `${exchange.name}: klucze są poprawne. Administrator musi zatwierdzić politykę opłat przed LIVE.`;
+  }
+  if (result.verification_status === "canary_required") {
+    return `${exchange.name}: klucze są poprawne. Wymagany jest kontrolowany canary przed LIVE.`;
+  }
+  return `${exchange.name}: ustawienia zostały zapisane.`;
+}
 
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(_: Request, __: RequestValidationError):
-    # Pydantic error objects can echo the rejected input, including secrets.
-    return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={
-            "status": "error",
-            "message": "Nieprawidłowe dane wejściowe.",
-        },
-    )
+function verificationStatusLabel(status?: string) {
+  const labels: Record<string, string> = {
+    verified: "Połączenie LIVE zweryfikowane",
+    canary_required: "Klucze poprawne — wymagany canary",
+    canary_verified: "Canary zatwierdzony",
+    manual_beta: "Klucze poprawne — wymagana walidacja BETA",
+    manual_verified: "Walidacja BETA zatwierdzona",
+    live_blocked: "Handel LIVE zablokowany",
+    not_configured: "Nie skonfigurowano",
+  };
+  return status ? labels[status] ?? status.replaceAll("_", " ") : "Oczekuje";
+}
 
+export default function Home() {
+  const [page, setPage] = useState<PageName>("landing");
+  const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [selectedExchange, setSelectedExchange] =
+    useState<ExchangeId>("bitget");
+  const [instructionExchange, setInstructionExchange] =
+    useState<ExchangeId>("bitget");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [multiExchangeEnabled, setMultiExchangeEnabled] = useState(false);
+  const [exchangeCapabilities, setExchangeCapabilities] = useState<
+    Partial<Record<ExchangeId, ExchangeCapability>>
+  >({});
+  const [sessionVerified, setSessionVerified] = useState(false);
+  const [legacyMode, setLegacyMode] = useState(false);
+  const [csrfToken, setCsrfToken] = useState("");
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminActionMessage, setAdminActionMessage] = useState("");
+  const [rolloutFeePolicy, setRolloutFeePolicy] =
+    useState<BitunixFeePolicy>("deduct_positive");
+  const [connectionState, setConnectionState] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
+  const [showPassphrase, setShowPassphrase] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [apiSecret, setApiSecret] = useState("");
+  const [apiPassphrase, setApiPassphrase] = useState("");
+  const [apiUid, setApiUid] = useState("");
+  const [subaccount, setSubaccount] = useState("");
+  const [margin, setMargin] = useState("4");
+  const [leverage, setLeverage] = useState("20");
+  const [maxRisk, setMaxRisk] = useState("20");
+  const [marginMode, setMarginMode] = useState<"isolated" | "cross">("isolated");
 
-@app.exception_handler(Exception)
-async def unhandled_exception_handler(_: Request, __: Exception):
-    # Do not expose CCXT, SQLite, filesystem or credential metadata.
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={
-            "status": "error",
-            "message": "Wewnętrzny błąd serwera.",
-        },
-    )
+  const exchange = exchangeMap[selectedExchange];
+  const instruction = exchangeMap[instructionExchange];
+  const applyDashboardData = useCallback(
+    (data: DashboardData, secureSession: boolean) => {
+      if (data.status !== "success") {
+        throw new Error("Serwer nie potwierdził profilu.");
+      }
+      setSessionVerified(secureSession);
+      setLegacyMode(!secureSession);
+      setDashboard(data);
+      if (data.exchange && exchangeMap[data.exchange]) {
+        setSelectedExchange(data.exchange);
+        setInstructionExchange(data.exchange);
+        setApiPassphrase("");
+        setShowPassphrase(false);
+      }
+      if (data.margin != null) setMargin(String(data.margin));
+      if (data.leverage != null) setLeverage(String(data.leverage));
+      if (data.max_risk != null) setMaxRisk(String(data.max_risk));
+      if (data.margin_mode) setMarginMode(data.margin_mode);
+      setIsAdmin(secureSession && data.is_admin === true);
+      setConnectionState("success");
+      if (!secureSession) {
+        setSaveMessage(
+          "Panel działa w trybie zgodności. Administrator i nowe giełdy pozostają zablokowane do czasu uruchomienia bezpiecznej sesji.",
+        );
+      }
+    },
+    [],
+  );
 
+  const fetchDashboardSession = useCallback(async () => {
+    const response = await fetch(`${API_BASE_URL}/api/dashboard/me`, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    const data = (await readJson(response)) as DashboardData;
+    applyDashboardData(data, true);
+    return data;
+  }, [applyDashboardData]);
 
-@app.get("/healthz")
-def healthz():
-    return {"status": "ok", "version": "13.8.0"}
+  const authenticateTelegram = useCallback(
+    async (user: TelegramUser) => {
+      setConnectionState("loading");
+      setSaveMessage("");
+      const name = `${user.first_name}${user.last_name ? ` ${user.last_name}` : ""}`;
+      try {
+        const authResponse = await fetch(`${API_BASE_URL}/api/auth/telegram`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(user),
+        });
 
-
-@app.get("/api/capabilities")
-def capabilities():
-    return {
-        "status": "success",
-        "multi_exchange": True,
-        "telegram_session": True,
-        "exchanges": _catalog_capabilities(),
-    }
-
-
-@app.post("/api/auth/telegram")
-def authenticate_telegram(
-    payload: TelegramLoginPayload,
-    request: Request,
-    response: Response,
-):
-    _require_origin(request)
-    RATE_LIMITER.check(
-        f"auth:{_client_rate_key(request)}",
-        limit=10,
-        window_seconds=5 * 60,
-    )
-    if not SETTINGS.telegram_bot_token:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Logowanie Telegram nie jest skonfigurowane na serwerze.",
-        )
-    signed_payload = payload.model_dump(exclude_none=True)
-    try:
-        verified = verify_telegram_auth(
-            signed_payload,
-            SETTINGS.telegram_bot_token,
-        )
-    except (TelegramAuthError, SecurityConfigurationError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Weryfikacja Telegram nie powiodła się.",
-        ) from exc
-
-    telegram_id = int(verified["id"])
-    with get_db_connection() as connection:
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            _create_or_update_authenticated_user(connection, verified)
-            session_token, csrf_token = _issue_database_session(
-                connection,
-                telegram_id,
-                request,
-            )
-            _audit(
-                connection,
-                actor=telegram_id,
-                action="auth.telegram.login",
-                resource_type="session",
-                request=request,
-            )
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=session_token,
-        max_age=SETTINGS.session_ttl_seconds,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        path="/",
-    )
-    return {"status": "success", "csrf_token": csrf_token}
-
-
-@app.post("/api/auth/logout")
-def logout(
-    request: Request,
-    response: Response,
-    user: SessionUser = Depends(require_mutation_session),
-):
-    with get_db_connection() as connection:
-        connection.execute(
-            "UPDATE sessions SET revoked_at = ? WHERE session_id = ?",
-            (_iso(_utc_now()), user.session_id),
-        )
-        _audit(
-            connection,
-            actor=user.telegram_id,
-            action="auth.logout",
-            resource_type="session",
-            resource_id=user.session_id,
-            request=request,
-        )
-        connection.commit()
-    response.delete_cookie(
-        SESSION_COOKIE_NAME,
-        path="/",
-        secure=True,
-        httponly=True,
-        samesite="none",
-    )
-    return {"status": "success"}
-
-
-@app.get("/api/dashboard/me")
-def get_my_dashboard(user: SessionUser = Depends(require_session)):
-    return _dashboard_payload(user.telegram_id)
-
-
-@app.get("/api/dashboard/{telegram_id}")
-def get_legacy_dashboard(
-    telegram_id: int,
-    user: SessionUser = Depends(require_session),
-):
-    if telegram_id != user.telegram_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Nie możesz odczytać danych innego użytkownika.",
-        )
-    return _dashboard_payload(user.telegram_id)
-
-
-@app.post("/api/save_settings")
-def save_settings(
-    settings: UserSettings,
-    request: Request,
-    user: SessionUser = Depends(require_mutation_session),
-):
-    RATE_LIMITER.check(
-        f"settings:{user.telegram_id}",
-        limit=8,
-        window_seconds=60,
-    )
-    _require_active_license(user.telegram_id)
-    request.state.account_switch_lock = acquire_account_switch_lock(
-        SETTINGS.trades_path,
-        user.telegram_id,
-        exclusive=True,
-    )
-    try:
-        exchange = canonical_exchange_id(settings.exchange)
-    except ExchangeValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
-
-    with get_db_connection(readonly=True) as connection:
-        selected = _selected_account(connection, user.telegram_id)
-        selected_exchange = str(selected["exchange"]) if selected else None
-        current_connection = _selected_credential_config(
-            connection,
-            user.telegram_id,
-        )
-        rollout_status, rollout_config = _rollout_config(connection, exchange)
-    if _managed_state_exists(
-        user.telegram_id,
-        require_state_file=selected is not None,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Konto ma zarządzaną pozycję lub zlecenie. "
-                "Zmiana połączenia API jest teraz zablokowana."
-            ),
-        )
-    if current_connection is not None:
-        current_exchange, current_credentials = current_connection
-        try:
-            assert_no_open_exchange_state(
-                current_exchange,
-                current_credentials,
-            )
-        except ExchangeValidationError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=str(exc),
-            ) from exc
-
-    credential_payload = {
-        "api_key": settings.api_key,
-        "api_secret": settings.api_secret,
-        "api_passphrase": settings.api_passphrase,
-        "api_uid": settings.api_uid,
-        "subaccount": settings.subaccount,
-    }
-    bitunix_fee_policy = None
-    if exchange == "bitunix":
-        configured_policy = rollout_config.get("bitunix_fee_policy")
-        bitunix_fee_policy = (
-            str(configured_policy).strip()
-            if configured_policy
-            else SETTINGS.bitunix_fee_policy
-        )
-        if rollout_status == "live" and bitunix_fee_policy not in {
-            "deduct_positive",
-            "signed_value",
-        }:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=(
-                    "Bitunix LIVE nie ma zatwierdzonej polityki naliczania "
-                    "opłat."
-                ),
-            )
-    smoke_input = {
-        **credential_payload,
-        "margin_mode": settings.margin_mode,
-        # Never accept a fee-policy override from an investor.
-        "bitunix_fee_policy": bitunix_fee_policy,
-    }
-    try:
-        smoke = run_read_only_smoke_test(
-            exchange,
-            smoke_input,
-            rollout_status=rollout_status,
-        )
-    except ExchangeValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from exc
-
-    try:
-        cipher = get_credential_cipher_from_env()
-    except SecurityConfigurationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Szyfrowanie kluczy API nie jest skonfigurowane.",
-        ) from exc
-
-    plaintext = json.dumps(
-        credential_payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    aad = credential_aad(user.telegram_id, exchange, cipher.key_id)
-    ciphertext, nonce, key_id = cipher.encrypt(plaintext, aad)
-    fingerprint = hashlib.sha256(ciphertext).hexdigest()
-
-    approved = smoke.api_connected
-    with get_db_connection() as connection:
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            if _managed_state_exists(
-                user.telegram_id,
-                require_state_file=selected is not None,
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=(
-                        "W czasie weryfikacji pojawiła się zarządzana "
-                        "pozycja lub zlecenie. Zmiana została anulowana."
-                    ),
-                )
-            connection.execute(
-                """
-                UPDATE exchange_accounts
-                   SET is_selected = 0, is_enabled = 0,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE telegram_id = ?
-                """,
-                (user.telegram_id,),
-            )
-            connection.execute(
-                """
-                INSERT INTO exchange_accounts (
-                    telegram_id, exchange, is_selected, is_enabled,
-                    live_trading_enabled, margin_mode, verification_status,
-                    verification_message, verified_at, api_uid, subaccount,
-                    bitunix_fee_policy, updated_at
-                ) VALUES (?, ?, 1, ?, ?, ?, ?, NULL, ?, NULL, NULL, ?,
-                          CURRENT_TIMESTAMP)
-                ON CONFLICT(telegram_id, exchange) DO UPDATE SET
-                    is_selected = 1,
-                    is_enabled = excluded.is_enabled,
-                    live_trading_enabled = excluded.live_trading_enabled,
-                    margin_mode = excluded.margin_mode,
-                    verification_status = excluded.verification_status,
-                    verification_message = NULL,
-                    verified_at = excluded.verified_at,
-                    api_uid = NULL,
-                    subaccount = NULL,
-                    bitunix_fee_policy = excluded.bitunix_fee_policy,
-                    updated_at = CURRENT_TIMESTAMP
-                """,
-                (
-                    user.telegram_id,
-                    exchange,
-                    int(approved),
-                    int(approved),
-                    settings.margin_mode,
-                    smoke.verification_status,
-                    _iso(_utc_now()) if approved else None,
-                    bitunix_fee_policy,
-                ),
-            )
-            account = connection.execute(
-                "SELECT id FROM exchange_accounts "
-                "WHERE telegram_id = ? AND exchange = ?",
-                (user.telegram_id, exchange),
-            ).fetchone()
-            if not account:
-                raise RuntimeError("Nie utworzono konfiguracji giełdy.")
-            account_id = int(account["id"])
-            connection.execute(
-                """
-                INSERT INTO exchange_credentials (
-                    account_id, ciphertext, nonce, key_id, fingerprint,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                ON CONFLICT(account_id) DO UPDATE SET
-                    ciphertext = excluded.ciphertext,
-                    nonce = excluded.nonce,
-                    key_id = excluded.key_id,
-                    fingerprint = excluded.fingerprint,
-                    updated_at = CURRENT_TIMESTAMP
-                """,
-                (
-                    account_id,
-                    ciphertext,
-                    nonce,
-                    key_id,
-                    fingerprint,
-                ),
-            )
-            connection.execute(
-                """
-                INSERT INTO exchange_risk_settings (
-                    account_id, leverage, margin, max_risk, updated_at
-                ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(account_id) DO UPDATE SET
-                    leverage = excluded.leverage,
-                    margin = excluded.margin,
-                    max_risk = excluded.max_risk,
-                    updated_at = CURRENT_TIMESTAMP
-                """,
-                (
-                    account_id,
-                    settings.leverage,
-                    settings.margin,
-                    settings.max_risk,
-                ),
-            )
-            _audit(
-                connection,
-                actor=user.telegram_id,
-                target=user.telegram_id,
-                action="exchange.settings.saved",
-                resource_type="exchange_account",
-                resource_id=str(account_id),
-                metadata={
-                    "exchange": exchange,
-                    "verification_status": smoke.verification_status,
-                    "previous_exchange": selected_exchange,
-                },
-                request=request,
-            )
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-
-    if smoke.verification_status == "verified":
-        message = (
-            f"{exchange.upper()}: klucze i tryb ONE-WAY potwierdzone. "
-            "Połączenie LIVE jest gotowe."
-        )
-    elif smoke.verification_status == "manual_beta":
-        message = (
-            "Bitunix: klucze odczytane poprawnie. Wymagana jest ręczna "
-            "walidacja fee-policy przed aktywacją LIVE."
-        )
-    else:
-        message = (
-            f"{exchange.upper()}: klucze odczytane poprawnie. "
-            "Wymagany jest kontrolowany canary przed aktywacją LIVE."
-        )
-    return {
-        "status": "success",
-        "message": message,
-        "verification_status": smoke.verification_status,
-    }
-
-
-@app.post("/api/admin/users")
-def get_all_users(
-    _: AdminRequest,
-    user: SessionUser = Depends(require_admin),
-):
-    RATE_LIMITER.check(f"admin:{user.telegram_id}", 60, 60)
-    with get_db_connection(readonly=True) as connection:
-        rows = connection.execute(
-            """
-            SELECT u.telegram_id, u.custom_name, u.join_date, u.sub_end,
-                   u.is_active, u.is_admin, a.exchange,
-                   a.verification_status
-              FROM users AS u
-              LEFT JOIN exchange_accounts AS a
-                ON a.telegram_id = u.telegram_id AND a.is_selected = 1
-             ORDER BY u.join_date DESC, u.telegram_id
-            """
-        ).fetchall()
-        users_payload = []
-        for row in rows:
-            license_state = _license_state(
-                connection,
-                int(row["telegram_id"]),
-            )
-            users_payload.append(
-                {
-                    "telegram_id": str(row["telegram_id"]),
-                    "custom_name": row["custom_name"] or "",
-                    "join_date": row["join_date"] or "Przed aktualizacją",
-                    "sub_end": (
-                        license_state.end_date
-                        or row["sub_end"]
-                        or "Brak danych"
-                    ),
-                    "license_active": license_state.active,
-                    "bot_active": bool(
-                        row["is_active"] and license_state.active
-                    ),
-                    "is_admin": bool(row["is_admin"]),
-                    "exchange": row["exchange"] or "bitget",
-                    "verification_status": (
-                        row["verification_status"] or "not_configured"
-                    ),
-                }
-            )
-    return {
-        "status": "success",
-        "users": users_payload,
-    }
-
-
-@app.post("/api/admin/toggle_bot")
-def toggle_bot(
-    payload: ToggleBotRequest,
-    request: Request,
-    admin: SessionUser = Depends(require_admin),
-):
-    with get_db_connection() as connection:
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            target = connection.execute(
-                "SELECT telegram_id FROM users WHERE telegram_id = ?",
-                (payload.target_user,),
-            ).fetchone()
-            if not target:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Nie znaleziono użytkownika.",
-                )
-            if payload.active:
-                license_state = _license_state(
-                    connection,
-                    payload.target_user,
-                    require_user_enabled=False,
-                )
-                if not license_state.active:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="Nie można włączyć konta z wygasłą licencją.",
-                    )
-                account = _selected_account(connection, payload.target_user)
-                if account and str(account["verification_status"]) not in {
-                    "verified",
-                    "canary_verified",
-                    "manual_verified",
-                    "legacy_migrated",
-                }:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="Najpierw zatwierdź canary/manual tej giełdy.",
-                    )
-            connection.execute(
-                "UPDATE users SET is_active = ?, updated_at = ? "
-                "WHERE telegram_id = ?",
-                (
-                    int(payload.active),
-                    _iso(_utc_now()),
-                    payload.target_user,
-                ),
-            )
-            connection.execute(
-                """
-                UPDATE exchange_accounts
-                   SET is_enabled = CASE
-                       WHEN ? = 1
-                        AND live_trading_enabled = 1
-                        AND verification_status IN (
-                            'verified', 'canary_verified',
-                            'manual_verified', 'legacy_migrated'
-                        )
-                       THEN 1 ELSE 0 END,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE telegram_id = ? AND is_selected = 1
-                """,
-                (int(payload.active), payload.target_user),
-            )
-            _audit(
-                connection,
-                actor=admin.telegram_id,
-                target=payload.target_user,
-                action="admin.bot.toggled",
-                resource_type="user",
-                resource_id=str(payload.target_user),
-                metadata={"active": payload.active},
-                request=request,
-            )
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-    return {"status": "success"}
-
-
-@app.post("/api/admin/toggle_admin")
-def toggle_admin(
-    payload: ToggleAdminRequest,
-    request: Request,
-    admin: SessionUser = Depends(require_superadmin),
-):
-    if payload.target_user in SETTINGS.superadmin_ids and not payload.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Nie można odebrać roli skonfigurowanemu SUPERADMINOWI.",
-        )
-    if payload.target_user == admin.telegram_id and not payload.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Nie możesz odebrać uprawnień własnej aktywnej sesji.",
-        )
-    with get_db_connection() as connection:
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            target = connection.execute(
-                "SELECT telegram_id FROM users WHERE telegram_id = ?",
-                (payload.target_user,),
-            ).fetchone()
-            if not target:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Nie znaleziono użytkownika.",
-                )
-            connection.execute(
-                "UPDATE users SET is_admin = ?, updated_at = ? "
-                "WHERE telegram_id = ?",
-                (
-                    int(payload.is_admin),
-                    _iso(_utc_now()),
-                    payload.target_user,
-                ),
-            )
-            connection.execute(
-                "UPDATE sessions SET revoked_at = ? "
-                "WHERE telegram_id = ? AND session_id <> ? "
-                "AND revoked_at IS NULL",
-                (
-                    _iso(_utc_now()),
-                    payload.target_user,
-                    admin.session_id,
-                ),
-            )
-            _audit(
-                connection,
-                actor=admin.telegram_id,
-                target=payload.target_user,
-                action="admin.role.changed",
-                resource_type="user",
-                resource_id=str(payload.target_user),
-                metadata={"is_admin": payload.is_admin},
-                request=request,
-            )
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-    return {"status": "success"}
-
-
-@app.post("/api/admin/update_name")
-def update_name(
-    payload: UpdateNameRequest,
-    request: Request,
-    admin: SessionUser = Depends(require_admin),
-):
-    custom_name = payload.custom_name.strip()
-    if not custom_name:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Nazwa nie może być pusta.",
-        )
-    with get_db_connection() as connection:
-        cursor = connection.execute(
-            "UPDATE users SET custom_name = ?, updated_at = ? "
-            "WHERE telegram_id = ?",
-            (custom_name, _iso(_utc_now()), payload.target_user),
-        )
-        if cursor.rowcount != 1:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Nie znaleziono użytkownika.",
-            )
-        _audit(
-            connection,
-            actor=admin.telegram_id,
-            target=payload.target_user,
-            action="admin.name.updated",
-            resource_type="user",
-            resource_id=str(payload.target_user),
-            request=request,
-        )
-        connection.commit()
-    return {"status": "success"}
-
-
-@app.post("/api/admin/approve_exchange")
-def approve_exchange(
-    payload: ApproveExchangeRequest,
-    request: Request,
-    admin: SessionUser = Depends(require_superadmin),
-):
-    try:
-        exchange = canonical_exchange_id(payload.exchange)
-    except ExchangeValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
-    capability_status = str(EXCHANGE_CAPABILITIES[exchange]["status"])
-    if capability_status == "manual_beta":
-        if not payload.bitunix_fee_policy:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Bitunix wymaga zatwierdzonej polityki naliczania opłat.",
-            )
-        approved_status = "manual_verified"
-    elif capability_status == "canary_required":
-        approved_status = "canary_verified"
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ta giełda nie wymaga ręcznego canary.",
-        )
-
-    evidence_hash = hashlib.sha256(
-        payload.canary_evidence.strip().encode("utf-8")
-    ).hexdigest()
-    with get_db_connection() as connection:
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            account = connection.execute(
-                """
-                SELECT a.id, a.verification_status, c.fingerprint
-                  FROM exchange_accounts AS a
-                  JOIN exchange_credentials AS c ON c.account_id = a.id
-                 WHERE a.telegram_id = ? AND a.exchange = ?
-                """,
-                (payload.target_user, exchange),
-            ).fetchone()
-            if not account:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Brak zapisanych i sprawdzonych kluczy tej giełdy.",
-                )
-            expected_source = (
-                "manual_beta" if exchange == "bitunix"
-                else "canary_required"
-            )
-            if str(account["verification_status"]) != expected_source:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=(
-                        "Konto nie znajduje się w prawidłowym stanie "
-                        f"{expected_source}."
-                    ),
-                )
-            credential_fingerprint = str(account["fingerprint"] or "")
-            if len(credential_fingerprint) != 64:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Brak fingerprintu aktualnej wersji kluczy.",
-                )
-            canary = connection.execute(
-                """
-                INSERT INTO adapter_canary_records (
-                    exchange, account_id, adapter_release,
-                    credential_fingerprint, evidence_hash, recorded_by
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    exchange,
-                    account["id"],
-                    SETTINGS.adapter_release,
-                    credential_fingerprint,
-                    evidence_hash,
-                    admin.telegram_id,
-                ),
-            )
-            target_license = _license_state(
-                connection,
-                payload.target_user,
-            )
-            connection.execute(
-                """
-                UPDATE exchange_accounts
-                   SET verification_status = ?,
-                       live_trading_enabled = 1,
-                       is_enabled = CASE
-                           WHEN is_selected = 1 AND ? = 1 THEN 1 ELSE 0 END,
-                       bitunix_fee_policy = ?,
-                       verified_at = ?,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE id = ?
-                """,
-                (
-                    approved_status,
-                    int(target_license.active),
-                    (
-                        payload.bitunix_fee_policy
-                        if exchange == "bitunix"
-                        else None
-                    ),
-                    _iso(_utc_now()),
-                    account["id"],
-                ),
-            )
-            _audit(
-                connection,
-                actor=admin.telegram_id,
-                target=payload.target_user,
-                action="admin.exchange.approved",
-                resource_type="exchange_account",
-                resource_id=str(account["id"]),
-                metadata={
-                    "exchange": exchange,
-                    "verification_status": approved_status,
-                    "adapter_release": SETTINGS.adapter_release,
-                    "canary_record_id": int(canary.lastrowid),
-                },
-                request=request,
-            )
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-    return {
-        "status": "success",
-        "verification_status": approved_status,
-        "canary_record_id": int(canary.lastrowid),
-    }
-
-
-@app.post("/api/admin/approve_exchange_rollout")
-def approve_exchange_rollout(
-    payload: ApproveRolloutRequest,
-    request: Request,
-    admin: SessionUser = Depends(require_superadmin),
-):
-    """Release an adapter globally only after an operator completed canary.
-
-    This endpoint does not perform the canary itself.  It records the
-    administrator's explicit release and enables accounts whose read-only
-    credential smoke test had already passed.
-    """
-
-    try:
-        exchange = canonical_exchange_id(payload.exchange)
-    except ExchangeValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
-    current = _catalog_capabilities()[exchange]
-    current_status = str(current["status"])
-    if current_status == "live":
-        return {
-            "status": "success",
-            "exchange": exchange,
-            "rollout_status": "live",
-            "approved_accounts": 0,
+        if ([404, 405].includes(authResponse.status)) {
+          const legacyResponse = await fetch(
+            `${API_BASE_URL}/api/dashboard/${encodeURIComponent(user.id)}?name=${encodeURIComponent(name)}`,
+            {
+              method: "GET",
+              credentials: "include",
+              headers: { Accept: "application/json" },
+            },
+          );
+          const legacyData = (await readJson(
+            legacyResponse,
+          )) as DashboardData;
+          applyDashboardData(legacyData, false);
+          return;
         }
-    if current_status not in {"canary_required", "manual_beta"}:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ta giełda nie może zostać zwolniona do LIVE.",
-        )
-    if exchange == "bitunix" and not payload.bitunix_fee_policy:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Bitunix wymaga zatwierdzonej polityki naliczania opłat.",
-        )
 
-    account_status = (
-        "manual_verified" if exchange == "bitunix" else "canary_verified"
-    )
-    catalog_config = (
-        {"bitunix_fee_policy": payload.bitunix_fee_policy}
-        if exchange == "bitunix"
-        else {}
-    )
-    with get_db_connection() as connection:
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            canary = connection.execute(
-                """
-                SELECT r.id, r.exchange, r.account_id, r.adapter_release,
-                       r.credential_fingerprint, r.created_at,
-                       a.verification_status, c.fingerprint
-                  FROM adapter_canary_records AS r
-                  JOIN exchange_accounts AS a ON a.id = r.account_id
-                  JOIN exchange_credentials AS c ON c.account_id = a.id
-                 WHERE r.id = ? AND r.exchange = ?
-                """,
-                (payload.canary_record_id, exchange),
-            ).fetchone()
-            if (
-                not canary
-                or str(canary["adapter_release"]) != SETTINGS.adapter_release
-                or str(canary["credential_fingerprint"])
-                != str(canary["fingerprint"])
-                or str(canary["verification_status"])
-                not in {"canary_verified", "manual_verified"}
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=(
-                        "Brak aktualnego, zatwierdzonego rekordu canary dla "
-                        "tej wersji adaptera i kluczy."
-                    ),
-                )
-            canary_time = _parse_datetime(canary["created_at"])
-            if (
-                canary_time is None
-                or (_utc_now() - canary_time).total_seconds()
-                > 30 * 24 * 60 * 60
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Rekord canary jest starszy niż 30 dni.",
-                )
-            connection.execute(
-                """
-                UPDATE exchange_catalog
-                   SET status = 'live',
-                       enabled = 1,
-                       config_json = ?,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE exchange = ? AND exchange <> 'mexc'
-                """,
-                (
-                    json.dumps(
-                        catalog_config,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                    exchange,
-                ),
-            )
-            updated = connection.execute(
-                """
-                UPDATE exchange_accounts
-                   SET verification_status = ?,
-                       live_trading_enabled = 1,
-                       is_enabled = 0,
-                       bitunix_fee_policy = CASE
-                           WHEN exchange = 'bitunix' THEN ?
-                           ELSE bitunix_fee_policy
-                       END,
-                       verified_at = ?,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE exchange = ?
-                   AND verification_status IN (
-                       'canary_required', 'manual_beta'
-                   )
-                   AND EXISTS (
-                       SELECT 1 FROM exchange_credentials
-                        WHERE exchange_credentials.account_id =
-                              exchange_accounts.id
-                   )
-                """,
-                (
-                    account_status,
-                    (
-                        payload.bitunix_fee_policy
-                        if exchange == "bitunix"
-                        else None
-                    ),
-                    _iso(_utc_now()),
-                    exchange,
-                ),
-            )
-            released_accounts = connection.execute(
-                """
-                SELECT id, telegram_id, is_selected
-                  FROM exchange_accounts
-                 WHERE exchange = ?
-                   AND verification_status = ?
-                """,
-                (exchange, account_status),
-            ).fetchall()
-            for released_account in released_accounts:
-                if (
-                    bool(released_account["is_selected"])
-                    and _license_state(
-                        connection,
-                        int(released_account["telegram_id"]),
-                    ).active
-                ):
-                    connection.execute(
-                        "UPDATE exchange_accounts SET is_enabled = 1 "
-                        "WHERE id = ?",
-                        (released_account["id"],),
-                    )
-            _audit(
-                connection,
-                actor=admin.telegram_id,
-                action="admin.exchange.rollout_released",
-                resource_type="exchange",
-                resource_id=exchange,
-                metadata={
-                    "previous_status": current_status,
-                    "rollout_status": "live",
-                    "approved_accounts": int(updated.rowcount),
-                    "adapter_release": SETTINGS.adapter_release,
-                    "canary_record_id": int(canary["id"]),
-                },
-                request=request,
-            )
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-    return {
-        "status": "success",
-        "exchange": exchange,
-        "rollout_status": "live",
-        "approved_accounts": int(updated.rowcount),
+        const authData = await readJson(authResponse);
+        setCsrfToken(String(authData?.csrf_token ?? ""));
+        await fetchDashboardSession();
+      } catch (error) {
+        setSessionVerified(false);
+        setIsAdmin(false);
+        setConnectionState("error");
+        setSaveMessage(
+          error instanceof Error
+            ? error.message
+            : "Nie udało się utworzyć bezpiecznej sesji.",
+        );
+      }
+    },
+    [applyDashboardData, fetchDashboardSession],
+  );
+
+  const fetchCapabilities = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/capabilities`, {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const data = (await readJson(response)) as CapabilitiesData;
+      setMultiExchangeEnabled(data.multi_exchange === true);
+      setExchangeCapabilities(data.exchanges ?? {});
+    } catch {
+      // Fail-closed: stary backend pozostawia dostępny tylko Bitget.
+      setMultiExchangeEnabled(false);
+      setExchangeCapabilities({});
     }
+  }, []);
+
+  useEffect(() => {
+    window.onTelegramAuth = (user: TelegramUser) => {
+      setTelegramUser(user);
+      setPage("dashboard");
+      void authenticateTelegram(user);
+    };
+
+    const capabilityTimer = window.setTimeout(() => {
+      void fetchCapabilities();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(capabilityTimer);
+      delete window.onTelegramAuth;
+    };
+  }, [authenticateTelegram, fetchCapabilities]);
+
+  useEffect(() => {
+    if (page !== "dashboard" || telegramUser) return;
+    const host = document.getElementById("telegram-login-widget");
+    if (!host || host.querySelector("script")) return;
+
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.setAttribute("data-telegram-login", TELEGRAM_BOT);
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-radius", "8");
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    script.setAttribute("data-request-access", "write");
+    host.appendChild(script);
+  }, [page, telegramUser]);
+
+  async function saveSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!telegramUser) {
+      setSaveMessage("Najpierw zaloguj się przez Telegram.");
+      setConnectionState("error");
+      return;
+    }
+    if (
+      !canSelectExchange(exchange) ||
+      effectiveStatus(exchange) === "blocked"
+    ) {
+      setSaveMessage("Handel LIVE na tej giełdzie jest zablokowany.");
+      setConnectionState("error");
+      return;
+    }
+    if (!apiKey.trim() || !apiSecret.trim()) {
+      setSaveMessage("Uzupełnij API Key i API Secret.");
+      setConnectionState("error");
+      return;
+    }
+    if (exchange.passphrase && !apiPassphrase.trim()) {
+      setSaveMessage(`${exchange.name} wymaga Passphrase.`);
+      setConnectionState("error");
+      return;
+    }
+
+    const parsedMargin = Number(margin);
+    const parsedLeverage = Number(leverage);
+    const parsedRisk = Number(maxRisk);
+    if (
+      !Number.isFinite(parsedMargin) ||
+      parsedMargin <= 0 ||
+      !Number.isInteger(parsedLeverage) ||
+      parsedLeverage < 1 ||
+      parsedLeverage > 100 ||
+      !Number.isFinite(parsedRisk) ||
+      parsedRisk <= 0
+    ) {
+      setSaveMessage("Sprawdź margin, dźwignię i limit ryzyka.");
+      setConnectionState("error");
+      return;
+    }
+
+    setConnectionState("loading");
+    setSaveMessage(`Weryfikuję połączenie z ${exchange.name}…`);
+
+    const payload = {
+      telegram_id: String(telegramUser.id),
+      exchange: selectedExchange,
+      api_key: apiKey.trim(),
+      api_secret: apiSecret.trim(),
+      api_passphrase: exchange.passphrase ? apiPassphrase.trim() : "",
+      api_uid: apiUid.trim(),
+      subaccount: subaccount.trim(),
+      margin_mode: marginMode,
+      leverage: parsedLeverage,
+      margin: parsedMargin,
+      max_risk: parsedRisk,
+    };
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/save_settings`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+      const result = await readJson(response);
+      if (result.status !== "success") {
+        throw new Error(result.message || "Serwer nie potwierdził zapisu.");
+      }
+      const confirmedMessage = verificationMessage(result, exchange);
+      setApiKey("");
+      setApiSecret("");
+      setApiPassphrase("");
+      setApiUid("");
+      setSubaccount("");
+      // Od tej chwili odświeżamy profil wyłącznie przez ważną sesję.
+      // Podpis Telegram Login jest jednorazowy i po kilku minutach wygasa.
+      await fetchDashboardSession();
+      setConnectionState("success");
+      setSaveMessage(confirmedMessage);
+    } catch (error) {
+      setConnectionState("error");
+      setSaveMessage(
+        error instanceof Error
+          ? error.message
+          : "Serwer odrzucił konfigurację.",
+      );
+    }
+  }
+
+  async function fetchAdminData() {
+    if (!isAdmin || !telegramUser || !sessionVerified) return;
+    setAdminLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+        },
+        body: JSON.stringify({
+          admin_id: String(telegramUser.id),
+        }),
+      });
+      const data = await readJson(response);
+      setAdminUsers(Array.isArray(data.users) ? data.users : []);
+    } catch (error) {
+      setAdminUsers([]);
+      setAdminActionMessage(
+        error instanceof Error
+          ? error.message
+          : "Nie udało się pobrać danych administratora.",
+      );
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  async function adminMutation(
+    endpoint: string,
+    payload: Record<string, unknown>,
+  ) {
+    if (!telegramUser || !isAdmin || !sessionVerified) return undefined;
+    setAdminActionMessage("Zapisywanie zmiany…");
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+        },
+        body: JSON.stringify({
+          ...payload,
+          admin_id: String(telegramUser.id),
+        }),
+      });
+      const result = await readJson(response);
+      setAdminActionMessage(
+        typeof result.message === "string"
+          ? result.message
+          : "Zmiana została zapisana.",
+      );
+      await fetchAdminData();
+      return result as Record<string, unknown>;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Serwer odrzucił zmianę.";
+      setAdminActionMessage(message);
+      throw error;
+    }
+  }
+
+  async function approveGlobalRollout(
+    exchangeId: ExchangeId,
+    canaryRecordId: number,
+    feePolicy?: BitunixFeePolicy,
+  ) {
+    const target = exchangeMap[exchangeId];
+    const confirmed = window.confirm(
+      `Zwolnić ${target.name} globalnie do LIVE? Zrób to wyłącznie po zakończonym canary i sprawdzeniu rekordu ${canaryRecordId}.`,
+    );
+    if (!confirmed) return;
+    await adminMutation("/api/admin/approve_exchange_rollout", {
+      exchange: exchangeId,
+      canary_record_id: canaryRecordId,
+      ...(exchangeId === "bitunix"
+        ? { bitunix_fee_policy: feePolicy ?? rolloutFeePolicy }
+        : {}),
+    });
+    await fetchCapabilities();
+  }
+
+  function navigate(nextPage: PageName) {
+    if (nextPage === "admin" && !isAdmin) return;
+    setPage(nextPage);
+    if (nextPage === "admin") void fetchAdminData();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function chooseExchange(id: ExchangeId) {
+    const next = exchangeMap[id];
+    setInstructionExchange(id);
+    if (!canSelectExchange(next)) {
+      document
+        .getElementById("exchange-instructions")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    changeSelectedExchange(id);
+    setPage("dashboard");
+    window.setTimeout(() => {
+      document
+        .getElementById("exchange-form")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
+
+  function clearLocalSession() {
+    setTelegramUser(null);
+    setDashboard(null);
+    setIsAdmin(false);
+    setSessionVerified(false);
+    setLegacyMode(false);
+    setCsrfToken("");
+    setAdminUsers([]);
+    setApiKey("");
+    setApiSecret("");
+    setApiPassphrase("");
+    setSaveMessage("");
+    setConnectionState("idle");
+    setPage("landing");
+  }
+
+  async function logout() {
+    if (sessionVerified) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+            ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+          },
+        });
+        await readJson(response);
+      } catch (error) {
+        setConnectionState("error");
+        setSaveMessage(
+          error instanceof Error
+            ? `Nie udało się zakończyć sesji: ${error.message}`
+            : "Nie udało się zakończyć sesji. Spróbuj ponownie.",
+        );
+        setPage("dashboard");
+        return;
+      }
+    }
+    clearLocalSession();
+  }
+
+  function capabilityFor(item: ExchangeConfig) {
+    return exchangeCapabilities[item.id];
+  }
+
+  function effectiveStatus(item: ExchangeConfig): ExchangeStatus {
+    const status = capabilityFor(item)?.status;
+    if (status === "live") return "live";
+    if (status === "canary_required") return "test";
+    if (status === "manual_beta") return "beta";
+    if (status === "live_blocked") return "blocked";
+    return item.status;
+  }
+
+  function effectiveStatusLabel(item: ExchangeConfig) {
+    const capability = capabilityFor(item);
+    if (!capability) return item.statusLabel;
+    if (!capability.enabled) {
+      return capability.status === "live_blocked"
+        ? "LIVE ZABLOKOWANY"
+        : "WYŁĄCZONA";
+    }
+    if (capability.status === "live") return "LIVE";
+    if (capability.status === "canary_required") return "LIVE PO CANARY";
+    if (capability.status === "manual_beta") {
+      return "BETA — AKTYWACJA RĘCZNA";
+    }
+    return String(capability.status).replaceAll("_", " ").toUpperCase();
+  }
+
+  function canSelectExchange(item: ExchangeConfig) {
+    if (!item.selectable || item.status === "blocked") return false;
+    if (!multiExchangeEnabled) return item.id === "bitget";
+    const capability = capabilityFor(item);
+    return Boolean(
+      capability?.enabled && capability.status !== "live_blocked",
+    );
+  }
+
+  function changeSelectedExchange(id: ExchangeId) {
+    setSelectedExchange(id);
+    setInstructionExchange(id);
+    setApiPassphrase("");
+    setShowPassphrase(false);
+    setSaveMessage("");
+  }
+
+  return (
+    <div className="site-shell">
+      <header className="site-header">
+        <div className="container header-inner">
+          <button
+            className="brand"
+            onClick={() => navigate("landing")}
+            aria-label="Czarna Perła — strona główna"
+          >
+            <span aria-hidden="true">🏴‍☠️</span>
+            <span>
+              CZARNA <strong>PERŁA</strong>
+            </span>
+          </button>
+          <nav className="nav-tabs" aria-label="Główna nawigacja">
+            <button
+              className={page === "landing" ? "nav-link active" : "nav-link"}
+              onClick={() => navigate("landing")}
+            >
+              Strona główna
+            </button>
+            <button
+              className={page === "dashboard" ? "nav-link active" : "nav-link"}
+              onClick={() => navigate("dashboard")}
+            >
+              Panel inwestora
+            </button>
+            {isAdmin && (
+              <button
+                className={page === "admin" ? "nav-link admin active" : "nav-link admin"}
+                onClick={() => navigate("admin")}
+              >
+                Mostek kapitański
+              </button>
+            )}
+          </nav>
+        </div>
+      </header>
+
+      {page === "landing" && (
+        <main>
+          <section className="hero">
+            <div className="hero-glow" aria-hidden="true" />
+            <div className="container hero-grid">
+              <div className="hero-copy">
+                <div className="eyebrow">SMC • TRUE CVD • MULTI-EXCHANGE</div>
+                <h1>
+                  Jedna Czarna Perła.
+                  <span> Własna giełda każdego inwestora.</span>
+                </h1>
+                <p>
+                  System oddziela analizę rynku od egzekucji. Każde konto korzysta
+                  z adaptera swojej giełdy, a przed aktywacją przechodzi kontrolę
+                  Futures, trybu one-way/net, dziennego PnL i uprawnień API.
+                </p>
+                <div className="hero-actions">
+                  <button
+                    className="button primary"
+                    onClick={() =>
+                      document
+                        .getElementById("exchanges")
+                        ?.scrollIntoView({ behavior: "smooth" })
+                    }
+                  >
+                    Zobacz obsługiwane giełdy
+                  </button>
+                  <button
+                    className="button secondary"
+                    onClick={() => navigate("dashboard")}
+                  >
+                    Przejdź do panelu
+                  </button>
+                </div>
+                <div className="security-note">
+                  <span aria-hidden="true">🛡️</span>
+                  Klucze tylko Read + Futures/Trade. Uprawnienie do wypłat zawsze
+                  wyłączone.
+                </div>
+              </div>
+              <aside className="hero-console" aria-label="Stan systemu">
+                <div className="console-top">
+                  <span className="live-dot" />
+                  CZARNA PERŁA v13.8
+                </div>
+                <div className="console-line">
+                  <span>Bitget</span>
+                  <strong>PROD</strong>
+                </div>
+                <div className="console-line">
+                  <span>Binance / Bybit / OKX / Gate</span>
+                  <strong className="blue-text">CANARY</strong>
+                </div>
+                <div className="console-line">
+                  <span>Bitunix</span>
+                  <strong className="amber">BETA</strong>
+                </div>
+                <div className="console-line">
+                  <span>MEXC Futures</span>
+                  <strong className="red">LIVE BLOCK</strong>
+                </div>
+                <div className="console-line">
+                  <span>Maks. pozycji / konto</span>
+                  <strong>10</strong>
+                </div>
+                <div className="console-rule" />
+                <div className="risk-flow">
+                  <span>TP1 25%</span>
+                  <i>→</i>
+                  <span>SL +0,30%</span>
+                  <i>→</i>
+                  <span>TP2 50%</span>
+                </div>
+                <div className="runner-row">Runner 25% • trailing 0,40%</div>
+              </aside>
+            </div>
+          </section>
+
+          <section id="exchanges" className="section exchange-section">
+            <div className="container">
+              <div className="section-heading">
+                <div className="eyebrow">OBSŁUGIWANE RYNKI</div>
+                <h2>Bitget PROD • 4 po teście • Bitunix BETA • MEXC blokada</h2>
+                <p>
+                  Status oznacza realny poziom gotowości adaptera. Nie nazywamy
+                  giełdy działającą, dopóki nie przejdzie wymaganych kontroli.
+                </p>
+              </div>
+              <div className="exchange-grid">
+                {exchanges.map((item) => (
+                  <article
+                    className={`exchange-card ${statusClass[effectiveStatus(item)]}`}
+                    key={item.id}
+                  >
+                    <div className="exchange-card-top">
+                      <div>
+                        <h3>{item.name}</h3>
+                        <p>{item.market}</p>
+                      </div>
+                      <span className="status-chip">
+                        <span className="status-symbol" aria-hidden="true" />
+                        {effectiveStatusLabel(item)}
+                      </span>
+                    </div>
+                    <p className="exchange-description">{item.description}</p>
+                    <dl className="mini-specs">
+                      <div>
+                        <dt>Dane</dt>
+                        <dd>{item.fields}</dd>
+                      </div>
+                      <div>
+                        <dt>Tryb</dt>
+                        <dd>{item.mode}</dd>
+                      </div>
+                    </dl>
+                    <button
+                      className="card-action"
+                      onClick={() => chooseExchange(item.id)}
+                    >
+                      {!canSelectExchange(item) && item.id !== "mexc"
+                        ? "Giełda wyłączona w konfiguracji serwera"
+                        : effectiveStatus(item) === "blocked"
+                        ? "Dlaczego LIVE jest zablokowany"
+                        : effectiveStatus(item) === "beta"
+                          ? "Podłącz i poproś o aktywację"
+                          : "Podłącz w Panelu Inwestora"}
+                    </button>
+                  </article>
+                ))}
+              </div>
+              <p className="exchange-legend">
+                LIVE oznacza dostępny adapter egzekucyjny. Binance, Bybit, OKX i
+                Gate są uruchamiane dopiero po autoryzowanym teście odczytowym i
+                minimalnym canary na konkretnym koncie. Bitunix wymaga dodatkowej
+                ręcznej walidacji.
+              </p>
+            </div>
+          </section>
+
+          <section className="section proof-section">
+            <div className="container">
+              <div className="section-heading">
+                <div className="eyebrow">DANE Z RYNKU RZECZYWISTEGO</div>
+                <h2>Historia działania, nie obietnica wyniku</h2>
+                <p>
+                  Poniższe dane dotyczą historycznych kont Bitget i nie stanowią
+                  gwarancji przyszłych rezultatów.
+                </p>
+              </div>
+              <div className="proof-grid">
+                <article className="proof-card">
+                  <div className="proof-user">
+                    <span>👤 Kolega_Damian</span>
+                    <small>od 01.06.2026 • Bitget</small>
+                  </div>
+                  <strong className="win-rate">84,48%</strong>
+                  <div className="proof-stats">
+                    <span>
+                      <b>49</b> zyskownych
+                    </span>
+                    <span>
+                      <b>9</b> stratnych
+                    </span>
+                  </div>
+                </article>
+                <article className="proof-card">
+                  <div className="proof-user">
+                    <span>👤 Kolega_AREK</span>
+                    <small>od 19.06.2026 • Bitget</small>
+                  </div>
+                  <strong className="win-rate">93,10%</strong>
+                  <div className="proof-stats">
+                    <span>
+                      <b>27</b> zyskownych
+                    </span>
+                    <span>
+                      <b>2</b> stratne
+                    </span>
+                  </div>
+                </article>
+              </div>
+              <div className="risk-warning">
+                Handel kontraktami i dźwignią wiąże się z wysokim ryzykiem utraty
+                kapitału. Wyniki historyczne nie gwarantują wyników przyszłych.
+              </div>
+            </div>
+          </section>
+
+          <section className="section">
+            <div className="container">
+              <div className="section-heading">
+                <div className="eyebrow">ARCHITEKTURA SYSTEMU</div>
+                <h2>Analiza wspólna. Egzekucja właściwa dla giełdy.</h2>
+              </div>
+              <div className="feature-grid">
+                <article className="feature-card">
+                  <span>🌊</span>
+                  <h3>SMC + True CVD</h3>
+                  <p>
+                    Trend wyższych interwałów, FVG, knot, OTE i rzeczywisty napływ
+                    transakcji składają się na jeden wynik jakości setupu.
+                  </p>
+                </article>
+                <article className="feature-card">
+                  <span>🧭</span>
+                  <h3>Adapter per giełda</h3>
+                  <p>
+                    Wejście, SL, TP, anulowanie i recovery idą wyłącznie przez
+                    zweryfikowany adapter konta — bez awaryjnego przejścia na
+                    prywatne API innej giełdy.
+                  </p>
+                </article>
+                <article className="feature-card">
+                  <span>🛡️</span>
+                  <h3>Fail-closed</h3>
+                  <p>
+                    Brak wymaganej metody, PnL lub potwierdzenia one-way/net
+                    blokuje handel. Bot nie zgaduje i nie składa częściowo
+                    zabezpieczonego zlecenia.
+                  </p>
+                </article>
+                <article className="feature-card">
+                  <span>🎯</span>
+                  <h3>Zarządzanie po TP1</h3>
+                  <p>
+                    TP1 zamyka 25%, SL przechodzi na +0,30%, TP2 zamyka 50%, a
+                    pozostałe 25% prowadzi trailing stop 0,40%.
+                  </p>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section className="section pricing-section">
+            <div className="container">
+              <div className="section-heading">
+                <div className="eyebrow">DOSTĘP</div>
+                <h2>Wybierz model współpracy</h2>
+              </div>
+              <div className="pricing-grid">
+                <article className="pricing-card blue">
+                  <span className="pricing-badge">STARTOWA</span>
+                  <h3>Pakiet testowy</h3>
+                  <div className="price">0$ <small>pierwszy miesiąc</small></div>
+                  <p>
+                    Pełny dostęp przez 30 dni, później 50$/mies. przez kolejne
+                    trzy miesiące.
+                  </p>
+                  <ul>
+                    <li>Wybrana obsługiwana giełda</li>
+                    <li>Pełna automatyzacja przez API</li>
+                    <li>Raporty i alerty Telegram</li>
+                    <li>Kapitał pozostaje na Twoim koncie</li>
+                  </ul>
+                  <button className="button blue" onClick={() => setTermsOpen(true)}>
+                    Aktywuj promocję
+                  </button>
+                </article>
+                <article className="pricing-card gold">
+                  <span className="pricing-badge">LIMIT 10 MIEJSC</span>
+                  <h3>Pakiet roczny</h3>
+                  <div className="price">
+                    800$ <small>/ rok</small>
+                  </div>
+                  <p>
+                    Roczna licencja bez prowizji od zysków i z priorytetową
+                    konfiguracją.
+                  </p>
+                  <ul>
+                    <li>12 miesięcy dostępu</li>
+                    <li>Konfiguracja konta i test połączenia</li>
+                    <li>Obsługa migracji na inną giełdę</li>
+                    <li>Priorytetowe wsparcie</li>
+                  </ul>
+                  <button className="button primary" onClick={() => setTermsOpen(true)}>
+                    Zarezerwuj roczny
+                  </button>
+                </article>
+              </div>
+            </div>
+          </section>
+        </main>
+      )}
+
+      {page === "dashboard" && (
+        <main className="dashboard-page">
+          <div className="container">
+            <section className="dashboard-header">
+              <div>
+                <div className="eyebrow">PANEL INWESTORA</div>
+                <h1>
+                  {telegramUser
+                    ? `Witaj, ${dashboard?.custom_name || dashboard?.username || telegramUser.first_name}`
+                    : "Podłącz giełdę i ustaw handel"}
+                </h1>
+                <p>
+                  Jedna aktywna giełda na profil. Zmiana giełdy nie nastąpi, jeśli
+                  bot zarządza otwartą pozycją lub zleceniem.
+                </p>
+              </div>
+              <div className="dashboard-actions">
+                <div className="connection-pill">
+                  <span
+                    className={`connection-dot ${
+                      dashboard?.api_connected ? "connected" : ""
+                    }`}
+                  />
+                  {dashboard?.api_connected
+                    ? `${exchangeMap[dashboard.exchange ?? selectedExchange].name} połączony`
+                    : dashboard?.verification_status
+                      ? verificationStatusLabel(
+                          dashboard.verification_status,
+                        )
+                      : "Brak zweryfikowanego API"}
+                </div>
+                {telegramUser && (
+                  <button className="button danger-outline" onClick={logout}>
+                    Wyloguj
+                  </button>
+                )}
+              </div>
+            </section>
+
+            {!telegramUser && (
+              <section className="login-panel">
+                <div>
+                  <h2>Zaloguj się przez Telegram</h2>
+                  <p>
+                    Logowanie identyfikuje profil inwestora. Serwer musi
+                    zweryfikować podpis Telegram przed odczytem lub zmianą danych.
+                  </p>
+                </div>
+                <div id="telegram-login-widget" className="telegram-widget" />
+              </section>
+            )}
+
+            {telegramUser && legacyMode && (
+              <div className="legacy-warning" role="status">
+                <strong>Wymagana aktualizacja API strony:</strong> bot v13.8 zna
+                wiele giełd, ale obecny serwer panelu nie potwierdził jeszcze
+                bezpiecznej sesji Telegram ani capability{" "}
+                <code>multi_exchange</code>. Dlatego nowe giełdy są chwilowo
+                zablokowane fail-closed; dotychczasowy Bitget pozostaje dostępny.
+              </div>
+            )}
+
+            <ol className="steps" aria-label="Etapy podłączenia giełdy">
+              <li className="active">
+                <span>1</span>Wybierz giełdę
+              </li>
+              <li>
+                <span>2</span>Utwórz bezpieczny klucz
+              </li>
+              <li>
+                <span>3</span>Zapisz i zweryfikuj
+              </li>
+            </ol>
+
+            <div className="dashboard-grid">
+              <div>
+                <section id="exchange-form" className="panel-card form-card">
+                  <div className="panel-title-row">
+                    <div>
+                      <span className="card-kicker">KONFIGURACJA LIVE</span>
+                      <h2>Ustawienia handlowe</h2>
+                    </div>
+                    <span
+                      className={`status-chip ${statusClass[effectiveStatus(exchange)]}`}
+                    >
+                      <span className="status-symbol" />
+                      {effectiveStatusLabel(exchange)}
+                    </span>
+                  </div>
+
+                  <form onSubmit={saveSettings} noValidate>
+                    <div className="form-group">
+                      <label htmlFor="exchange">Giełda docelowa</label>
+                      <select
+                        id="exchange"
+                        value={selectedExchange}
+                        onChange={(event) =>
+                          changeSelectedExchange(
+                            event.target.value as ExchangeId,
+                          )
+                        }
+                      >
+                        {exchanges.map((item) => (
+                          <option
+                            value={item.id}
+                            key={item.id}
+                            disabled={!canSelectExchange(item)}
+                          >
+                            {item.name} — {effectiveStatusLabel(item)}
+                            {!canSelectExchange(item) && item.id !== "mexc"
+                              ? " / wyłączona przez serwer"
+                              : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <small>
+                        {exchange.market} • wymagany tryb {exchange.mode}
+                      </small>
+                    </div>
+
+                    <div
+                      className={`exchange-alert ${statusClass[effectiveStatus(exchange)]}`}
+                    >
+                      <strong>{exchange.name}: </strong>
+                      {exchange.activation}
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="api-key">API Key</label>
+                      <input
+                        id="api-key"
+                        value={apiKey}
+                        onChange={(event) => setApiKey(event.target.value)}
+                        autoComplete="off"
+                        spellCheck={false}
+                        placeholder="Wklej API Key"
+                        required
+                        disabled={!canSelectExchange(exchange)}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="api-secret">API Secret</label>
+                      <div className="password-field">
+                        <input
+                          id="api-secret"
+                          type={showSecret ? "text" : "password"}
+                          value={apiSecret}
+                          onChange={(event) => setApiSecret(event.target.value)}
+                          autoComplete="new-password"
+                          spellCheck={false}
+                          placeholder="Wklej API Secret"
+                          required
+                          disabled={!canSelectExchange(exchange)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSecret((value) => !value)}
+                          aria-label={
+                            showSecret ? "Ukryj API Secret" : "Pokaż API Secret"
+                          }
+                        >
+                          {showSecret ? "Ukryj" : "Pokaż"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {exchange.passphrase && (
+                      <div className="form-group">
+                        <label htmlFor="api-passphrase">Passphrase</label>
+                        <div className="password-field">
+                          <input
+                            id="api-passphrase"
+                            type={showPassphrase ? "text" : "password"}
+                            value={apiPassphrase}
+                            onChange={(event) =>
+                              setApiPassphrase(event.target.value)
+                            }
+                            autoComplete="new-password"
+                            spellCheck={false}
+                            placeholder={`Passphrase z ${exchange.name}`}
+                            required
+                            disabled={!canSelectExchange(exchange)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowPassphrase((value) => !value)
+                            }
+                            aria-label={
+                              showPassphrase
+                                ? "Ukryj Passphrase"
+                                : "Pokaż Passphrase"
+                            }
+                          >
+                            {showPassphrase ? "Ukryj" : "Pokaż"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="two-columns">
+                      <div className="form-group">
+                        <label htmlFor="trade-margin">Margin / pozycję (USDT)</label>
+                        <input
+                          id="trade-margin"
+                          type="number"
+                          min="1"
+                          step="0.01"
+                          value={margin}
+                          onChange={(event) => setMargin(event.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="trade-leverage">Dźwignia</label>
+                        <input
+                          id="trade-leverage"
+                          type="number"
+                          min="1"
+                          max="100"
+                          step="1"
+                          value={leverage}
+                          onChange={(event) => setLeverage(event.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="max-risk">Dzienny limit straty (USDT)</label>
+                        <input
+                          id="max-risk"
+                          type="number"
+                          min="1"
+                          step="0.01"
+                          value={maxRisk}
+                          onChange={(event) => setMaxRisk(event.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="margin-mode">Tryb marży</label>
+                        <select
+                          id="margin-mode"
+                          value={marginMode}
+                          onChange={(event) =>
+                            setMarginMode(
+                              event.target.value as "isolated" | "cross",
+                            )
+                          }
+                        >
+                          <option value="isolated">Isolated (zalecany)</option>
+                          <option value="cross">Cross</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="advanced-toggle"
+                      onClick={() => setShowAdvanced((value) => !value)}
+                      aria-expanded={showAdvanced}
+                    >
+                      {showAdvanced ? "−" : "+"} Ustawienia zaawansowane
+                    </button>
+                    {showAdvanced && (
+                      <div className="two-columns advanced-fields">
+                        <div className="form-group">
+                          <label htmlFor="api-uid">UID API (opcjonalnie)</label>
+                          <input
+                            id="api-uid"
+                            value={apiUid}
+                            onChange={(event) => setApiUid(event.target.value)}
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label htmlFor="subaccount">
+                            Subaccount (opcjonalnie)
+                          </label>
+                          <input
+                            id="subaccount"
+                            value={subaccount}
+                            onChange={(event) => setSubaccount(event.target.value)}
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="form-safety">
+                      <span>✓ Brak uprawnień Withdrawal</span>
+                      <span>✓ Whitelist IP</span>
+                      <span>✓ One-way / Net</span>
+                    </div>
+
+                    <button
+                      className="button primary submit-button"
+                      type="submit"
+                      disabled={
+                        !telegramUser ||
+                        !canSelectExchange(exchange) ||
+                        connectionState === "loading"
+                      }
+                    >
+                      {connectionState === "loading"
+                        ? "Weryfikuję połączenie…"
+                        : telegramUser
+                          ? `Zapisz i sprawdź ${exchange.name}`
+                          : "Zaloguj się, aby zapisać"}
+                    </button>
+                    <div
+                      className={`save-message ${connectionState}`}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {saveMessage}
+                    </div>
+                  </form>
+                </section>
+              </div>
+
+              <aside>
+                <section className="panel-card account-card">
+                  <span className="card-kicker">TWÓJ PROFIL</span>
+                  <h2>Status konta</h2>
+                  <dl className="account-list">
+                    <div>
+                      <dt>Plan</dt>
+                      <dd>{dashboard?.plan_name ?? "Brak danych"}</dd>
+                    </div>
+                    <div>
+                      <dt>Giełda</dt>
+                      <dd>
+                        {dashboard?.exchange
+                          ? exchangeMap[dashboard.exchange].name
+                          : "Nie wybrano"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Weryfikacja</dt>
+                      <dd>
+                        {dashboard?.verification_status
+                          ? verificationStatusLabel(
+                              dashboard.verification_status,
+                            )
+                          : dashboard?.api_connected
+                            ? "Połączenie LIVE zweryfikowane"
+                            : "Oczekuje"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Margin / dźwignia</dt>
+                      <dd>
+                        {dashboard?.margin ?? margin} USDT /{" "}
+                        {dashboard?.leverage ?? leverage}x
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Ważność licencji</dt>
+                      <dd>{formatTimeLeft(dashboard?.subscription_end_date)}</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <section className="panel-card safety-card">
+                  <span className="card-kicker">ZANIM ZAPISZESZ</span>
+                  <h2>5 zasad bezpieczeństwa</h2>
+                  <ol>
+                    <li>Osobny klucz tylko dla Czarnej Perły.</li>
+                    <li>Wyłącznie Read + Futures/Trade.</li>
+                    <li>Withdrawal i transfery zawsze OFF.</li>
+                    <li>Whitelist adresu IP serwera.</li>
+                    <li>Pierwszy test minimalnym marginem.</li>
+                  </ol>
+                </section>
+
+                <section className="panel-card referral-card">
+                  <span className="card-kicker">PROGRAM POLECEŃ</span>
+                  <h2>Twój link</h2>
+                  <div className="referral-value">
+                    {dashboard?.referral_code
+                      ? `https://msliwa610-oss.github.io/czarnaperla-bot/?ref=${dashboard.referral_code}`
+                      : "Dostępny po zalogowaniu"}
+                  </div>
+                  <button
+                    className="button secondary compact"
+                    type="button"
+                    disabled={!dashboard?.referral_code}
+                    onClick={async () => {
+                      if (!dashboard?.referral_code) return;
+                      await navigator.clipboard.writeText(
+                        `https://msliwa610-oss.github.io/czarnaperla-bot/?ref=${dashboard.referral_code}`,
+                      );
+                      setSaveMessage("Link polecający skopiowany.");
+                    }}
+                  >
+                    Kopiuj link
+                  </button>
+                </section>
+              </aside>
+            </div>
+
+            <section id="exchange-instructions" className="instructions-section">
+              <div className="section-heading left">
+                <div className="eyebrow">INSTRUKCJA KROK PO KROKU</div>
+                <h2>Jak podłączyć każdą giełdę</h2>
+                <p>
+                  Wybierz giełdę. Pokażemy tylko pola i kroki, których naprawdę
+                  wymaga.
+                </p>
+              </div>
+              <div className="instruction-tabs" role="tablist">
+                {exchanges.map((item) => (
+                  <button
+                    role="tab"
+                    aria-selected={instructionExchange === item.id}
+                    className={
+                      instructionExchange === item.id ? "active" : undefined
+                    }
+                    key={item.id}
+                    onClick={() => setInstructionExchange(item.id)}
+                  >
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+              <article
+                className={`instruction-card ${statusClass[effectiveStatus(instruction)]}`}
+              >
+                <div className="instruction-head">
+                  <div>
+                    <span className="status-chip">
+                      <span className="status-symbol" />
+                      {effectiveStatusLabel(instruction)}
+                    </span>
+                    <h3>
+                      {instruction.name} • {instruction.market}
+                    </h3>
+                  </div>
+                  <div className="instruction-meta">
+                    <span>{instruction.fields}</span>
+                    <span>Tryb: {instruction.mode}</span>
+                  </div>
+                </div>
+                <ol>
+                  {instruction.instructions.map((step, index) => (
+                    <li key={step}>
+                      <span>{index + 1}</span>
+                      <p>{step}</p>
+                    </li>
+                  ))}
+                </ol>
+                <div className="instruction-footer">
+                  <p>
+                    <strong>Ważne:</strong> nigdy nie przyznawaj kluczowi
+                    uprawnienia do wypłat.
+                  </p>
+                  {instruction.docsUrl && (
+                    <a
+                      href={instruction.docsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Oficjalna dokumentacja {instruction.name} ↗
+                    </a>
+                  )}
+                </div>
+              </article>
+            </section>
+          </div>
+        </main>
+      )}
+
+      {page === "admin" && isAdmin && (
+        <main className="admin-page">
+          <div className="container">
+            <section className="dashboard-header">
+              <div>
+                <div className="eyebrow red-eyebrow">MOSTEK KAPITAŃSKI</div>
+                <h1>Zarządzanie załogą</h1>
+                <p>
+                  Klucze API nigdy nie są wyświetlane. Widzisz wyłącznie giełdę i
+                  wynik weryfikacji.
+                </p>
+              </div>
+              <button className="button secondary" onClick={fetchAdminData}>
+                Odśwież dane
+              </button>
+            </section>
+            <section className="panel-card rollout-card">
+              <div className="panel-title-row">
+                <div>
+                  <span className="card-kicker">GLOBALNY ROLLOUT</span>
+                  <h2>Zwolnienie adaptera do LIVE</h2>
+                </div>
+              </div>
+              <p className="rollout-warning">
+                Ten przycisk nie wykonuje testu. Użyj go dopiero po realnym
+                canary, sprawdzeniu zleceń ochronnych i dziennego PnL.
+              </p>
+              <div className="rollout-grid">
+                {exchanges
+                  .filter(
+                    (item) => item.id !== "bitget" && item.id !== "mexc",
+                  )
+                  .map((item) => (
+                    <RolloutControl
+                      key={item.id}
+                      exchange={item}
+                      capability={exchangeCapabilities[item.id]}
+                      defaultFeePolicy={rolloutFeePolicy}
+                      onFeePolicyChange={setRolloutFeePolicy}
+                      onApprove={approveGlobalRollout}
+                    />
+                  ))}
+              </div>
+              {adminActionMessage && (
+                <div className="admin-action-message" role="status">
+                  {adminActionMessage}
+                </div>
+              )}
+            </section>
+            <section className="panel-card admin-card">
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Telegram ID</th>
+                      <th>Imię</th>
+                      <th>Giełda</th>
+                      <th>Weryfikacja</th>
+                      <th>Licencja</th>
+                      <th>Bot</th>
+                      <th>Admin</th>
+                      <th>Aktywacja LIVE</th>
+                      <th>Akcja</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminLoading && (
+                      <tr>
+                        <td colSpan={9}>Pobieranie danych…</td>
+                      </tr>
+                    )}
+                    {!adminLoading && adminUsers.length === 0 && (
+                      <tr>
+                        <td colSpan={9}>Brak danych lub brak połączenia z API.</td>
+                      </tr>
+                    )}
+                    {adminUsers.map((user) => (
+                      <AdminRow
+                        key={String(user.telegram_id)}
+                        user={user}
+                        onMutation={adminMutation}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </main>
+      )}
+
+      <footer className="site-footer">
+        <div className="container footer-grid">
+          <div>
+            <div className="brand footer-brand">
+              <span>🏴‍☠️</span>
+              <span>
+                CZARNA <strong>PERŁA</strong>
+              </span>
+            </div>
+            <p>Oprogramowanie do automatyzacji i analizy ilościowej.</p>
+          </div>
+          <div className="footer-links">
+            <button onClick={() => setTermsOpen(true)}>
+              Regulamin i ryzyko
+            </button>
+            <button onClick={() => navigate("dashboard")}>Panel inwestora</button>
+          </div>
+        </div>
+        <div className="container legal-line">
+          © 2026 Czarna Perła. Kryptowaluty i kontrakty z dźwignią wiążą
+          się z ryzykiem utraty kapitału.
+        </div>
+      </footer>
+
+      {termsOpen && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setTermsOpen(false);
+          }}
+        >
+          <section
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="terms-title"
+          >
+            <div className="modal-header">
+              <h2 id="terms-title">Regulamin i warunki korzystania</h2>
+              <button
+                aria-label="Zamknij regulamin"
+                onClick={() => setTermsOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <h3>Charakter systemu</h3>
+              <p>
+                Czarna Perła jest oprogramowaniem do automatyzacji decyzji
+                zgodnych z ustaloną strategią. Nie stanowi porady inwestycyjnej
+                ani gwarancji wyniku.
+              </p>
+              <h3>Ryzyko</h3>
+              <p>
+                Handel kryptowalutami, kontraktami i dźwignią może prowadzić do
+                częściowej lub całkowitej utraty kapitału. Użytkownik sam ustala
+                margin, dźwignię i limit straty.
+              </p>
+              <h3>Bezpieczeństwo API</h3>
+              <p>
+                Klucz powinien mieć jedynie odczyt oraz handel Futures. Wypłaty i
+                transfery muszą pozostać wyłączone, a dostęp powinien być
+                ograniczony adresem IP serwera.
+              </p>
+              <h3>Status giełd</h3>
+              <p>
+                MEXC LIVE jest zablokowany. Bitunix wymaga ręcznej walidacji
+                BETA. Pozostałe nowe giełdy są aktywowane dopiero po teście
+                konkretnego konta.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <label className="terms-check">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(event) => setTermsAccepted(event.target.checked)}
+                />
+                <span>Akceptuję regulamin i rozumiem ryzyko.</span>
+              </label>
+              <button
+                className="button blue"
+                disabled={!termsAccepted}
+                onClick={() => {
+                  window.open(TELEGRAM_GROUP, "_blank", "noopener,noreferrer");
+                  setTermsOpen(false);
+                }}
+              >
+                Przejdź do Telegrama
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminRow({
+  user,
+  onMutation,
+}: {
+  user: AdminUser;
+  onMutation: (
+    endpoint: string,
+    payload: Record<string, unknown>,
+  ) => Promise<Record<string, unknown> | undefined>;
+}) {
+  const [name, setName] = useState(user.custom_name ?? "");
+  const [canaryEvidence, setCanaryEvidence] = useState("");
+  const [feePolicy, setFeePolicy] =
+    useState<BitunixFeePolicy>("deduct_positive");
+  const exchangeName =
+    user.exchange && exchangeMap[user.exchange]
+      ? exchangeMap[user.exchange].name
+      : "Bitget / legacy";
+  const approvalRequired =
+    Boolean(user.exchange) &&
+    ["canary_required", "manual_beta"].includes(
+      user.verification_status ?? "",
+    );
+
+  return (
+    <tr>
+      <td className="mono">{String(user.telegram_id)}</td>
+      <td>
+        <input
+          className="table-input"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          aria-label={`Imię użytkownika ${user.telegram_id}`}
+        />
+      </td>
+      <td>{exchangeName}</td>
+      <td>{verificationStatusLabel(user.verification_status)}</td>
+      <td>{user.sub_end ?? "Brak danych"}</td>
+      <td>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={Boolean(user.bot_active)}
+            onChange={(event) =>
+              void onMutation("/api/admin/toggle_bot", {
+                target_user: String(user.telegram_id),
+                active: event.target.checked,
+              }).catch(() => undefined)
+            }
+          />
+          <span />
+          <b className="sr-only">Bot aktywny</b>
+        </label>
+      </td>
+      <td>
+        <label className="toggle admin-toggle">
+          <input
+            type="checkbox"
+            checked={Boolean(user.is_admin)}
+            onChange={(event) =>
+              void onMutation("/api/admin/toggle_admin", {
+                target_user: String(user.telegram_id),
+                is_admin: event.target.checked,
+              }).catch(() => undefined)
+            }
+          />
+          <span />
+          <b className="sr-only">Uprawnienia administratora</b>
+        </label>
+      </td>
+      <td>
+        {approvalRequired && user.exchange ? (
+          <div className="approval-controls">
+            <input
+              className="table-input evidence-input"
+              value={canaryEvidence}
+              minLength={8}
+              maxLength={512}
+              placeholder="Dowód canary / numer logu"
+              aria-label={`Dowód canary dla ${user.telegram_id}`}
+              onChange={(event) => setCanaryEvidence(event.target.value)}
+            />
+            {user.exchange === "bitunix" && (
+              <select
+                className="table-input"
+                value={feePolicy}
+                aria-label={`Polityka opłat Bitunix dla ${user.telegram_id}`}
+                onChange={(event) =>
+                  setFeePolicy(event.target.value as BitunixFeePolicy)
+                }
+              >
+                <option value="deduct_positive">
+                  Opłata dodatnia — odejmij
+                </option>
+                <option value="signed_value">Opłata ze znakiem</option>
+              </select>
+            )}
+            <button
+              className="table-button approve-button"
+              disabled={canaryEvidence.trim().length < 8}
+              onClick={() => {
+                const confirmed = window.confirm(
+                  `Potwierdzasz zakończony test ${exchangeName} dla konta ${user.telegram_id}?`,
+                );
+                if (!confirmed) return;
+                void onMutation("/api/admin/approve_exchange", {
+                  target_user: String(user.telegram_id),
+                  exchange: user.exchange,
+                  canary_evidence: canaryEvidence.trim(),
+                  ...(user.exchange === "bitunix"
+                    ? { bitunix_fee_policy: feePolicy }
+                    : {}),
+                }).catch(() => undefined);
+              }}
+            >
+              Zatwierdź konto
+            </button>
+          </div>
+        ) : (
+          <span className="muted-cell">
+            {user.verification_status === "canary_verified" ||
+            user.verification_status === "manual_verified" ||
+            user.verification_status === "verified"
+              ? "Zatwierdzone"
+              : "—"}
+          </span>
+        )}
+      </td>
+      <td>
+        <button
+          className="table-button"
+          onClick={() =>
+            void onMutation("/api/admin/update_name", {
+              target_user: String(user.telegram_id),
+              custom_name: name,
+            }).catch(() => undefined)
+          }
+        >
+          Zapisz
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function RolloutControl({
+  exchange,
+  capability,
+  defaultFeePolicy,
+  onFeePolicyChange,
+  onApprove,
+}: {
+  exchange: ExchangeConfig;
+  capability?: ExchangeCapability;
+  defaultFeePolicy: BitunixFeePolicy;
+  onFeePolicyChange: (value: BitunixFeePolicy) => void;
+  onApprove: (
+    exchangeId: ExchangeId,
+    canaryRecordId: number,
+    feePolicy?: BitunixFeePolicy,
+  ) => Promise<void>;
+}) {
+  const [canaryRecordId, setCanaryRecordId] = useState("");
+  const canRelease =
+    capability?.enabled === true &&
+    ["canary_required", "manual_beta"].includes(capability.status);
+  const parsedRecordId = Number.parseInt(canaryRecordId, 10);
+  const statusLabel =
+    capability?.status === "live"
+      ? "LIVE"
+      : capability?.status === "canary_required"
+        ? "WYMAGA CANARY"
+        : capability?.status === "manual_beta"
+          ? "WYMAGA WALIDACJI BETA"
+          : capability?.status === "live_blocked"
+            ? "ZABLOKOWANA"
+            : capability?.enabled === false
+              ? "WYŁĄCZONA"
+              : "BRAK DANYCH";
+
+  return (
+    <article className="rollout-item">
+      <div>
+        <strong>{exchange.name}</strong>
+        <span>{statusLabel}</span>
+      </div>
+      {canRelease ? (
+        <>
+          <label>
+            ID rekordu zakończonego canary
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={canaryRecordId}
+              onChange={(event) => setCanaryRecordId(event.target.value)}
+              placeholder="np. 42"
+            />
+          </label>
+          {exchange.id === "bitunix" && (
+            <label>
+              Potwierdzona polityka opłat
+              <select
+                value={defaultFeePolicy}
+                onChange={(event) =>
+                  onFeePolicyChange(
+                    event.target.value as BitunixFeePolicy,
+                  )
+                }
+              >
+                <option value="deduct_positive">
+                  Dodatnią opłatę odejmuj od PnL
+                </option>
+                <option value="signed_value">
+                  Wartość opłaty ma poprawny znak
+                </option>
+              </select>
+            </label>
+          )}
+          <button
+            className="table-button rollout-button"
+            disabled={!Number.isInteger(parsedRecordId) || parsedRecordId <= 0}
+            onClick={() =>
+              void onApprove(
+                exchange.id,
+                parsedRecordId,
+                exchange.id === "bitunix" ? defaultFeePolicy : undefined,
+              ).catch(() => undefined)
+            }
+          >
+            Zwolnij globalnie do LIVE
+          </button>
+        </>
+      ) : (
+        <p>
+          {capability?.status === "live"
+            ? "Adapter został już zwolniony."
+            : "Aktywacja globalna nie jest obecnie dostępna."}
+        </p>
+      )}
+    </article>
+  );
+}
