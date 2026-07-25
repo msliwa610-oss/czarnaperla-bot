@@ -8,12 +8,12 @@
   <style>
     :root {
       --bg: #07090d;
-      --panel: rgba(17, 21, 29, .90);
-      --panel2: rgba(12, 16, 22, .94);
+      --panel: rgba(17, 21, 29, .96);
+      --panel2: rgba(12, 16, 22, .97);
       --line: #2a303b;
       --line-soft: rgba(255,255,255,.08);
       --text: #f4f6f8;
-      --muted: #98a2b1;
+      --muted: #aeb7c5;
       --gold: #f3a63b;
       --green: #10d49a;
       --blue: #35a9ee;
@@ -28,12 +28,14 @@
       min-height: 100vh;
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
       line-height: 1.6;
       background-color: var(--bg);
       background-image:
-        linear-gradient(rgba(7,9,13,.80), rgba(7,9,13,.97)),
+        linear-gradient(rgba(11,13,16,.85), rgba(11,13,16,.98)),
         url("./50z3n.jpg");
-      background-position: center top;
+      background-position: center center;
       background-size: cover;
       background-repeat: no-repeat;
       background-attachment: fixed;
@@ -43,19 +45,20 @@
     button { color: inherit; }
     a { color: inherit; }
     :focus-visible { outline: 3px solid rgba(243,166,59,.5); outline-offset: 2px; }
-    .container { width: min(1100px, calc(100% - 40px)); margin: 0 auto; }
+    .container { width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 24px; }
     .hidden { display: none !important; }
 
     header {
       position: sticky;
       top: 0;
       z-index: 50;
+      padding: 20px 0;
       border-bottom: 1px solid var(--line-soft);
-      background: rgba(7,9,13,.88);
-      backdrop-filter: blur(16px);
+      background: rgba(11,13,16,.78);
+      backdrop-filter: blur(10px);
     }
     .header-inner {
-      min-height: 76px;
+      min-height: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -66,21 +69,21 @@
       background: transparent;
       cursor: pointer;
       color: white;
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 900;
       letter-spacing: .09em;
       white-space: nowrap;
     }
     .brand strong { color: var(--gold); }
-    nav { display: flex; gap: 6px; }
+    nav { display: flex; gap: 10px; }
     .nav-btn {
-      min-height: 42px;
-      padding: 0 15px;
+      min-height: 38px;
+      padding: 8px 16px;
       border: 1px solid transparent;
-      border-radius: 9px;
+      border-radius: 6px;
       background: transparent;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 750;
       cursor: pointer;
     }
@@ -110,25 +113,36 @@
       backdrop-filter: blur(8px);
     }
     .hero h1 {
-      max-width: 930px;
-      margin: 36px auto 18px;
-      font-size: clamp(38px, 5.2vw, 64px);
-      line-height: 1.05;
-      letter-spacing: -.045em;
+      width: 100%;
+      max-width: 1100px;
+      margin: 40px auto 20px;
+      padding: .08em .16em .20em;
+      overflow: visible;
+      font-size: clamp(34px, 3vw, 46px);
+      line-height: 1.2;
+      letter-spacing: -.025em;
       background: linear-gradient(110deg, #fff 10%, #ffd59b 58%, var(--gold));
       -webkit-background-clip: text;
       background-clip: text;
+      -webkit-text-fill-color: transparent;
       color: transparent;
-      text-shadow: 0 10px 38px rgba(0,0,0,.35);
+      text-shadow: none;
     }
     .hero p {
       max-width: 790px;
       margin: 0 auto;
       color: #d0d6df;
-      font-size: 17px;
-      text-shadow: 0 2px 12px #000;
+      font-size: 18px;
+      line-height: 1.55;
+      text-shadow: 0 2px 4px rgba(0,0,0,.8);
     }
     .hero-actions { margin-top: 30px; display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
+    .hero-login {
+      min-height: 48px;
+      margin-top: 38px;
+      display: grid;
+      place-items: center;
+    }
     .btn {
       min-height: 46px;
       padding: 0 19px;
@@ -150,7 +164,7 @@
     .section.alt {
       border-top: 1px solid var(--line-soft);
       border-bottom: 1px solid var(--line-soft);
-      background: rgba(5,7,10,.65);
+      background: rgba(5,7,10,.78);
       backdrop-filter: blur(5px);
     }
     .section-head { max-width: 780px; margin: 0 auto 42px; text-align: center; }
@@ -284,11 +298,12 @@
     }
     @media (max-width: 680px) {
       body { background-attachment: scroll; }
-      .container { width: min(100% - 26px,1100px); }
+      .container { padding: 0 14px; }
       .header-inner { padding: 12px 0; align-items: flex-start; flex-direction: column; gap: 9px; }
       nav { width: 100%; overflow-x: auto; }
       .nav-btn { white-space: nowrap; padding: 0 10px; }
-      .hero { padding: 58px 0; }
+      .hero { min-height: auto; padding: 54px 0 58px; }
+      .hero h1 { max-width: 100%; font-size: clamp(32px, 9.5vw, 42px); line-height: 1.08; }
       .exchange-grid, .proof-grid, .feature-grid, .pricing-grid, .form-grid { grid-template-columns: 1fr; }
       .full { grid-column: auto; }
       .dashboard-head { align-items: flex-start; flex-direction: column; }
@@ -314,14 +329,10 @@
         <div class="badges">
           <span class="badge">WinRate &gt; 80% na rynku rzeczywistym</span>
           <span class="badge">SMC + True CVD + ochrona kapitału</span>
-          <span class="badge">Panel 7 giełd</span>
         </div>
         <h1>Twój kapitał pod pełną kontrolą algorytmu</h1>
         <p>Czarna Perła analizuje rynek wspólnie, ale każde konto wykonuje zlecenia przez bezpieczny adapter wybranej giełdy. Maksymalnie 10 pozycji na konto, kontrola trybu one-way/net i automatyczne zarządzanie TP oraz SL.</p>
-        <div class="hero-actions">
-          <button class="btn btn-gold" data-scroll="exchanges">Zobacz obsługiwane giełdy</button>
-          <button class="btn btn-blue" data-page="dashboard">Zaloguj się przez Telegram</button>
-        </div>
+        <div id="telegram-widget-hero" class="hero-login" aria-label="Logowanie przez Telegram"></div>
       </div>
     </section>
 
@@ -410,10 +421,10 @@
                 <select id="exchange-select"></select>
               </label>
               <label>API Key
-                <input id="api-key" autocomplete="off" placeholder="Wklej API Key">
+                <input id="api-key" required autocomplete="off" placeholder="Wklej API Key">
               </label>
               <label>API Secret
-                <input id="api-secret" type="password" autocomplete="new-password" placeholder="Wklej API Secret">
+                <input id="api-secret" required type="password" autocomplete="new-password" placeholder="Wklej API Secret">
               </label>
               <label id="passphrase-wrap">Passphrase
                 <input id="api-passphrase" type="password" autocomplete="new-password" placeholder="Wklej Passphrase">
@@ -422,13 +433,13 @@
                 <select id="margin-mode"><option value="isolated">Isolated</option><option value="cross">Cross</option></select>
               </label>
               <label>Margin na pozycję (USDT)
-                <input id="margin" type="number" min="0.1" step="0.1" value="4">
+                <input id="margin" required type="number" min="0.1" step="0.1" value="4">
               </label>
               <label>Dźwignia
-                <input id="leverage" type="number" min="1" max="100" step="1" value="20">
+                <input id="leverage" required type="number" min="1" max="100" step="1" value="20">
               </label>
               <label>Limit dziennego ryzyka (USDT)
-                <input id="max-risk" type="number" min="0.1" step="0.1" value="20">
+                <input id="max-risk" required type="number" min="0.1" step="0.1" value="20">
               </label>
               <div class="full form-note">Klucze muszą mieć wyłącznie odczyt oraz Futures/Trade. Uprawnienia Withdraw i Transfer pozostaw wyłączone.</div>
               <button class="btn btn-gold full" type="submit">Zapisz i sprawdź połączenie</button>
@@ -518,13 +529,40 @@
       telegramUser: null,
       dashboard: null,
       csrf: "",
+      session: sessionStorage.getItem("cp_session") || "",
       isAdmin: false,
+      isSuperAdmin: false,
       multiExchange: false,
       capabilities: {}
     };
 
     const byId = id => document.getElementById(id);
     const exchangeById = id => EXCHANGES.find(item => item.id === id) || EXCHANGES[0];
+
+    function apiHeaders(extra) {
+      const headers = Object.assign({Accept:"application/json"}, extra || {});
+      if (state.session) headers["X-Session-Token"] = state.session;
+      return headers;
+    }
+
+    function clearSensitiveFields() {
+      ["api-key","api-secret","api-passphrase"].forEach(id => {
+        const input = byId(id);
+        if (input) input.value = "";
+      });
+    }
+
+    function clearSessionState() {
+      state.telegramUser = null;
+      state.dashboard = null;
+      state.csrf = "";
+      state.session = "";
+      state.isAdmin = false;
+      state.isSuperAdmin = false;
+      sessionStorage.removeItem("cp_session");
+      byId("admin-nav").classList.add("hidden");
+      clearSensitiveFields();
+    }
 
     function setText(id, value) {
       const node = byId(id);
@@ -629,7 +667,11 @@
       const type = response.headers.get("content-type") || "";
       if (!type.includes("application/json")) throw new Error("Serwer zwrócił nieprawidłową odpowiedź (" + response.status + ").");
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || data.detail || "Błąd HTTP " + response.status);
+      if (!response.ok) {
+        const error = new Error(data.message || data.detail || "Błąd HTTP " + response.status);
+        error.status = response.status;
+        throw error;
+      }
       return data;
     }
 
@@ -648,42 +690,57 @@
     }
 
     function ensureTelegramWidget() {
-      const host = byId("telegram-widget");
-      if (!host || host.querySelector("script") || state.telegramUser) return;
-      const script = document.createElement("script");
-      script.async = true;
-      script.src = "https://telegram.org/js/telegram-widget.js?22";
-      script.dataset.telegramLogin = TELEGRAM_BOT;
-      script.dataset.size = "large";
-      script.dataset.radius = "8";
-      script.dataset.onauth = "onTelegramAuth(user)";
-      script.dataset.requestAccess = "write";
-      host.append(script);
+      if (state.telegramUser) return;
+      ["telegram-widget-hero","telegram-widget"].forEach(id => {
+        const host = byId(id);
+        if (!host || host.querySelector("script, iframe")) return;
+        const script = document.createElement("script");
+        script.async = true;
+        script.src = "https://telegram.org/js/telegram-widget.js?22";
+        script.dataset.telegramLogin = TELEGRAM_BOT;
+        script.dataset.size = "large";
+        script.dataset.radius = "8";
+        script.dataset.onauth = "onTelegramAuth(user)";
+        script.dataset.requestAccess = "write";
+        host.append(script);
+      });
     }
 
     window.onTelegramAuth = async function(user) {
+      clearSessionState();
       state.telegramUser = user;
       setConnection("loading", "Weryfikacja Telegram…");
       try {
         const response = await fetch(API_BASE_URL + "/api/auth/telegram", {
           method:"POST",
           credentials:"include",
-          headers:{"Content-Type":"application/json",Accept:"application/json"},
+          headers:apiHeaders({"Content-Type":"application/json"}),
           body:JSON.stringify(user)
         });
         const auth = await readJson(response);
+        state.session = String(auth.session_token || "");
+        if (state.session) sessionStorage.setItem("cp_session", state.session);
         state.csrf = String(auth.csrf_token || "");
         await loadDashboard();
+        showPage("dashboard");
       } catch (error) {
+        clearSessionState();
+        ["telegram-widget-hero","telegram-widget"].forEach(id => byId(id).replaceChildren());
         setConnection("error", error.message || "Nie udało się zalogować.");
+        setTimeout(ensureTelegramWidget, 100);
       }
     };
 
     async function loadDashboard() {
-      const response = await fetch(API_BASE_URL + "/api/dashboard/me", {credentials:"include", headers:{Accept:"application/json"}});
+      const response = await fetch(API_BASE_URL + "/api/dashboard/me", {
+        credentials:"include",
+        headers:apiHeaders()
+      });
       const data = await readJson(response);
       state.dashboard = data;
+      state.telegramUser = state.telegramUser || {id:String(data.telegram_id)};
       state.isAdmin = data.is_admin === true;
+      state.isSuperAdmin = data.is_superadmin === true;
       byId("admin-nav").classList.toggle("hidden", !state.isAdmin);
       byId("login-panel").classList.add("hidden");
       byId("dashboard-content").classList.remove("hidden");
@@ -700,6 +757,24 @@
       if (data.exchange && exchangeById(data.exchange)) byId("exchange-select").value = data.exchange;
       updateSelectedExchange();
       setConnection("success", data.api_connected ? "API połączone" : "Zalogowano — brak kluczy API");
+    }
+
+    async function restoreSession() {
+      if (!state.session) return false;
+      try {
+        const response = await fetch(API_BASE_URL + "/api/auth/session", {
+          method:"POST",
+          credentials:"include",
+          headers:apiHeaders()
+        });
+        const restored = await readJson(response);
+        state.csrf = String(restored.csrf_token || "");
+        await loadDashboard();
+        return true;
+      } catch (_) {
+        clearSessionState();
+        return false;
+      }
     }
 
     function setConnection(kind, text) {
@@ -746,6 +821,17 @@
         setSave("Uzupełnij wszystkie wymagane dane API.", false);
         return;
       }
+      const leverage = Number(byId("leverage").value);
+      const margin = Number(byId("margin").value);
+      const maxRisk = Number(byId("max-risk").value);
+      if (
+        !Number.isInteger(leverage) || leverage < 1 || leverage > 100
+        || !Number.isFinite(margin) || margin <= 0
+        || !Number.isFinite(maxRisk) || maxRisk <= 0
+      ) {
+        setSave("Sprawdź margin, dźwignię i limit ryzyka.", false);
+        return;
+      }
       const payload = {
         telegram_id:String(state.telegramUser.id),
         exchange:item.id,
@@ -755,16 +841,16 @@
         api_uid:"",
         subaccount:"",
         margin_mode:byId("margin-mode").value,
-        leverage:Number(byId("leverage").value),
-        margin:Number(byId("margin").value),
-        max_risk:Number(byId("max-risk").value)
+        leverage:leverage,
+        margin:margin,
+        max_risk:maxRisk
       };
       setSave("Sprawdzam połączenie z " + item.name + "…", true);
       try {
         const response = await fetch(API_BASE_URL + "/api/save_settings", {
           method:"POST",
           credentials:"include",
-          headers:{"Content-Type":"application/json",Accept:"application/json","X-CSRF-Token":state.csrf},
+          headers:apiHeaders({"Content-Type":"application/json","X-CSRF-Token":state.csrf}),
           body:JSON.stringify(payload)
         });
         const result = await readJson(response);
@@ -781,19 +867,22 @@
     async function logout() {
       try {
         if (state.csrf) {
-          const response = await fetch(API_BASE_URL + "/api/auth/logout", {method:"POST",credentials:"include",headers:{Accept:"application/json","X-CSRF-Token":state.csrf}});
+          const response = await fetch(API_BASE_URL + "/api/auth/logout", {
+            method:"POST",
+            credentials:"include",
+            headers:apiHeaders({"X-CSRF-Token":state.csrf})
+          });
           await readJson(response);
         }
-      } catch (_) {}
-      state.telegramUser = null;
-      state.dashboard = null;
-      state.csrf = "";
-      state.isAdmin = false;
-      byId("admin-nav").classList.add("hidden");
+      } catch (error) {
+        setConnection("error", error.message || "Nie udało się wylogować. Spróbuj ponownie.");
+        return;
+      }
+      clearSessionState();
       byId("login-panel").classList.remove("hidden");
       byId("dashboard-content").classList.add("hidden");
       byId("logout-btn").classList.add("hidden");
-      byId("telegram-widget").replaceChildren();
+      ["telegram-widget-hero","telegram-widget"].forEach(id => byId(id).replaceChildren());
       setConnection("idle","Oczekuje na logowanie");
       ensureTelegramWidget();
       showPage("landing");
@@ -804,7 +893,7 @@
       const response = await fetch(API_BASE_URL + path, {
         method:"POST",
         credentials:"include",
-        headers:{"Content-Type":"application/json",Accept:"application/json","X-CSRF-Token":state.csrf},
+        headers:apiHeaders({"Content-Type":"application/json","X-CSRF-Token":state.csrf}),
         body:JSON.stringify(Object.assign({admin_id:String(state.telegramUser.id)}, payload || {}))
       });
       return readJson(response);
@@ -834,17 +923,32 @@
         const exCell = document.createElement("td"); exCell.textContent = exchangeById(user.exchange).name;
         const verCell = document.createElement("td"); verCell.textContent = verificationLabel(user.verification_status);
         const botCell = document.createElement("td");
-        const botToggle = document.createElement("input"); botToggle.type="checkbox"; botToggle.className="toggle"; botToggle.checked=Boolean(user.bot_active); botCell.append(botToggle);
+        const originalName = user.custom_name || "";
+        const originalBot = Boolean(user.bot_active);
+        const originalAdmin = Boolean(user.is_admin);
+        const botToggle = document.createElement("input"); botToggle.type="checkbox"; botToggle.className="toggle"; botToggle.checked=originalBot; botCell.append(botToggle);
         const adminCell = document.createElement("td");
-        const adminToggle = document.createElement("input"); adminToggle.type="checkbox"; adminToggle.className="toggle"; adminToggle.checked=Boolean(user.is_admin); adminCell.append(adminToggle);
+        const adminToggle = document.createElement("input"); adminToggle.type="checkbox"; adminToggle.className="toggle"; adminToggle.checked=originalAdmin; adminToggle.disabled=!state.isSuperAdmin; adminToggle.title=state.isSuperAdmin ? "" : "Zmiana roli wymaga uprawnień superadministratora"; adminCell.append(adminToggle);
         const actionCell = document.createElement("td");
         const save = document.createElement("button"); save.className="btn btn-gold btn-small"; save.textContent="Zapisz";
         save.addEventListener("click", async () => {
           try {
-            await adminRequest("/api/admin/update_name",{target_user:id,custom_name:nameInput.value});
-            await adminRequest("/api/admin/toggle_bot",{target_user:id,active:botToggle.checked});
-            await adminRequest("/api/admin/toggle_admin",{target_user:id,is_admin:adminToggle.checked});
-            setText("admin-status","Zapisano zmiany dla " + id + ".");
+            let changed = 0;
+            const nextName = nameInput.value.trim();
+            if (nextName && nextName !== originalName) {
+              await adminRequest("/api/admin/update_name",{target_user:id,custom_name:nextName});
+              changed += 1;
+            }
+            if (botToggle.checked !== originalBot) {
+              await adminRequest("/api/admin/toggle_bot",{target_user:id,active:botToggle.checked});
+              changed += 1;
+            }
+            if (state.isSuperAdmin && adminToggle.checked !== originalAdmin) {
+              await adminRequest("/api/admin/toggle_admin",{target_user:id,is_admin:adminToggle.checked});
+              changed += 1;
+            }
+            setText("admin-status",changed ? "Zapisano zmiany dla " + id + "." : "Brak nowych zmian dla " + id + ".");
+            if (changed) await loadAdminUsers();
           } catch (error) {
             setText("admin-status",error.message || "Błąd zapisu.");
           }
@@ -862,15 +966,24 @@
       if (scrollButton) byId(scrollButton.dataset.scroll).scrollIntoView({behavior:"smooth"});
       if (event.target.closest("[data-terms]")) byId("terms-dialog").showModal();
     });
-    byId("exchange-select").addEventListener("change", updateSelectedExchange);
+    byId("exchange-select").addEventListener("change", () => {
+      clearSensitiveFields();
+      updateSelectedExchange();
+    });
     byId("logout-btn").addEventListener("click", logout);
     byId("refresh-admin").addEventListener("click", loadAdminUsers);
     byId("close-terms").addEventListener("click", () => byId("terms-dialog").close());
     byId("accept-terms").addEventListener("click", () => byId("terms-dialog").close());
 
-    renderExchangeCards();
-    renderExchangeSelect();
-    loadCapabilities();
+    async function bootstrap() {
+      renderExchangeCards();
+      renderExchangeSelect();
+      await loadCapabilities();
+      const restored = await restoreSession();
+      if (!restored) ensureTelegramWidget();
+    }
+
+    bootstrap();
   </script>
 </body>
 </html>
