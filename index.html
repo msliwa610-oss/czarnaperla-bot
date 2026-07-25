@@ -8,18 +8,19 @@
   <style>
     :root {
       --bg: #07090d;
-      --panel: rgba(17, 21, 29, .96);
-      --panel2: rgba(12, 16, 22, .97);
-      --line: #2a303b;
+      --panel: rgba(15, 20, 29, .88);
+      --panel2: rgba(10, 14, 21, .91);
+      --line: rgba(111, 126, 148, .30);
       --line-soft: rgba(255,255,255,.08);
       --text: #f4f6f8;
       --muted: #aeb7c5;
       --gold: #f3a63b;
+      --gold-bright: #ffbd57;
       --green: #10d49a;
       --blue: #35a9ee;
       --amber: #f6ba4b;
       --red: #ff6262;
-      --shadow: 0 24px 70px rgba(0,0,0,.48);
+      --shadow: 0 24px 70px rgba(0,0,0,.40);
     }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -33,7 +34,8 @@
       line-height: 1.6;
       background-color: var(--bg);
       background-image:
-        linear-gradient(rgba(11,13,16,.85), rgba(11,13,16,.98)),
+        radial-gradient(circle at 50% 10%, rgba(243,166,59,.08), transparent 35%),
+        linear-gradient(rgba(5,8,12,.53), rgba(5,8,12,.72)),
         url("./50z3n.jpg");
       background-position: center center;
       background-size: cover;
@@ -52,10 +54,10 @@
       position: sticky;
       top: 0;
       z-index: 50;
-      padding: 20px 0;
+      padding: 16px 0;
       border-bottom: 1px solid var(--line-soft);
-      background: rgba(11,13,16,.78);
-      backdrop-filter: blur(10px);
+      background: linear-gradient(180deg, rgba(7,9,13,.82), rgba(7,9,13,.68));
+      backdrop-filter: blur(14px) saturate(125%);
     }
     .header-inner {
       min-height: 0;
@@ -69,11 +71,28 @@
       background: transparent;
       cursor: pointer;
       color: white;
-      font-size: 22px;
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 2px 0;
+      font-size: 27px;
       font-weight: 900;
       letter-spacing: .09em;
       white-space: nowrap;
     }
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(243,166,59,.40);
+      border-radius: 12px;
+      background: linear-gradient(145deg, rgba(243,166,59,.18), rgba(77,41,103,.48));
+      box-shadow: 0 8px 24px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.12);
+      font-size: 22px;
+      line-height: 1;
+    }
+    .brand-copy { line-height: 1; }
     .brand strong { color: var(--gold); }
     nav { display: flex; gap: 10px; }
     .nav-btn {
@@ -94,31 +113,40 @@
     .page { display: none; }
     .page.active { display: block; }
     .hero {
-      min-height: 470px;
-      padding: 80px 0 68px;
+      min-height: 535px;
+      padding: 92px 0 78px;
       display: grid;
       place-items: center;
       text-align: center;
       border-bottom: 1px solid var(--line-soft);
+      background:
+        radial-gradient(circle at 50% 42%, rgba(7,10,15,.18), rgba(7,10,15,.54) 72%, rgba(7,10,15,.34));
     }
     .badges { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
     .badge {
       padding: 8px 16px;
       border: 1px solid var(--green);
       border-radius: 999px;
-      background: rgba(16,212,154,.10);
+      background: rgba(7,27,24,.58);
       color: var(--green);
       font-size: 13px;
       font-weight: 750;
       backdrop-filter: blur(8px);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .badge-gold {
+      border-color: rgba(243,166,59,.82);
+      background: rgba(45,29,8,.62);
+      color: #ffd28f;
+      box-shadow: 0 0 26px rgba(243,166,59,.12), inset 0 1px 0 rgba(255,255,255,.07);
     }
     .hero h1 {
       width: 100%;
-      max-width: 1100px;
-      margin: 40px auto 20px;
+      max-width: 1080px;
+      margin: 38px auto 20px;
       padding: .08em .16em .20em;
       overflow: visible;
-      font-size: clamp(34px, 3vw, 46px);
+      font-size: clamp(38px, 4.1vw, 60px);
       line-height: 1.2;
       letter-spacing: -.025em;
       background: linear-gradient(110deg, #fff 10%, #ffd59b 58%, var(--gold));
@@ -164,8 +192,8 @@
     .section.alt {
       border-top: 1px solid var(--line-soft);
       border-bottom: 1px solid var(--line-soft);
-      background: rgba(5,7,10,.78);
-      backdrop-filter: blur(5px);
+      background: transparent;
+      backdrop-filter: none;
     }
     .section-head { max-width: 780px; margin: 0 auto 42px; text-align: center; }
     .eyebrow { color: var(--gold); font-size: 12px; font-weight: 850; letter-spacing: .18em; }
@@ -180,7 +208,7 @@
       border-radius: 15px;
       background: var(--panel);
       box-shadow: var(--shadow);
-      backdrop-filter: blur(12px);
+      backdrop-filter: blur(14px) saturate(115%);
     }
     .exchange-card { min-height: 315px; padding: 22px; display: flex; flex-direction: column; border-top-width: 3px; }
     .exchange-card.live { border-top-color: var(--green); }
@@ -206,11 +234,94 @@
     .proof-top strong { color: white; font-size: 18px; }
     .winrate { display: block; margin: 18px 0; text-align: center; color: var(--green); font-size: 46px; font-weight: 900; }
     .proof-stats { display: flex; justify-content: space-around; padding: 14px; border-radius: 10px; background: rgba(0,0,0,.28); }
-    .feature-card, .pricing-card { padding: 28px; }
-    .feature-card h3, .pricing-card h3 { margin: 8px 0; }
-    .feature-card p, .pricing-card p { margin: 0; color: var(--muted); }
-    .price { margin: 12px 0; font-size: 36px; font-weight: 900; color: var(--gold); }
-    .pricing-card ul { padding-left: 20px; color: #d5dae1; }
+    .feature-card { padding: 28px; }
+    .feature-card h3 { margin: 8px 0; }
+    .feature-card p { margin: 0; color: var(--muted); }
+    .pricing-section { position: relative; }
+    .pricing-section::before {
+      content: "";
+      position: absolute;
+      inset: 8% 18% 0;
+      z-index: -1;
+      border-radius: 50%;
+      background: rgba(243,166,59,.08);
+      filter: blur(90px);
+      pointer-events: none;
+    }
+    .pricing-grid { gap: 24px; align-items: stretch; }
+    .pricing-card {
+      position: relative;
+      min-height: 520px;
+      padding: 34px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-color: rgba(119,133,154,.36);
+      background:
+        linear-gradient(155deg, rgba(24,30,42,.94), rgba(12,16,23,.90));
+      transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+    }
+    .pricing-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(243,166,59,.48);
+      box-shadow: 0 28px 80px rgba(0,0,0,.48);
+    }
+    .pricing-card.featured {
+      border-color: rgba(243,166,59,.78);
+      background:
+        radial-gradient(circle at 90% 0, rgba(243,166,59,.18), transparent 30%),
+        linear-gradient(155deg, rgba(27,31,39,.96), rgba(15,18,24,.92));
+      box-shadow: 0 28px 80px rgba(0,0,0,.46), 0 0 42px rgba(243,166,59,.08);
+    }
+    .pricing-ribbon {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      padding: 6px 10px;
+      border: 1px solid rgba(243,166,59,.46);
+      border-radius: 999px;
+      background: rgba(243,166,59,.12);
+      color: #ffd18b;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .10em;
+      text-transform: uppercase;
+    }
+    .plan-icon {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 24px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 13px;
+      background: rgba(255,255,255,.05);
+      font-size: 23px;
+    }
+    .pricing-card h3 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+    .pricing-card > p { min-height: 52px; margin: 14px 0 0; color: var(--muted); }
+    .price-row { display: flex; align-items: flex-end; gap: 10px; margin: 22px 0 4px; }
+    .price { font-size: 54px; line-height: 1; font-weight: 950; color: var(--gold-bright); letter-spacing: -.045em; }
+    .price-note { padding-bottom: 5px; color: var(--muted); font-size: 13px; }
+    .old-price { margin-top: 4px; color: #778190; font-size: 14px; }
+    .old-price s { margin-right: 7px; }
+    .save-pill { color: var(--green); font-weight: 800; }
+    .pricing-card ul {
+      margin: 26px 0 30px;
+      padding: 22px 0 0;
+      border-top: 1px solid var(--line-soft);
+      list-style: none;
+      color: #dce2e9;
+    }
+    .pricing-card li { position: relative; margin: 12px 0; padding-left: 26px; }
+    .pricing-card li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--green);
+      font-weight: 900;
+    }
+    .pricing-card .btn { width: 100%; margin-top: auto; }
     .warning { margin-top: 28px; padding: 15px; border: 1px solid rgba(246,186,75,.35); border-radius: 10px; background: rgba(246,186,75,.07); color: #e9d4a5; font-size: 13px; }
 
     .dashboard, .admin-page { padding: 42px 0 80px; }
@@ -266,14 +377,110 @@
     .instructions ol { margin: 15px 0; padding-left: 22px; }
     .instructions li { margin: 9px 0; color: #d6dbe2; }
     .doc-link { color: var(--blue); }
-    .admin-table-wrap { overflow-x: auto; }
+    .admin-shell {
+      padding: 0;
+      overflow: hidden;
+      border-color: rgba(255,79,93,.82);
+      background:
+        radial-gradient(circle at 0 0, rgba(255,78,93,.07), transparent 28%),
+        rgba(14,18,27,.92);
+      box-shadow: 0 30px 90px rgba(0,0,0,.45), 0 0 0 1px rgba(255,78,93,.03);
+    }
+    .admin-hero {
+      padding: 26px 28px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .admin-title-wrap { display: flex; align-items: center; gap: 14px; }
+    .admin-emblem {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border: 1px solid rgba(255,98,98,.32);
+      border-radius: 11px;
+      background: rgba(116,39,85,.36);
+      font-size: 21px;
+    }
+    .admin-hero h2 { margin: 0; font-size: clamp(21px, 2.5vw, 27px); line-height: 1.2; }
+    .admin-hero p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .admin-status-wrap { min-height: 36px; padding: 0 28px; }
+    .admin-table-wrap { overflow-x: auto; padding: 0 24px 18px; }
+    .admin-table { min-width: 980px; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { padding: 11px; border-bottom: 1px solid var(--line-soft); text-align: left; }
-    th { color: var(--muted); }
-    td input { min-width: 130px; }
-    .toggle { width: 18px; height: 18px; accent-color: var(--green); }
+    th, td { padding: 15px 14px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: middle; }
+    th {
+      color: #8994a4;
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .admin-table tbody tr { transition: background .16s ease; }
+    .admin-table tbody tr:hover { background: rgba(255,255,255,.025); }
+    .admin-table tbody tr:last-child td { border-bottom: 0; }
+    .admin-id { color: #edf1f5; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .admin-name-input {
+      width: 150px;
+      min-width: 150px;
+      margin: 0;
+      padding: 9px 10px;
+      background: rgba(3,6,11,.64);
+    }
+    .account-meta { display: block; margin-top: 6px; color: #7f8998; font-size: 10px; line-height: 1.35; }
+    .account-meta strong { color: #aeb8c6; font-weight: 750; }
+    .license-cell { white-space: nowrap; }
+    .switch {
+      position: relative;
+      width: 46px;
+      height: 24px;
+      display: inline-block;
+      margin: 0;
+      color: inherit;
+      vertical-align: middle;
+    }
+    .switch input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .switch-track {
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 999px;
+      background: #2a303b;
+      cursor: pointer;
+      transition: background .18s ease, box-shadow .18s ease;
+    }
+    .switch-track::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #f7f9fb;
+      box-shadow: 0 2px 6px rgba(0,0,0,.35);
+      transition: transform .18s ease;
+    }
+    .switch input:checked + .switch-track { background: #08bd8e; }
+    .switch.admin-switch input:checked + .switch-track { background: var(--gold); }
+    .switch input:checked + .switch-track::after { transform: translateX(22px); }
+    .switch input:focus-visible + .switch-track { outline: 3px solid rgba(243,166,59,.45); outline-offset: 2px; }
+    .switch input:disabled + .switch-track { cursor: not-allowed; opacity: .45; }
+    .save-name { white-space: nowrap; }
 
-    footer { padding: 36px 0; border-top: 1px solid var(--line-soft); background: rgba(7,9,13,.82); color: var(--muted); text-align: center; font-size: 12px; }
+    footer { padding: 36px 0; border-top: 1px solid var(--line-soft); background: rgba(7,9,13,.38); backdrop-filter: blur(5px); color: var(--muted); text-align: center; font-size: 12px; }
     dialog {
       width: min(650px, calc(100% - 30px));
       max-height: 80vh;
@@ -295,11 +502,15 @@
     @media (max-width: 900px) {
       .exchange-grid, .feature-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
       .dashboard-grid { grid-template-columns: 1fr; }
+      .pricing-card { min-height: 500px; padding: 28px; }
     }
     @media (max-width: 680px) {
       body { background-attachment: scroll; }
       .container { padding: 0 14px; }
-      .header-inner { padding: 12px 0; align-items: flex-start; flex-direction: column; gap: 9px; }
+      header { position: relative; padding: 12px 0 10px; }
+      .header-inner { align-items: flex-start; flex-direction: column; gap: 10px; }
+      .brand { gap: 9px; font-size: 21px; }
+      .brand-mark { width: 34px; height: 34px; border-radius: 10px; font-size: 18px; }
       nav { width: 100%; overflow-x: auto; }
       .nav-btn { white-space: nowrap; padding: 0 10px; }
       .hero { min-height: auto; padding: 54px 0 58px; }
@@ -308,13 +519,23 @@
       .full { grid-column: auto; }
       .dashboard-head { align-items: flex-start; flex-direction: column; }
       .exchange-top { flex-direction: column; }
+      .pricing-card { min-height: 0; padding: 25px; }
+      .pricing-ribbon { position: static; align-self: flex-start; margin-bottom: 18px; }
+      .price { font-size: 48px; }
+      .admin-page { padding-top: 22px; }
+      .admin-hero { padding: 20px; align-items: flex-start; flex-direction: column; }
+      .admin-status-wrap { padding: 0 20px; }
+      .admin-table-wrap { padding: 0 10px 12px; }
     }
   </style>
 </head>
 <body>
   <header>
     <div class="container header-inner">
-      <button class="brand" data-page="landing" aria-label="Strona główna">🏴‍☠️ CZARNA <strong>PERŁA</strong></button>
+      <button class="brand" data-page="landing" aria-label="Czarna Perła — strona główna">
+        <span class="brand-mark" aria-hidden="true">🏴‍☠️</span>
+        <span class="brand-copy">CZARNA <strong>PERŁA</strong></span>
+      </button>
       <nav aria-label="Główna nawigacja">
         <button class="nav-btn active" data-page="landing">Strona główna</button>
         <button class="nav-btn" data-page="dashboard">Panel inwestora</button>
@@ -327,6 +548,7 @@
     <section class="hero">
       <div class="container">
         <div class="badges">
+          <span class="badge badge-gold">🌐 Panel przygotowany na 7 giełd</span>
           <span class="badge">WinRate &gt; 80% na rynku rzeczywistym</span>
           <span class="badge">SMC + True CVD + ochrona kapitału</span>
         </div>
@@ -384,12 +606,43 @@
       </div>
     </section>
 
-    <section class="section">
+    <section class="section pricing-section">
       <div class="container">
-        <div class="section-head"><div class="eyebrow">DOSTĘP</div><h2>Wybierz model współpracy</h2></div>
+        <div class="section-head">
+          <div class="eyebrow">DOSTĘP DO SYSTEMU</div>
+          <h2>Wybierz model współpracy</h2>
+          <p>Najpierw poznaj system na własnym koncie albo wybierz pełny rok z priorytetową konfiguracją.</p>
+        </div>
         <div class="grid pricing-grid">
-          <article class="card pricing-card"><h3>📱 Pakiet testowy</h3><div class="price">0$</div><p>Pierwszy miesiąc bez opłat, następnie 50$/mies. przez kolejne trzy miesiące.</p><ul><li>Wybrana obsługiwana giełda</li><li>Raporty i alerty Telegram</li><li>Kapitał pozostaje na Twoim koncie</li></ul><button class="btn btn-blue" data-terms>Aktywuj promocję</button></article>
-          <article class="card pricing-card"><h3>💎 Pakiet roczny</h3><div class="price">800$</div><p>Pełna licencja na 12 miesięcy z priorytetową konfiguracją i wsparciem.</p><ul><li>Konfiguracja konta</li><li>Test połączenia i adaptera</li><li>Obsługa migracji giełdy</li></ul><button class="btn btn-gold" data-terms>Zarezerwuj roczny</button></article>
+          <article class="card pricing-card">
+            <span class="pricing-ribbon">30 dni na start</span>
+            <div class="plan-icon" aria-hidden="true">📱</div>
+            <h3>Pakiet testowy</h3>
+            <div class="price-row"><span class="price">0 $</span><span class="price-note">pierwszy miesiąc</span></div>
+            <p>Poznaj działanie Czarnej Perły bez opłaty startowej. Następnie 50 $ miesięcznie przez kolejne trzy miesiące.</p>
+            <ul>
+              <li>Jedna wybrana obsługiwana giełda</li>
+              <li>Pełne raporty i alerty Telegram</li>
+              <li>Konfiguracja ochrony kapitału</li>
+              <li>Kapitał przez cały czas pozostaje na Twoim koncie</li>
+            </ul>
+            <button class="btn btn-blue" data-terms>Aktywuj pakiet testowy</button>
+          </article>
+          <article class="card pricing-card featured">
+            <span class="pricing-ribbon">Najlepsza wartość</span>
+            <div class="plan-icon" aria-hidden="true">💎</div>
+            <h3>Pakiet roczny</h3>
+            <div class="price-row"><span class="price">800 $</span><span class="price-note">za 12 miesięcy</span></div>
+            <div class="old-price"><s>1200 $</s><span class="save-pill">Oszczędzasz 400 $</span></div>
+            <p>Pełna roczna licencja z priorytetowym uruchomieniem, kontrolą adaptera i wsparciem technicznym.</p>
+            <ul>
+              <li>Konfiguracja konta i wybranej giełdy</li>
+              <li>Test połączenia, uprawnień i zabezpieczeń</li>
+              <li>Priorytetowe wsparcie techniczne</li>
+              <li>Pomoc przy migracji między obsługiwanymi giełdami</li>
+            </ul>
+            <button class="btn btn-gold" data-terms>Zarezerwuj pakiet roczny</button>
+          </article>
         </div>
         <div class="warning">⚠️ Handel kontraktami i dźwignią wiąże się z wysokim ryzykiem utraty kapitału. Wyniki historyczne nie gwarantują wyników przyszłych.</div>
       </div>
@@ -476,15 +729,21 @@
 
   <main id="admin" class="page admin-page">
     <div class="container">
-      <section class="card panel">
-        <div class="dashboard-head" style="padding:0;margin:0 0 20px;box-shadow:none;background:transparent;border:0">
-          <div><h2>🏴‍☠️ Mostek kapitański</h2><p>Zarządzanie użytkownikami i aktywacją bota.</p></div>
-          <button id="refresh-admin" class="btn btn-outline btn-small">Odśwież</button>
+      <section class="card admin-shell">
+        <div class="admin-hero">
+          <div class="admin-title-wrap">
+            <span class="admin-emblem" aria-hidden="true">🏴‍☠️</span>
+            <div>
+              <h2>Mostek Kapitański <span style="color:#cdd3dc;font-weight:650">(Zarządzanie Załogą)</span></h2>
+              <p>Kontrola dostępu, licencji i aktywności kont użytkowników.</p>
+            </div>
+          </div>
+          <button id="refresh-admin" class="btn btn-outline btn-small">Odśwież dane</button>
         </div>
-        <div id="admin-status" class="save-status"></div>
+        <div class="admin-status-wrap"><div id="admin-status" class="save-status" role="status"></div></div>
         <div class="admin-table-wrap">
-          <table>
-            <thead><tr><th>Telegram ID</th><th>Imię</th><th>Giełda</th><th>Weryfikacja</th><th>Bot</th><th>Admin</th><th>Akcja</th></tr></thead>
+          <table class="admin-table">
+            <thead><tr><th>Telegram ID</th><th>Przypisane imię</th><th>Data dołączenia</th><th>Ważność abonamentu</th><th>Bot ON/OFF</th><th>Admin ON/OFF</th><th>Akcje</th></tr></thead>
             <tbody id="admin-users"></tbody>
           </table>
         </div>
@@ -803,6 +1062,15 @@
       return labels[value] || String(value || "Oczekuje").replaceAll("_"," ");
     }
 
+    function adminDate(value, fallback) {
+      const text = String(value || "").trim();
+      if (!text) return fallback;
+      return text
+        .replace("T", " ")
+        .replace(/\.\d+(?:Z|[+-]\d{2}:?\d{2})?$/, "")
+        .replace(/Z$/, "");
+    }
+
     byId("exchange-form").addEventListener("submit", async event => {
       event.preventDefault();
       if (!state.telegramUser || !state.csrf) {
@@ -914,24 +1182,80 @@
     function renderAdminUsers(users) {
       const body = byId("admin-users");
       body.replaceChildren();
+      if (!users.length) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 7;
+        cell.textContent = "Brak użytkowników do wyświetlenia.";
+        cell.style.textAlign = "center";
+        cell.style.color = "var(--muted)";
+        row.append(cell);
+        body.append(row);
+        return;
+      }
       users.forEach(user => {
         const row = document.createElement("tr");
         const id = String(user.telegram_id);
-        const idCell = document.createElement("td"); idCell.textContent = id;
+        const idCell = document.createElement("td");
+        idCell.className = "admin-id";
+        idCell.textContent = id;
+
         const nameCell = document.createElement("td");
-        const nameInput = document.createElement("input"); nameInput.value = user.custom_name || ""; nameCell.append(nameInput);
-        const exCell = document.createElement("td"); exCell.textContent = exchangeById(user.exchange).name;
-        const verCell = document.createElement("td"); verCell.textContent = verificationLabel(user.verification_status);
+        const nameInput = document.createElement("input");
+        nameInput.className = "admin-name-input";
+        nameInput.value = user.custom_name || "";
+        nameInput.setAttribute("aria-label", "Przypisane imię dla konta " + id);
+        const accountMeta = document.createElement("span");
+        accountMeta.className = "account-meta";
+        const knownExchange = EXCHANGES.find(item => item.id === user.exchange);
+        const exchangeName = knownExchange ? knownExchange.name : (user.exchange ? String(user.exchange) : "Giełda nieustawiona");
+        accountMeta.textContent = exchangeName + " • " + verificationLabel(user.verification_status);
+        nameCell.append(nameInput, accountMeta);
+
+        const joinCell = document.createElement("td");
+        joinCell.textContent = adminDate(user.join_date, "Przed aktualizacją");
+
+        const licenseCell = document.createElement("td");
+        licenseCell.className = "license-cell";
+        licenseCell.textContent = adminDate(user.sub_end, "Brak danych");
+
         const botCell = document.createElement("td");
         const originalName = user.custom_name || "";
         const originalBot = Boolean(user.bot_active);
         const originalAdmin = Boolean(user.is_admin);
-        const botToggle = document.createElement("input"); botToggle.type="checkbox"; botToggle.className="toggle"; botToggle.checked=originalBot; botCell.append(botToggle);
+        const botLabel = document.createElement("label");
+        botLabel.className = "switch";
+        const botToggle = document.createElement("input");
+        botToggle.type = "checkbox";
+        botToggle.checked = originalBot;
+        botToggle.setAttribute("aria-label", "Bot ON/OFF dla konta " + id);
+        const botTrack = document.createElement("span");
+        botTrack.className = "switch-track";
+        botLabel.append(botToggle, botTrack);
+        botCell.append(botLabel);
+
         const adminCell = document.createElement("td");
-        const adminToggle = document.createElement("input"); adminToggle.type="checkbox"; adminToggle.className="toggle"; adminToggle.checked=originalAdmin; adminToggle.disabled=!state.isSuperAdmin; adminToggle.title=state.isSuperAdmin ? "" : "Zmiana roli wymaga uprawnień superadministratora"; adminCell.append(adminToggle);
+        const adminLabel = document.createElement("label");
+        adminLabel.className = "switch admin-switch";
+        const adminToggle = document.createElement("input");
+        adminToggle.type = "checkbox";
+        adminToggle.checked = originalAdmin;
+        adminToggle.disabled = !state.isSuperAdmin;
+        adminToggle.setAttribute("aria-label", "Admin ON/OFF dla konta " + id);
+        adminToggle.title = state.isSuperAdmin ? "" : "Zmiana roli wymaga uprawnień superadministratora";
+        const adminTrack = document.createElement("span");
+        adminTrack.className = "switch-track";
+        adminLabel.append(adminToggle, adminTrack);
+        adminCell.append(adminLabel);
+
         const actionCell = document.createElement("td");
-        const save = document.createElement("button"); save.className="btn btn-gold btn-small"; save.textContent="Zapisz";
+        const save = document.createElement("button");
+        save.className = "btn btn-gold btn-small save-name";
+        save.textContent = "Zapisz imię";
         save.addEventListener("click", async () => {
+          save.disabled = true;
+          const previousLabel = save.textContent;
+          save.textContent = "Zapisuję…";
           try {
             let changed = 0;
             const nextName = nameInput.value.trim();
@@ -951,10 +1275,13 @@
             if (changed) await loadAdminUsers();
           } catch (error) {
             setText("admin-status",error.message || "Błąd zapisu.");
+          } finally {
+            save.disabled = false;
+            save.textContent = previousLabel;
           }
         });
         actionCell.append(save);
-        row.append(idCell,nameCell,exCell,verCell,botCell,adminCell,actionCell);
+        row.append(idCell,nameCell,joinCell,licenseCell,botCell,adminCell,actionCell);
         body.append(row);
       });
     }
