@@ -1,818 +1,2039 @@
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Czarna Perła – Zautomatyzowany System Tradingowy</title>
-    <style>
-        :root {
-            --bg-color: #0b0d10;
-            --card-bg: rgba(19, 23, 34, 0.85);
-            --card-border: #2a2e39;
-            --accent-gold: #f3a63b;
-            --accent-green: #00c087;
-            --accent-red: #ff4d4d;
-            --accent-blue: #26a5e4;
-            --text-main: #f0f2f5;
-            --text-muted: #848e9c;
-            --modal-overlay: rgba(0, 0, 0, 0.85);
-        }
+"use client";
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
-        body {
-            background-color: var(--bg-color);
-            background-image: linear-gradient(rgba(11, 13, 16, 0.85), rgba(11, 13, 16, 0.98)), url('50z3n.jpg');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-            color: var(--text-main);
-            line-height: 1.6;
-            overflow-x: hidden;
-        }
+type PageName = "landing" | "dashboard" | "admin";
+type ExchangeId =
+  | "bitget"
+  | "binanceusdm"
+  | "bybit"
+  | "okx"
+  | "gate"
+  | "bitunix"
+  | "mexc";
+type ExchangeStatus = "live" | "test" | "beta" | "blocked";
+type ExchangeCapabilityStatus =
+  | "live"
+  | "canary_required"
+  | "manual_beta"
+  | "live_blocked"
+  | string;
+type BitunixFeePolicy = "deduct_positive" | "signed_value";
 
-        .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+type TelegramUser = {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+};
 
-        /* Navigation Header */
-        header { padding: 20px 0; border-bottom: 1px solid rgba(42, 46, 57, 0.4); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 99; background: rgba(11, 13, 16, 0.7); }
-        .header-container { display: flex; justify-content: space-between; align-items: center; }
-        .logo { font-size: 22px; font-weight: 800; letter-spacing: 2px; color: var(--text-main); }
-        .logo span { color: var(--accent-gold); }
-        .nav-tabs { display: flex; gap: 10px; }
-        .nav-btn { background: transparent; border: 1px solid transparent; color: var(--text-muted); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s ease; }
-        .nav-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
-        .nav-btn.active { border-color: var(--accent-gold); color: var(--accent-gold); background: rgba(243, 166, 59, 0.05); }
-        
-        /* Styl dla ukrytego przycisku Admina */
-        #btnNavAdmin { display: none; border-color: var(--accent-red); color: var(--accent-red); }
-        #btnNavAdmin.active { background: rgba(255, 77, 77, 0.1); }
+type DashboardData = {
+  status: string;
+  username?: string;
+  custom_name?: string;
+  plan_name?: string;
+  referral_code?: string;
+  margin?: number;
+  leverage?: number;
+  max_risk?: number;
+  margin_mode?: "isolated" | "cross";
+  exchange?: ExchangeId;
+  api_connected?: boolean;
+  credentials_configured?: boolean;
+  subscription_end_date?: string;
+  is_admin?: boolean;
+  verification_status?: string;
+  multi_exchange?: boolean;
+};
 
-        /* Pages control */
-        .page-content { display: none; }
-        .page-content.active { display: block; }
+type AdminUser = {
+  telegram_id: string;
+  custom_name?: string;
+  join_date?: string;
+  sub_end?: string;
+  bot_active?: boolean;
+  is_admin?: boolean;
+  exchange?: ExchangeId;
+  verification_status?: string;
+};
 
-        /* Hero Section */
-        .hero { padding: 80px 0 60px 0; text-align: center; }
-        .hero h1 { font-size: 46px; font-weight: 800; line-height: 1.2; margin-bottom: 20px; background: linear-gradient(135deg, #fff 0%, var(--accent-gold) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .hero p { font-size: 18px; color: #cbd5e1; max-width: 800px; margin: 0 auto 40px auto; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
-        .stats-badge-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 40px; }
-        .stats-badge { background: rgba(0, 192, 135, 0.15); border: 1px solid var(--accent-green); color: var(--accent-green); padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 14px; backdrop-filter: blur(5px); }
+type ExchangeCapability = {
+  enabled: boolean;
+  status: ExchangeCapabilityStatus;
+};
 
-        /* General Sections */
-        .section-padding { padding: 60px 0; }
-        .section-title { font-size: 32px; font-weight: 800; text-align: center; margin-bottom: 50px; position: relative; color: #fff; }
-        .section-title::after { content: ''; display: block; width: 60px; height: 4px; background-color: var(--accent-gold); margin: 15px auto 0 auto; border-radius: 2px;}
+type CapabilitiesData = {
+  status?: string;
+  multi_exchange?: boolean;
+  telegram_session?: boolean;
+  exchanges?: Partial<Record<ExchangeId, ExchangeCapability>>;
+};
 
-        /* Results / Proof Section */
-        .results-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 30px; margin-bottom: 40px; }
-        .result-card { background-color: var(--card-bg); border: 1px solid var(--card-border); border-top: 4px solid var(--accent-green); border-radius: 12px; padding: 25px; backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .result-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px; margin-bottom: 15px; }
-        .result-name { font-size: 18px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
-        .result-date { font-size: 12px; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 12px; }
-        .winrate-big { font-size: 42px; font-weight: 900; color: var(--accent-green); text-align: center; margin: 20px 0; }
-        .trade-stats { display: flex; justify-content: space-between; text-align: center; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; }
-        .trade-stat-item div:first-child { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
-        .trade-stat-item div:last-child { font-size: 18px; font-weight: 700; color: #fff; }
-        .trade-stat-item .win { color: var(--accent-green); }
-        .trade-stat-item .loss { color: var(--accent-red); }
-        
-        /* Trades Highlights */
-        .trades-showcase { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin-top: 30px; }
-        .trade-pill { background: rgba(0, 192, 135, 0.1); border: 1px solid rgba(0, 192, 135, 0.3); padding: 12px 20px; border-radius: 30px; display: flex; align-items: center; gap: 10px; font-weight: 700; }
-        .trade-pair { color: #fff; font-size: 15px; }
-        .trade-profit { color: var(--accent-green); font-size: 18px; }
-        .trade-type { background: var(--accent-red); color: #fff; font-size: 10px; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; }
+type ExchangeConfig = {
+  id: ExchangeId;
+  name: string;
+  market: string;
+  status: ExchangeStatus;
+  statusLabel: string;
+  selectable: boolean;
+  passphrase: boolean;
+  description: string;
+  fields: string;
+  mode: string;
+  activation: string;
+  instructions: string[];
+  docsUrl?: string;
+};
 
-        /* Anatomy Section */
-        .anatomy-card { background-color: var(--card-bg); border-left: 4px solid var(--accent-gold); padding: 30px; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); backdrop-filter: blur(10px); }
-        .anatomy-card h3 { color: #fff; font-size: 20px; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
-        .anatomy-card h3 span { font-size: 24px; }
-        .anatomy-list { list-style: none; margin-left: 10px; }
-        .anatomy-list li { font-size: 15px; color: var(--text-muted); margin-bottom: 12px; position: relative; padding-left: 20px; line-height: 1.5; }
-        .anatomy-list li::before { content: "⚡"; position: absolute; left: -5px; font-size: 12px; top: 3px; }
-        .anatomy-list li strong { color: var(--text-main); font-weight: 600; }
+declare global {
+  interface Window {
+    onTelegramAuth?: (user: TelegramUser) => void;
+  }
+}
 
-        /* Pricing */
-        .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; max-width: 1000px; margin: 0 auto; }
-        .pricing-card { background-color: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 40px 30px; position: relative; display: flex; flex-direction: column; backdrop-filter: blur(10px); }
-        .pricing-card.featured { border-color: var(--accent-gold); box-shadow: 0 4px 25px rgba(243, 166, 59, 0.1); }
-        .pricing-card.telecom { border-color: var(--accent-blue); }
-        .badge-premium { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); background-color: var(--accent-gold); color: #000; padding: 4px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; white-space: nowrap;}
-        .badge-telecom { background-color: var(--accent-blue); color: #fff; }
-        .pricing-card h3 { font-size: 20px; text-align: center; margin-bottom: 10px; }
-        .pricing-card .price { font-size: 32px; font-weight: 800; text-align: center; margin: 15px 0; color: #fff; }
-        .pricing-card .price .old-price { font-size: 18px; color: var(--text-muted); text-decoration: line-through; font-weight: 500; display: block; margin-bottom: -5px; }
-        .pricing-card .price span { font-size: 14px; color: var(--text-muted); font-weight: 400; }
-        .pricing-card .desc { font-size: 14px; color: var(--text-muted); text-align: center; margin-bottom: 25px; min-height: 50px; }
-        .pricing-list { list-style: none; margin-bottom: 30px; flex-grow: 1; }
-        .pricing-list li { font-size: 14px; margin-bottom: 10px; padding-left: 20px; position: relative; }
-        .pricing-list li::before { content: "✓"; position: absolute; left: 0; color: var(--accent-green); font-weight: 700; }
-        .btn-card { width: 100%; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; border: 1px solid var(--card-border); background: transparent; color: #fff; transition: all 0.2s ease; text-align: center; }
-        .pricing-card.featured .btn-card { background: var(--accent-gold); color: #000; border: none; }
-        .pricing-card.telecom .btn-card { background: var(--accent-blue); color: #fff; border: none; }
-        .pricing-card .btn-card:hover { background-color: rgba(255, 255, 255, 0.05); border-color: var(--text-muted); }
-        .pricing-card.featured .btn-card:hover { background-color: #f4b356; transform: translateY(-1px); }
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_CP_API_BASE_URL?.replace(/\/+$/, "") ??
+  "/portal-api";
 
-        /* DASHBOARD STYLES */
-        .db-header-panel { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 24px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; backdrop-filter: blur(10px); margin-top: 40px; }
-        .user-info h2 { font-size: 22px; color: #fff; }
-        .user-info p { color: var(--text-muted); font-size: 14px; }
-        .header-actions { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
-        .status-box { display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.3); padding: 10px 20px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.05); }
-        .status-lamp { width: 12px; height: 12px; background-color: var(--text-muted); border-radius: 50%; display: inline-block; }
-        @keyframes blink { 0% { opacity: 0.4; box-shadow: 0 0 4px var(--accent-green); } 50% { opacity: 1; box-shadow: 0 0 14px var(--accent-green); } 100% { opacity: 0.4; box-shadow: 0 0 4px var(--accent-green); } }
-        .status-text { font-size: 14px; font-weight: 700; color: #fff; }
-        .btn-logout { background: transparent; border: 1px solid var(--accent-red); color: var(--accent-red); padding: 8px 16px; border-radius: 30px; cursor: pointer; font-weight: 600; font-size: 13px; transition: 0.2s; }
-        .btn-logout:hover { background: rgba(255, 77, 77, 0.1); color: #fff; }
-        
-        .db-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; }
-        @media (max-width: 900px) { .db-grid { grid-template-columns: 1fr; } }
-        .db-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 24px; margin-bottom: 30px; backdrop-filter: blur(10px); }
-        .db-card h3 { font-size: 18px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; color: #fff; }
-        .info-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
-        .info-label { color: var(--text-muted); }
-        .info-value { font-weight: 600; color: #fff; }
-        .api-input { width: 100%; padding: 10px; border-radius: 6px; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); color: #fff; font-family: monospace; font-size: 13px; margin-top: 4px;}
-        .api-input:focus { outline: none; border-color: var(--accent-gold); }
-        .form-group { margin-bottom: 15px; }
-        .referral-box { background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); padding: 15px; border-radius: 8px; margin-top: 15px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-        .referral-link { font-family: monospace; font-size: 13px; color: var(--accent-gold); word-break: break-all; }
-        .btn-copy { background: var(--card-border); border: none; color: #fff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; }
-        .btn-copy:hover { background: rgba(255,255,255,0.1); }
-        .affiliate-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
-        .stat-box { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; text-align: center; }
-        .stat-num { font-size: 24px; font-weight: 800; color: var(--accent-gold); }
-        .stat-num.green { color: var(--accent-green); }
-        .stat-label { font-size: 12px; color: var(--text-muted); }
+const TELEGRAM_BOT =
+  process.env.NEXT_PUBLIC_CP_TELEGRAM_BOT ?? "czarna_perla_auth_bot";
 
-        /* Odliczanie czasu (Licencja) */
-        .time-left { font-family: monospace; color: var(--accent-gold); font-weight: bold; }
-        .time-expired { color: var(--accent-red); font-weight: bold; }
+const TELEGRAM_GROUP = "https://t.me/+QumQey-BSYNkYTlk";
 
-        /* ADMIN PANEL STYLES */
-        .admin-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
-        .admin-table th, .admin-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .admin-table th { color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
-        .admin-table tr:hover { background: rgba(255,255,255,0.02); }
-        .admin-input { background: rgba(0,0,0,0.5); border: 1px solid var(--card-border); color: #fff; padding: 6px; border-radius: 4px; width: 120px; }
-        
-        /* Toggle Switch CSS */
-        .switch { position: relative; display: inline-block; width: 44px; height: 22px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #2a2e39; transition: .4s; border-radius: 34px; }
-        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: var(--accent-green); }
-        input:checked + .slider.admin-slider { background-color: var(--accent-gold); }
-        input:checked + .slider:before { transform: translateX(22px); }
+const exchanges: ExchangeConfig[] = [
+  {
+    id: "bitget",
+    name: "Bitget",
+    market: "USDT Futures",
+    status: "live",
+    statusLabel: "LIVE",
+    selectable: true,
+    passphrase: true,
+    description:
+      "Natywna obsługa wejść, SL, TP, trailing stopu i dziennego PnL.",
+    fields: "API Key + API Secret + Passphrase",
+    mode: "One-way",
+    activation: "Automatyczna weryfikacja konta przed uruchomieniem.",
+    instructions: [
+      "Wejdź w zarządzanie API i utwórz nowy klucz przeznaczony wyłącznie dla Czarnej Perły.",
+      "Włącz odczyt konta oraz handel Futures. Nie włączaj wypłat ani transferów.",
+      "Ustaw białą listę IP serwera, zapisz własną Passphrase i przełącz USDT Futures na tryb One-way.",
+      "Wklej trzy dane do formularza i rozpocznij test minimalnym marginem.",
+    ],
+    docsUrl: "https://www.bitget.com/api-doc/common/signature",
+  },
+  {
+    id: "binanceusdm",
+    name: "Binance",
+    market: "USD-M Futures",
+    status: "test",
+    statusLabel: "LIVE PO TEŚCIE KONTA",
+    selectable: true,
+    passphrase: false,
+    description:
+      "Adapter LIVE jest gotowy; każde konto przechodzi odczytowy smoke test i minimalny canary.",
+    fields: "API Key + API Secret",
+    mode: "One-way",
+    activation: "Aktywacja po weryfikacji Futures, PnL i trybu pozycji.",
+    instructions: [
+      "W API Management utwórz oddzielny klucz dla bota.",
+      "Włącz odczyt oraz Enable Futures. Wypłaty i transfery pozostaw wyłączone.",
+      "Dodaj IP serwera do ograniczeń klucza i ustaw Position Mode na One-way.",
+      "Wklej API Key i API Secret; system wykona kontrolny odczyt przed aktywacją.",
+    ],
+    docsUrl:
+      "https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info",
+  },
+  {
+    id: "bybit",
+    name: "Bybit",
+    market: "Linear USDT",
+    status: "test",
+    statusLabel: "LIVE PO TEŚCIE KONTA",
+    selectable: true,
+    passphrase: false,
+    description:
+      "Obsługa kontraktów liniowych z weryfikacją trybu pozycji i dziennego PnL.",
+    fields: "API Key + API Secret",
+    mode: "One-way",
+    activation: "Aktywacja po autoryzowanym teście odczytowym.",
+    instructions: [
+      "Utwórz System-generated API Key w panelu API Management.",
+      "Nadaj odczyt i handel Contract/Derivatives. Nie przyznawaj uprawnienia Withdraw.",
+      "Ogranicz klucz adresem IP serwera i ustaw pozycje liniowe w trybie One-way.",
+      "Wklej API Key oraz API Secret i poczekaj na potwierdzenie testu konta.",
+    ],
+    docsUrl: "https://bybit-exchange.github.io/docs/v5/intro",
+  },
+  {
+    id: "okx",
+    name: "OKX",
+    market: "USDT Perpetual SWAP",
+    status: "test",
+    statusLabel: "LIVE PO TEŚCIE KONTA",
+    selectable: true,
+    passphrase: true,
+    description:
+      "Obsługa kontraktów SWAP; wymagane są trzy dane API i tryb pozycji Net.",
+    fields: "API Key + API Secret + Passphrase",
+    mode: "Net",
+    activation: "Aktywacja po potwierdzeniu rachunku SWAP i Net mode.",
+    instructions: [
+      "W sekcji API utwórz klucz z uprawnieniami Read oraz Trade.",
+      "Wypłaty pozostaw wyłączone, dodaj IP serwera i zapisz utworzoną Passphrase.",
+      "Dla USDT SWAP ustaw Position Mode na Net.",
+      "Wklej API Key, API Secret i Passphrase; aktywacja nastąpi po teście odczytowym.",
+    ],
+    docsUrl: "https://www.okx.com/docs-v5/en/",
+  },
+  {
+    id: "gate",
+    name: "Gate",
+    market: "USDT Perpetual",
+    status: "test",
+    statusLabel: "LIVE PO TEŚCIE KONTA",
+    selectable: true,
+    passphrase: false,
+    description:
+      "Obsługa USDT perpetual z natywnym rozliczaniem zamkniętych pozycji.",
+    fields: "API Key + API Secret",
+    mode: "Single / One-way",
+    activation: "Aktywacja po kontroli rachunku rozliczanego w USDT.",
+    instructions: [
+      "Utwórz osobny klucz APIv4 dla Czarnej Perły.",
+      "Nadaj Futures Read-Write, ale nie zezwalaj na wypłaty ani transfery.",
+      "Dodaj whitelistę IP, wybierz rozliczenie USDT i Single/One-way mode.",
+      "Wklej API Key i API Secret; system sprawdzi połączenie przed startem.",
+    ],
+    docsUrl: "https://www.gate.com/docs/developers/apiv4/en/",
+  },
+  {
+    id: "bitunix",
+    name: "Bitunix",
+    market: "USDT Futures",
+    status: "beta",
+    statusLabel: "BETA — AKTYWACJA RĘCZNA",
+    selectable: true,
+    passphrase: false,
+    description:
+      "Adapter jest gotowy, ale pierwsze konto wymaga potwierdzenia sposobu księgowania opłat.",
+    fields: "API Key + API Secret",
+    mode: "One-way",
+    activation:
+      "Administrator aktywuje konto po weryfikacji autentycznego zamkniętego zlecenia.",
+    instructions: [
+      "Utwórz klucz do USDT Futures z odczytem i handlem; wypłaty pozostaw wyłączone.",
+      "Dodaj adres IP serwera i ustaw konto w trybie One-way.",
+      "Zapisz klucze w panelu. Konto otrzyma status „oczekuje na walidację BETA”.",
+      "Pierwszy test wykonujemy minimalnym marginem i potwierdzamy prawidłowe księgowanie opłat.",
+    ],
+    docsUrl: "https://www.bitunix.com/api-docs/futures/common/introduction.html",
+  },
+  {
+    id: "mexc",
+    name: "MEXC",
+    market: "Futures / Shadow",
+    status: "blocked",
+    statusLabel: "LIVE ZABLOKOWANY",
+    selectable: false,
+    passphrase: false,
+    description:
+      "Dane rynkowe mogą być obserwowane, lecz prawdziwe zlecenia są wyłączone fail-closed.",
+    fields: "Nie wprowadzaj kluczy",
+    mode: "Shadow",
+    activation:
+      "Odblokowanie dopiero po pełnej weryfikacji endpointów zleceń i dziennego net PnL.",
+    instructions: [
+      "MEXC pozostaje dostępny wyłącznie jako informacja o planowanym rozszerzeniu.",
+      "Nie wprowadzaj kluczy API i nie próbuj uruchamiać handlu LIVE.",
+      "Shadow i analiza danych nie oznaczają zgody na składanie prawdziwych zleceń.",
+      "Panel udostępni połączenie dopiero po zakończeniu pełnej walidacji bezpieczeństwa.",
+    ],
+    docsUrl: "https://mexcdevelop.github.io/apidocs/contract_v1_en/",
+  },
+];
 
-        /* Modals */
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--modal-overlay); display: flex; justify-content: center; align-items: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; backdrop-filter: blur(8px); }
-        .modal-overlay.active { opacity: 1; pointer-events: auto; }
-        .modal-box { background-color: #131722; border: 1px solid var(--card-border); width: 100%; max-width: 650px; max-height: 85vh; border-radius: 16px; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
-        .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; }
-        .modal-header h2 { font-size: 18px; color: #fff; }
-        .close-modal { background: transparent; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; }
-        .modal-body { padding: 24px; overflow-y: auto; font-size: 14px; color: #cbd5e1; }
-        .modal-body h3 { font-size: 15px; margin: 20px 0 8px 0; color: var(--accent-gold); }
-        .modal-footer { padding: 20px 24px; background-color: rgba(0,0,0,0.3); border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
-        .accept-container { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
-        .accept-container input[type="checkbox"] { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--accent-gold); cursor: pointer; }
-        .accept-container label { font-size: 13px; color: var(--text-muted); }
-        .btn-tg { width: 100%; background-color: #26a5e4; color: #fff; border: none; padding: 14px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; opacity: 0.5; pointer-events: none; }
-        .btn-tg.enabled { opacity: 1; pointer-events: auto; }
+const exchangeMap = Object.fromEntries(
+  exchanges.map((exchange) => [exchange.id, exchange]),
+) as Record<ExchangeId, ExchangeConfig>;
 
-        footer { text-align: center; padding: 40px 0; border-top: 1px solid rgba(42, 46, 57, 0.4); color: var(--text-muted); font-size: 13px; margin-top: 40px; }
-        footer a { color: var(--text-muted); text-decoration: underline; cursor: pointer; }
-    </style>
-</head>
-<body>
+const statusClass: Record<ExchangeStatus, string> = {
+  live: "status-live",
+  test: "status-test",
+  beta: "status-beta",
+  blocked: "status-blocked",
+};
 
-    <!-- Header Navigation -->
-    <header>
-        <div class="container header-container">
-            <div class="logo">🏴‍☠️ CZARNA <span>PERŁA</span></div>
-            <div class="nav-tabs">
-                <button class="nav-btn active" onclick="switchPage('landing', this)">Strona Główna</button>
-                <button class="nav-btn" onclick="switchPage('dashboard', this)">Panel Inwestora</button>
-                <!-- Przycisk ukryty, pokaże się tylko po weryfikacji Admina -->
-                <button class="nav-btn" id="btnNavAdmin" onclick="switchPage('admin', this)">Mostek Kapitański (Admin)</button>
-            </div>
-        </div>
-    </header>
+function formatTimeLeft(endDateString?: string) {
+  if (!endDateString || endDateString === "Brak danych") {
+    return "Brak aktywnej licencji";
+  }
+  const endDate = new Date(endDateString);
+  if (Number.isNaN(endDate.getTime())) return "Nieprawidłowa data";
+  if (endDate.getFullYear() >= 2099) return "Licencja bezterminowa";
+  const distance = endDate.getTime() - Date.now();
+  if (distance <= 0) return "WYGASŁA — kontakt: @Mateushpro";
+  const days = Math.ceil(distance / 86_400_000);
+  return `${days} dni (do ${endDate.toLocaleDateString("pl-PL")})`;
+}
 
-    <!-- PAGE 1: LANDING PAGE -->
-    <div id="landingPage" class="page-content active">
-        <section class="hero">
-            <div class="container">
-                <div class="stats-badge-container">
-                    <div class="stats-badge">WinRate > 80% na rynku rzeczywistym</div>
-                    <div class="stats-badge">Autorski system z logiką SMC & CVD</div>
-                </div>
-                <h1>Twój kapitał pod pełną kontrolą algorytmu</h1>
-                <p>
-                    Większość detalicznych botów tradingowych przegrywa, bo opierają się na przestarzałych, sztywnych wskaźnikach. Czarna Perła to elitarny system stworzony do precyzyjnego snajperstwa rynkowego i restrykcyjnej ochrony kapitału.
-                </p>
-                
-                <script async src="https://telegram.org/js/telegram-widget.js?22" 
-                        data-telegram-login="czarna_perla_auth_bot" 
-                        data-size="large" 
-                        data-onauth="onTelegramAuth(user)" 
-                        data-request-access="write">
-                </script>
-            </div>
-        </section>
+async function readJson(response: Response) {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Serwer zwrócił nieprawidłową odpowiedź (${response.status}).`);
+  }
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.message || data?.detail || `Błąd HTTP ${response.status}`);
+  }
+  return data;
+}
 
-        <!-- SEKCJA WYNIKÓW -->
-        <section class="section-padding" style="background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <div class="container">
-                <h2 class="section-title">Dowody Skuteczności (Live Results)</h2>
-                <p style="text-align: center; color: var(--text-muted); margin-bottom: 40px; max-width: 800px; margin-left: auto; margin-right: auto;">
-                    Nie sprzedajemy obietnic ani wyidealizowanych backtestów z przeszłości. Nasz autorski kod, stale udoskonalany od kwietnia 2026, operuje na realnych kontach grupy. Poniżej weryfikowalne statystyki użytkowników "Czarnej Perły" spięte przez nasze API:
-                </p>
+function verificationMessage(
+  result: Record<string, unknown>,
+  exchange: ExchangeConfig,
+) {
+  if (typeof result.message === "string" && result.message.trim()) {
+    return result.message;
+  }
+  if (result.verification_status === "verified") {
+    return `${exchange.name}: klucze i tryb ${exchange.mode} zostały potwierdzone.`;
+  }
+  if (result.verification_status === "manual_beta") {
+    return `${exchange.name}: klucze są poprawne. Administrator musi zatwierdzić politykę opłat przed LIVE.`;
+  }
+  if (result.verification_status === "canary_required") {
+    return `${exchange.name}: klucze są poprawne. Wymagany jest kontrolowany canary przed LIVE.`;
+  }
+  return `${exchange.name}: ustawienia zostały zapisane.`;
+}
 
-                <div class="results-grid">
-                    <!-- Karta Damian -->
-                    <div class="result-card">
-                        <div class="result-header">
-                            <div class="result-name">👤 Kolega_Damian</div>
-                            <div class="result-date">Start: 01.06.2026</div>
-                        </div>
-                        <div style="font-size: 14px; color: var(--text-muted); text-align: center;">Skuteczność (WinRate)</div>
-                        <div class="winrate-big">84.48%</div>
-                        <div class="trade-stats">
-                            <div class="trade-stat-item">
-                                <div>Zyskowne (W)</div>
-                                <div class="win">49 ✅</div>
-                            </div>
-                            <div class="trade-stat-item" style="border-left: 1px solid rgba(255,255,255,0.1); padding-left: 20px;">
-                                <div>Stratne (L)</div>
-                                <div class="loss">9 ❌</div>
-                            </div>
-                        </div>
-                    </div>
+function verificationStatusLabel(status?: string) {
+  const labels: Record<string, string> = {
+    verified: "Połączenie LIVE zweryfikowane",
+    canary_required: "Klucze poprawne — wymagany canary",
+    canary_verified: "Canary zatwierdzony",
+    manual_beta: "Klucze poprawne — wymagana walidacja BETA",
+    manual_verified: "Walidacja BETA zatwierdzona",
+    live_blocked: "Handel LIVE zablokowany",
+    not_configured: "Nie skonfigurowano",
+  };
+  return status ? labels[status] ?? status.replaceAll("_", " ") : "Oczekuje";
+}
 
-                    <!-- Karta Arek -->
-                    <div class="result-card">
-                        <div class="result-header">
-                            <div class="result-name">👤 Kolega_AREK</div>
-                            <div class="result-date">Start: 19.06.2026</div>
-                        </div>
-                        <div style="font-size: 14px; color: var(--text-muted); text-align: center;">Skuteczność (WinRate)</div>
-                        <div class="winrate-big">93.10%</div>
-                        <div class="trade-stats">
-                            <div class="trade-stat-item">
-                                <div>Zyskowne (W)</div>
-                                <div class="win">27 ✅</div>
-                            </div>
-                            <div class="trade-stat-item" style="border-left: 1px solid rgba(255,255,255,0.1); padding-left: 20px;">
-                                <div>Stratne (L)</div>
-                                <div class="loss">2 ❌</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+export default function Home() {
+  const [page, setPage] = useState<PageName>("landing");
+  const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [selectedExchange, setSelectedExchange] =
+    useState<ExchangeId>("bitget");
+  const [instructionExchange, setInstructionExchange] =
+    useState<ExchangeId>("bitget");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [multiExchangeEnabled, setMultiExchangeEnabled] = useState(false);
+  const [exchangeCapabilities, setExchangeCapabilities] = useState<
+    Partial<Record<ExchangeId, ExchangeCapability>>
+  >({});
+  const [sessionVerified, setSessionVerified] = useState(false);
+  const [legacyMode, setLegacyMode] = useState(false);
+  const [csrfToken, setCsrfToken] = useState("");
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminActionMessage, setAdminActionMessage] = useState("");
+  const [rolloutFeePolicy, setRolloutFeePolicy] =
+    useState<BitunixFeePolicy>("deduct_positive");
+  const [connectionState, setConnectionState] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
+  const [showPassphrase, setShowPassphrase] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [apiSecret, setApiSecret] = useState("");
+  const [apiPassphrase, setApiPassphrase] = useState("");
+  const [apiUid, setApiUid] = useState("");
+  const [subaccount, setSubaccount] = useState("");
+  const [margin, setMargin] = useState("4");
+  const [leverage, setLeverage] = useState("20");
+  const [maxRisk, setMaxRisk] = useState("20");
+  const [marginMode, setMarginMode] = useState<"isolated" | "cross">("isolated");
 
-                <!-- Najlepsze strzały -->
-                <div style="text-align: center; margin-top: 20px;">
-                    <h4 style="color: #fff; margin-bottom: 20px; font-weight: 600;">Ostatnie potężne realizacje zysków (Konta Bitget, dźwignia 20x):</h4>
-                    <div class="trades-showcase">
-                        <div class="trade-pill">
-                            <span class="trade-pair">NEAR/USDT</span>
-                            <span class="trade-type">SHORT</span>
-                            <span class="trade-profit">+117.46%</span>
-                        </div>
-                        <div class="trade-pill">
-                            <span class="trade-pair">FET/USDT</span>
-                            <span class="trade-type">SHORT</span>
-                            <span class="trade-profit">+83.68%</span>
-                        </div>
-                        <div class="trade-pill">
-                            <span class="trade-pair">BNB/USDT</span>
-                            <span class="trade-type">SHORT</span>
-                            <span class="trade-profit">+80.42%</span>
-                        </div>
-                        <div class="trade-pill">
-                            <span class="trade-pair">ARB/USDT</span>
-                            <span class="trade-type">SHORT</span>
-                            <span class="trade-profit">+70.04%</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
+  const exchange = exchangeMap[selectedExchange];
+  const instruction = exchangeMap[instructionExchange];
+  const applyDashboardData = useCallback(
+    (data: DashboardData, secureSession: boolean) => {
+      if (data.status !== "success") {
+        throw new Error("Serwer nie potwierdził profilu.");
+      }
+      setSessionVerified(secureSession);
+      setLegacyMode(!secureSession);
+      setDashboard(data);
+      if (data.exchange && exchangeMap[data.exchange]) {
+        setSelectedExchange(data.exchange);
+        setInstructionExchange(data.exchange);
+        setApiPassphrase("");
+        setShowPassphrase(false);
+      }
+      if (data.margin != null) setMargin(String(data.margin));
+      if (data.leverage != null) setLeverage(String(data.leverage));
+      if (data.max_risk != null) setMaxRisk(String(data.max_risk));
+      if (data.margin_mode) setMarginMode(data.margin_mode);
+      setIsAdmin(secureSession && data.is_admin === true);
+      setConnectionState("success");
+      if (!secureSession) {
+        setSaveMessage(
+          "Panel działa w trybie zgodności. Administrator i nowe giełdy pozostają zablokowane do czasu uruchomienia bezpiecznej sesji.",
+        );
+      }
+    },
+    [],
+  );
 
-        <!-- Anatomia Algorytmu -->
-        <section class="section-padding">
-            <div class="container">
-                <h2 class="section-title">Anatomia Algorytmu: Dlaczego to działa?</h2>
-                
-                <div class="anatomy-card">
-                    <h3><span>⚙️</span> Pełna Automatyzacja i Ekosystem Telegram</h3>
-                    <ul class="anatomy-list">
-                        <li><strong>Asynchroniczna architektura:</strong> Skaner rynku działa w osobnym wątku, analizując dziesiątki rynków jednocześnie. Zero opóźnień (lagów) pomiędzy sygnałem z giełdy a egzekucją.</li>
-                        <li><strong>Smart Handling kontraktów:</strong> Hybrydowy mechanizm obliczeniowy całkowicie eliminuje problem "ucinania" resztek kontraktów. Algorytm idealnie wylicza tolerancję, zawsze realizując zysk w 100%.</li>
-                        <li><strong>System raportowania na żywo:</strong> Nie musisz non-stop śledzić wykresów. Dedykowany bot na Telegramie natychmiast powiadamia Cię o każdej reakcji, a autorski system na bieżąco raportuje aktualne saldo Twojego portfela w komunikatorze.</li>
-                    </ul>
-                </div>
+  const fetchDashboardSession = useCallback(async () => {
+    const response = await fetch(`${API_BASE_URL}/api/dashboard/me`, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    const data = (await readJson(response)) as DashboardData;
+    applyDashboardData(data, true);
+    return data;
+  }, [applyDashboardData]);
 
-                <div class="anatomy-card" style="border-left-color: var(--accent-blue);">
-                    <h3><span>🎯</span> Rygorystyczny Protokół Wejścia (SMC)</h3>
-                    <ul class="anatomy-list">
-                        <li><strong>Zgoda Makro-Strukturalna:</strong> Wykres 15-minutowy musi idealnie zgadzać się z trendem na wyższych interwałach (4H, 1D), a wskaźnik wolumenowy CVD musi potwierdzać prawdziwą obecność kapitału.</li>
-                        <li><strong>Weryfikacja Płynności (Pin Bar Filter):</strong> Skanowanie ekstremów w poszukiwaniu tzw. Pin Barów (minimum 50% knota odrzucającego cenę) – matematyczny dowód na zebranie Stop Lossów detalistów (Liquidity Sweep).</li>
-                        <li><strong>Zasadzka Snajperska (OTE):</strong> Zero chciwości i wchodzenia na szczytach. Cierpliwie oczekujące zlecenia Limit lądują bezwzględnie w strefie Optimal Trade Entry (Złota Strefa Fibonacciego: 61.8% - 78.6%).</li>
-                    </ul>
-                </div>
-
-                <div class="anatomy-card" style="border-left-color: var(--accent-green);">
-                    <h3><span>📊</span> Defensywne Zarządzanie Ryzykiem</h3>
-                    <ul class="anatomy-list">
-                        <li><strong>Ucinanie ryzyka w locie:</strong> Po osiągnięciu zaledwie 1% czystego ruchu ceny, system realizuje część profitu i natychmiast przestawia pozycję na Break-Even (+0.2%). Transakcja staje się darmowa.</li>
-                        <li><strong>Bezpieczny Stop Loss:</strong> Ukryty za ekstremum z dodatkowym buforem ochronnym (1.5x ATR), chroniącym Twój kapitał przed rynkowym szumem i celowymi "szpilkami" Bitgeta.</li>
-                        <li><strong>Wieloetapowe księgowanie:</strong> Zabezpieczamy to co nasze, a na koniec wypuszczamy tzw. Runnera na Trailing Stopie, który może bezpiecznie surfować po trendzie łapiąc potężne zyski bez górnego limitu.</li>
-                    </ul>
-                </div>
-            </div>
-        </section>
-
-        <!-- Pricing Section -->
-        <section class="section-padding pricing" style="background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.05);">
-            <div class="container">
-                <h2 class="section-title">Wybierz model współpracy</h2>
-                <div class="pricing-grid">
-                    <div class="pricing-card telecom">
-                        <div class="badge-premium badge-telecom">🔥 STARTOWA 🔥</div>
-                        <h3>📱 PAKIET TESTOWY</h3>
-                        <div class="price">1. miesiąc 0$ <span>następnie 50$ / mc</span></div>
-                        <div class="desc">Pełen dostęp do algorytmu przez 30 dni bez żadnych opłat. Przetestuj skuteczność systemu na własnym kapitale.</div>
-                        <ul class="pricing-list">
-                            <li><strong>Pierwszy miesiąc całkowicie GRATIS (0$)</strong></li>
-                            <li>Kolejne 3 miesiące z rabatem **-50%** (tylko 50$/mc)</li>
-                            <li>Standardowa cena 100$/mc wchodzi dopiero od 5. miesiąca</li>
-                            <li>Pełna automatyzacja na giełdzie Bitget przez klucze API</li>
-                        </ul>
-                        <button class="btn-card" onclick="openTermsModal()">Aktywuj promocję</button>
-                    </div>
-
-                    <div class="pricing-card featured">
-                        <div class="badge-premium">🔥 LIMIT 10 MIEJSC 🔥</div>
-                        <h3>💎 PAKIET ROCZNY (PROMO)</h3>
-                        <div class="price"><span class="old-price">1200$</span> 800$ <span>/ rok</span></div>
-                        <div class="desc">Pełna roczna licencja "Pod Klucz" bez prowizji od zysków. Oszczędzasz najwięcej.</div>
-                        <ul class="pricing-list">
-                            <li>Dostęp do algorytmu na pełne 12 miesięcy</li>
-                            <li>Pełna konfiguracja techniczna na głównym serwerze Debiana</li>
-                            <li>Zintegrowane z Bitget (kapitał cały czas na Twoim koncie)</li>
-                            <li>Pełen nadzór i priorytetowe wsparcie 24/7</li>
-                        </ul>
-                        <button class="btn-card" onclick="openTermsModal()">Zarezerwuj roczny</button>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </div>
-
-    <!-- PAGE 2: USER DASHBOARD -->
-    <div id="dashboardPage" class="page-content">
-        <div class="container dashboard-container">
-            
-            <div class="db-header-panel">
-                <div class="user-info">
-                    <h2>Witaj, <span id="db-username" style="color:var(--accent-gold);">Zaloguj się przez Telegram</span></h2>
-                    <p>Zarządzaj swoimi licencjami i śledź status połączenia bota.</p>
-                </div>
-                <div class="header-actions">
-                    <div class="status-box">
-                        <span id="db-api-lamp" class="status-lamp"></span>
-                        <span id="db-api-status" class="status-text">Oczekuje na weryfikację</span>
-                    </div>
-                    <!-- Zegar odliczania w Panelu Inwestora -->
-                    <div class="status-box" style="background: rgba(243, 166, 59, 0.1); border-color: var(--accent-gold);">
-                        <span style="font-size: 13px; color: var(--text-muted);">Ważność licencji:</span>
-                        <span id="db-time-left" class="time-left">Brak danych</span>
-                    </div>
-                    <button class="btn-logout" id="btnLogout" style="display:none;" onclick="logoutUser()">Wyloguj</button>
-                </div>
-            </div>
-
-            <div class="db-grid">
-                <!-- Lewa kolumna: Formularze i Plan -->
-                <div>
-                    <div class="db-card" style="border-color: var(--accent-gold);">
-                        <h3>Ustawienia Handlowe (Bitget API)</h3>
-                        <p style="font-size:13px; color:var(--text-muted); margin-bottom: 20px;">Wprowadź klucze API z Bitget oraz dostosuj parametry ryzyka. Skrypt asynchroniczny automatycznie pobierze ustawienia.</p>
-                        
-                        <div class="form-group">
-                            <label style="font-size:12px; color:var(--text-muted);">Klucz API (API Key)</label>
-                            <input type="text" id="api_key" class="api-input" placeholder="Wklej API Key">
-                        </div>
-                        <div class="form-group">
-                            <label style="font-size:12px; color:var(--text-muted);">Sekret API (API Secret)</label>
-                            <input type="password" id="api_secret" class="api-input" placeholder="Wklej API Secret">
-                        </div>
-                        <div class="form-group">
-                            <label style="font-size:12px; color:var(--text-muted);">Hasło API (Passphrase)</label>
-                            <input type="password" id="api_passphrase" class="api-input" placeholder="Wklej Passphrase">
-                        </div>
-                        
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:5px;">
-                            <div class="form-group">
-                                <label style="font-size:12px; color:var(--text-muted);">Margin (Kwota na pozycję)</label>
-                                <input type="number" id="trade_margin" class="api-input" placeholder="np. 50">
-                            </div>
-                            <div class="form-group">
-                                <label style="font-size:12px; color:var(--text-muted);">Dźwignia (Lewar)</label>
-                                <input type="number" id="trade_leverage" class="api-input" placeholder="np. 20">
-                            </div>
-                        </div>
-
-                        <button onclick="saveApiSettings()" style="width:100%; margin-top:10px; background:var(--accent-gold); color:#000; border:none; padding:12px; border-radius:6px; font-weight:bold; cursor:pointer; transition: 0.2s;">
-                            Zapisz Ustawienia
-                        </button>
-                        <div id="save_status" style="font-size:14px; margin-top:10px; text-align:center; font-weight:bold;"></div>
-                    </div>
-
-                    <div class="db-card">
-                        <h3>Twoja aktywna licencja</h3>
-                        <div class="info-row"><span class="info-label">Aktualny plan:</span><span id="db-plan" class="info-value" style="color:var(--accent-blue);">Brak danych</span></div>
-                        <div class="info-row"><span class="info-label">Status rozliczenia:</span><span class="info-value">Brak danych</span></div>
-                        <div class="info-row"><span class="info-label">Giełda docelowa:</span><span class="info-value">Bitget (API)</span></div>
-                    </div>
-                </div>
-
-                <!-- Prawa kolumna: Info statyczne -->
-                <div>
-                    <div class="db-card">
-                        <h3>Połączenie z giełdą</h3>
-                        <div class="info-row">
-                            <span class="info-label">Status kluczy:</span>
-                            <span class="info-value" id="db-api-status-text" style="display:flex; align-items:center; gap:6px;">
-                                <span id="db-api-small-lamp" class="status-lamp" style="animation:none; width:8px; height:8px;"></span> 
-                                <span id="db-api-status-word">Brak połączenia</span>
-                            </span>
-                        </div>
-                        <div class="info-row"><span class="info-label">Twoja dźwignia:</span><span class="info-value" id="db-display-lev">Brak danych</span></div>
-                        <div class="info-row"><span class="info-label">Kwota Margin:</span><span class="info-value" id="db-display-mar">Brak danych</span></div>
-                    </div>
-
-                    <div class="db-card">
-                        <h3>Zarabiaj przez polecanie (15%)</h3>
-                        <p style="font-size:13px; color:var(--text-muted); margin-bottom: 10px;">Skopiuj swój reflink i udostępnij go grupie. System sam naliczy nagrody z abonamentu.</p>
-                        
-                        <label style="font-size:12px; color:var(--text-muted);">Twój link polecający:</label>
-                        <div class="referral-box">
-                            <span class="referral-link" id="db-ref-link">Zaloguj się, aby pobrać link</span>
-                            <button class="btn-copy" onclick="copyRefLink()">Kopiuj</button>
-                        </div>
-                        <div class="affiliate-stats">
-                            <div class="stat-box"><div class="stat-num">0</div><div class="stat-label">Poleconych</div></div>
-                            <div class="stat-box"><div class="stat-num green">0$</div><div class="stat-label">Suma prowizji</div></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- PAGE 3: MOSTEK KAPITAŃSKI (Tylko dla Adminów) -->
-    <div id="adminPage" class="page-content">
-        <div class="container">
-            <div class="db-card" style="margin-top: 40px; border-color: var(--accent-red);">
-                <h2 style="color: #fff; margin-bottom: 20px; display: flex; justify-content: space-between;">
-                    <span>🏴‍☠️ Mostek Kapitański (Zarządzanie Załogą)</span>
-                    <button onclick="fetchAdminData()" style="background: var(--card-border); color: #fff; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer; font-size: 14px;">Odśwież dane</button>
-                </h2>
-                
-                <div style="overflow-x: auto;">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Telegram ID</th>
-                                <th>Przypisane Imię</th>
-                                <th>Data Dołączenia</th>
-                                <th>Ważność Abonamentu</th>
-                                <th>Bot ON/OFF</th>
-                                <th>Admin ON/OFF</th>
-                                <th>Akcje</th>
-                            </tr>
-                        </thead>
-                        <tbody id="admin-users-list">
-                            <!-- Dane będą wstrzykiwane przez JavaScript -->
-                            <tr><td colspan="7" style="text-align:center; color: var(--text-muted);">Ładowanie załogi...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <footer>
-        <div class="container">
-            <p>&copy; 2026 Crypto Bot „Czarna Perła”. Oprogramowanie do analizy ilościowej.</p>
-            <p style="margin-top: 10px;"><a onclick="openTermsModal()">Regulamin Korzystania i Wyłączenie Odpowiedzialności</a></p>
-        </div>
-    </footer>
-
-    <!-- Modale (Zwijane) -->
-    <div class="modal-overlay" id="termsModal">
-        <div class="modal-box">
-            <div class="modal-header">
-                <h2>Regulamin i Warunki Korzystania</h2>
-                <button class="close-modal" onclick="closeTermsModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p style="font-weight: bold; text-align: center; margin-bottom: 20px;">REGULAMIN KORZYSTANIA Z BOTA</p>
-                <h3>§ 1 Postanowienia ogólne</h3>
-                <p>1. Właścicielem skryptu jest Kapitan Mateusz. System ma charakter badawczy i analityczny.</p>
-                <p>2. Kryptowaluty wiążą się z ryzykiem. Algorytm w pełni wykonuje instrukcje API.</p>
-                <p style="margin-top: 15px; font-weight: bold;">Data wejścia w życie: 30.06.2026</p>
-            </div>
-            <div class="modal-footer">
-                <div class="accept-container">
-                    <input type="checkbox" id="acceptCheckbox" onchange="toggleTgButton()">
-                    <label for="acceptCheckbox">Akceptuję postanowienia regulaminu. Chcę przejść do Telegrama.</label>
-                </div>
-                <button class="btn-tg" id="tgButton" onclick="redirectToTelegram()">
-                    Przejdź do grupy zarządzającej
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const TELEGRAM_LINK = "https://t.me/+QumQey-BSYNkYTlk";
-        let CURRENT_USER_ID = null;
-        let IS_ADMIN = false;
-
-        const API_BASE_URL = "https://czarnaperla.duckdns.org"; 
-
-        async function fetchDashboardData(telegramId, telegramName = "") {
-            CURRENT_USER_ID = telegramId;
-            try {
-                // Przekazujemy imię z Telegrama do serwera
-                const response = await fetch(`${API_BASE_URL}/api/dashboard/${telegramId}?name=${encodeURIComponent(telegramName)}`);
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    document.getElementById('db-username').innerText = data.custom_name || data.username;
-                    document.getElementById('db-plan').innerText = data.plan_name || "Podstawowy";
-                    document.getElementById('db-ref-link').innerText = `https://msliwa610-oss.github.io/czarnaperla-bot/?ref=${data.referral_code || 'brak'}`;
-                    
-                    document.getElementById('trade_margin').value = data.margin;
-                    document.getElementById('trade_leverage').value = data.leverage;
-                    document.getElementById('db-display-mar').innerText = data.margin + " USDT";
-                    document.getElementById('db-display-lev').innerText = data.leverage + "x";
-
-                    updateStatusLamps(data.api_connected);
-
-                    // Prawdziwe odliczanie czasu
-                    if (data.subscription_end_date) {
-                        calculateTimeLeft(data.subscription_end_date);
-                    } else {
-                        document.getElementById('db-time-left').innerHTML = "<span class='time-expired'>WYGASŁO! Kontakt: @Mateushpro</span>";
-                    }
-
-                    // Logika uprawnień Administratora
-                    if (data.is_admin === true) {
-                        IS_ADMIN = true;
-                        document.getElementById('btnNavAdmin').style.display = 'block';
-                    }
-                }
-            } catch (error) {
-                console.error("Błąd połączenia z serwerem API:", error);
-                document.getElementById('db-username').innerText = "Tryb Offline (Oczekuje na start serwera)";
-            }
-        }
-
-        // Ulepszone odliczanie z prawdziwą datą i namiarem na Kapitana
-        function calculateTimeLeft(endDateString) {
-            const endDate = new Date(endDateString).getTime();
-            const now = new Date().getTime();
-            const distance = endDate - now;
-
-            if (distance < 0 || endDateString.includes("2099")) {
-                document.getElementById('db-time-left').innerHTML = "<span class='time-expired'>WYGASŁO! Kontakt: @Mateushpro</span>";
-            } else {
-                const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-                document.getElementById('db-time-left').innerHTML = `Pozostało <span style="color:#fff">${days} dni</span> (do ${endDateString})`;
-            }
-        }
-
-        /* =======================================================
-           FUNKCJE PANELU ADMINISTRATORA (MOSTEK KAPITAŃSKI)
-        ======================================================= */
-
-        async function fetchAdminData() {
-            if (!IS_ADMIN) return;
-            const tbody = document.getElementById('admin-users-list');
-            tbody.innerHTML = "<tr><td colspan='7'>Pobieranie bazy danych z serwera...</td></tr>";
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ admin_id: CURRENT_USER_ID })
-                });
-                const data = await response.json();
-
-                if (data.status === 'success') {
-                    tbody.innerHTML = "";
-                    data.users.forEach(user => {
-                        const isExpired = new Date(user.sub_end) < new Date();
-                        const timeText = isExpired ? '<span class="time-expired">WYGASŁ (OFF)</span>' : user.sub_end;
-
-                        const row = `<tr>
-                                <td style="font-family: monospace;">${user.telegram_id}</td>
-                                <td>
-                                    <input type="text" id="name_${user.telegram_id}" class="admin-input" value="${user.custom_name || ''}">
-                                </td>
-                                <td>${user.join_date}</td>
-                                <td>${timeText}</td>
-                                <td>
-                                    <label class="switch">
-                                      <input type="checkbox" onchange="toggleBotStatus('${user.telegram_id}', this.checked)" ${user.bot_active ? 'checked' : ''}>
-                                      <span class="slider"></span>
-                                    </label>
-                                </td>
-                                <td>
-                                    <label class="switch">
-                                      <input type="checkbox" onchange="toggleAdminStatus('${user.telegram_id}', this.checked)" ${user.is_admin ? 'checked' : ''}>
-                                      <span class="slider admin-slider"></span>
-                                    </label>
-                                </td>
-                                <td>
-                                    <button onclick="updateUserName('${user.telegram_id}')" style="background: var(--accent-gold); color: #000; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px;">Zapisz Imię</button>
-                                </td>
-                            </tr>`;
-                        tbody.innerHTML += row;
-                    });
-                }
-            } catch (err) {
-                tbody.innerHTML = `<tr><td colspan='7' style="color:var(--accent-red)">Błąd połączenia z serwerem API.</td></tr>`;
-            }
-        }
-
-        async function toggleBotStatus(userId, isChecked) {
-            await fetch(`${API_BASE_URL}/api/admin/toggle_bot`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ admin_id: CURRENT_USER_ID, target_user: userId, active: isChecked })
-            });
-            alert(`Zmieniono status bota dla użytkownika: ${userId}`);
-        }
-
-        async function toggleAdminStatus(userId, isChecked) {
-            await fetch(`${API_BASE_URL}/api/admin/toggle_admin`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ admin_id: CURRENT_USER_ID, target_user: userId, is_admin: isChecked })
-            });
-            alert(`Zmieniono uprawnienia administratora dla: ${userId}`);
-        }
-
-        async function updateUserName(userId) {
-            const newName = document.getElementById(`name_${userId}`).value;
-            await fetch(`${API_BASE_URL}/api/admin/update_name`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ admin_id: CURRENT_USER_ID, target_user: userId, custom_name: newName })
-            });
-            alert(`Zapisano nowe imię: ${newName}`);
-        }
-
-        /* =======================================================
-           ZAPISYWANIE API I LOGOWANIE
-        ======================================================= */
-
-        async function saveApiSettings() {
-            if (!CURRENT_USER_ID) {
-                alert("Musisz się najpierw zalogować!");
-                return;
-            }
-
-            const key = document.getElementById('api_key').value;
-            const secret = document.getElementById('api_secret').value;
-            const phrase = document.getElementById('api_passphrase').value;
-            const lev = document.getElementById('trade_leverage').value;
-            const mar = document.getElementById('trade_margin').value;
-
-            const payload = {
-                telegram_id: CURRENT_USER_ID,
-                api_key: key,
-                api_secret: secret,
-                api_passphrase: phrase,
-                leverage: parseInt(lev) || 10,
-                margin: parseFloat(mar) || 50.0
-            };
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/save_settings`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
-                });
-                
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    const statusText = document.getElementById('save_status');
-                    statusText.innerText = "Zapisano poprawnie. Oczekuję na sygnały z giełdy.";
-                    statusText.style.color = "var(--accent-green)";
-                    fetchDashboardData(CURRENT_USER_ID);
-                }
-            } catch (error) {
-                console.error("Błąd zapisu API:", error);
-                document.getElementById('save_status').innerText = "Serwer odrzucił połączenie.";
-                document.getElementById('save_status').style.color = "var(--accent-red)";
-            }
-        }
-
-        function updateStatusLamps(isConnected) {
-            const bigLamp = document.getElementById('db-api-lamp');
-            const smallLamp = document.getElementById('db-api-small-lamp');
-            const bigStatusText = document.getElementById('db-api-status');
-            const smallStatusText = document.getElementById('db-api-status-word');
-
-            if (isConnected) {
-                bigLamp.style.backgroundColor = 'var(--accent-green)';
-                bigLamp.style.boxShadow = '0 0 10px var(--accent-green)';
-                bigLamp.style.animation = 'blink 2s infinite';
-                smallLamp.style.backgroundColor = 'var(--accent-green)';
-                
-                bigStatusText.innerText = 'BOT STATUS: AKTYWNY (API)';
-                smallStatusText.innerText = 'Zsynchronizowano';
-                smallStatusText.style.color = 'var(--accent-green)';
-            } else {
-                bigLamp.style.backgroundColor = 'var(--accent-red)';
-                bigLamp.style.boxShadow = '0 0 10px var(--accent-red)';
-                bigLamp.style.animation = 'none';
-                smallLamp.style.backgroundColor = 'var(--accent-red)';
-                
-                bigStatusText.innerText = 'BOT STATUS: BRAK API';
-                bigStatusText.style.color = 'var(--accent-red)';
-                smallStatusText.innerText = 'Brak kluczy';
-                smallStatusText.style.color = 'var(--accent-red)';
-            }
-        }
-
-        function onTelegramAuth(user) {
-            document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('dashboardPage').classList.add('active');
-            
-            document.getElementById('btnLogout').style.display = 'block';
-            document.getElementById('db-username').innerText = "Weryfikacja danych...";
-            
-            // Pobieramy prawdziwe imię i nazwisko logującego się inwestora
-            const tgName = user.first_name + (user.last_name ? " " + user.last_name : "");
-            fetchDashboardData(user.id, tgName);
-        }
-
-        function logoutUser() {
-            CURRENT_USER_ID = null;
-            IS_ADMIN = false;
-            window.location.reload();
-        }
-
-        function switchPage(pageName, btn) {
-            document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            if(pageName === 'landing') document.getElementById('landingPage').classList.add('active');
-            else if(pageName === 'dashboard') document.getElementById('dashboardPage').classList.add('active');
-            else if(pageName === 'admin') {
-                document.getElementById('adminPage').classList.add('active');
-                fetchAdminData();
-            }
-            btn.classList.add('active');
-        }
-
-        function openTermsModal() { document.getElementById('termsModal').classList.add('active'); document.body.style.overflow = 'hidden'; }
-        function closeTermsModal() { document.getElementById('termsModal').classList.remove('active'); document.body.style.overflow = 'auto'; }
-        function toggleTgButton() {
-            const checkbox = document.getElementById('acceptCheckbox');
-            const tgButton = document.getElementById('tgButton');
-            if(checkbox.checked) tgButton.classList.add('enabled');
-            else tgButton.classList.remove('enabled');
-        }
-        function redirectToTelegram() {
-            if(document.getElementById('acceptCheckbox').checked) {
-                window.open(TELEGRAM_LINK, '_blank');
-                closeTermsModal();
-            }
-        }
-        function copyRefLink() {
-            const linkText = document.getElementById('db-ref-link').innerText;
-            navigator.clipboard.writeText(linkText);
-            alert("Link skopiowany i gotowy do udostępnienia!");
-        }
-        document.getElementById('termsModal').addEventListener('click', function(e) {
-            if(e.target === this) closeTermsModal();
+  const authenticateTelegram = useCallback(
+    async (user: TelegramUser) => {
+      setConnectionState("loading");
+      setSaveMessage("");
+      const name = `${user.first_name}${user.last_name ? ` ${user.last_name}` : ""}`;
+      try {
+        const authResponse = await fetch(`${API_BASE_URL}/api/auth/telegram`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(user),
         });
-    </script>
-</body>
-</html>
+
+        if ([404, 405].includes(authResponse.status)) {
+          const legacyResponse = await fetch(
+            `${API_BASE_URL}/api/dashboard/${encodeURIComponent(user.id)}?name=${encodeURIComponent(name)}`,
+            {
+              method: "GET",
+              credentials: "include",
+              headers: { Accept: "application/json" },
+            },
+          );
+          const legacyData = (await readJson(
+            legacyResponse,
+          )) as DashboardData;
+          applyDashboardData(legacyData, false);
+          return;
+        }
+
+        const authData = await readJson(authResponse);
+        setCsrfToken(String(authData?.csrf_token ?? ""));
+        await fetchDashboardSession();
+      } catch (error) {
+        setSessionVerified(false);
+        setIsAdmin(false);
+        setConnectionState("error");
+        setSaveMessage(
+          error instanceof Error
+            ? error.message
+            : "Nie udało się utworzyć bezpiecznej sesji.",
+        );
+      }
+    },
+    [applyDashboardData, fetchDashboardSession],
+  );
+
+  const fetchCapabilities = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/capabilities`, {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      const data = (await readJson(response)) as CapabilitiesData;
+      setMultiExchangeEnabled(data.multi_exchange === true);
+      setExchangeCapabilities(data.exchanges ?? {});
+    } catch {
+      // Fail-closed: stary backend pozostawia dostępny tylko Bitget.
+      setMultiExchangeEnabled(false);
+      setExchangeCapabilities({});
+    }
+  }, []);
+
+  useEffect(() => {
+    window.onTelegramAuth = (user: TelegramUser) => {
+      setTelegramUser(user);
+      setPage("dashboard");
+      void authenticateTelegram(user);
+    };
+
+    const capabilityTimer = window.setTimeout(() => {
+      void fetchCapabilities();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(capabilityTimer);
+      delete window.onTelegramAuth;
+    };
+  }, [authenticateTelegram, fetchCapabilities]);
+
+  useEffect(() => {
+    if (page !== "dashboard" || telegramUser) return;
+    const host = document.getElementById("telegram-login-widget");
+    if (!host || host.querySelector("script")) return;
+
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.setAttribute("data-telegram-login", TELEGRAM_BOT);
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-radius", "8");
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    script.setAttribute("data-request-access", "write");
+    host.appendChild(script);
+  }, [page, telegramUser]);
+
+  async function saveSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!telegramUser) {
+      setSaveMessage("Najpierw zaloguj się przez Telegram.");
+      setConnectionState("error");
+      return;
+    }
+    if (
+      !canSelectExchange(exchange) ||
+      effectiveStatus(exchange) === "blocked"
+    ) {
+      setSaveMessage("Handel LIVE na tej giełdzie jest zablokowany.");
+      setConnectionState("error");
+      return;
+    }
+    if (!apiKey.trim() || !apiSecret.trim()) {
+      setSaveMessage("Uzupełnij API Key i API Secret.");
+      setConnectionState("error");
+      return;
+    }
+    if (exchange.passphrase && !apiPassphrase.trim()) {
+      setSaveMessage(`${exchange.name} wymaga Passphrase.`);
+      setConnectionState("error");
+      return;
+    }
+
+    const parsedMargin = Number(margin);
+    const parsedLeverage = Number(leverage);
+    const parsedRisk = Number(maxRisk);
+    if (
+      !Number.isFinite(parsedMargin) ||
+      parsedMargin <= 0 ||
+      !Number.isInteger(parsedLeverage) ||
+      parsedLeverage < 1 ||
+      parsedLeverage > 100 ||
+      !Number.isFinite(parsedRisk) ||
+      parsedRisk <= 0
+    ) {
+      setSaveMessage("Sprawdź margin, dźwignię i limit ryzyka.");
+      setConnectionState("error");
+      return;
+    }
+
+    setConnectionState("loading");
+    setSaveMessage(`Weryfikuję połączenie z ${exchange.name}…`);
+
+    const payload = {
+      telegram_id: String(telegramUser.id),
+      exchange: selectedExchange,
+      api_key: apiKey.trim(),
+      api_secret: apiSecret.trim(),
+      api_passphrase: exchange.passphrase ? apiPassphrase.trim() : "",
+      api_uid: apiUid.trim(),
+      subaccount: subaccount.trim(),
+      margin_mode: marginMode,
+      leverage: parsedLeverage,
+      margin: parsedMargin,
+      max_risk: parsedRisk,
+    };
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/save_settings`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+      const result = await readJson(response);
+      if (result.status !== "success") {
+        throw new Error(result.message || "Serwer nie potwierdził zapisu.");
+      }
+      const confirmedMessage = verificationMessage(result, exchange);
+      setApiKey("");
+      setApiSecret("");
+      setApiPassphrase("");
+      setApiUid("");
+      setSubaccount("");
+      // Od tej chwili odświeżamy profil wyłącznie przez ważną sesję.
+      // Podpis Telegram Login jest jednorazowy i po kilku minutach wygasa.
+      await fetchDashboardSession();
+      setConnectionState("success");
+      setSaveMessage(confirmedMessage);
+    } catch (error) {
+      setConnectionState("error");
+      setSaveMessage(
+        error instanceof Error
+          ? error.message
+          : "Serwer odrzucił konfigurację.",
+      );
+    }
+  }
+
+  async function fetchAdminData() {
+    if (!isAdmin || !telegramUser || !sessionVerified) return;
+    setAdminLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+        },
+        body: JSON.stringify({
+          admin_id: String(telegramUser.id),
+        }),
+      });
+      const data = await readJson(response);
+      setAdminUsers(Array.isArray(data.users) ? data.users : []);
+    } catch (error) {
+      setAdminUsers([]);
+      setAdminActionMessage(
+        error instanceof Error
+          ? error.message
+          : "Nie udało się pobrać danych administratora.",
+      );
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  async function adminMutation(
+    endpoint: string,
+    payload: Record<string, unknown>,
+  ) {
+    if (!telegramUser || !isAdmin || !sessionVerified) return undefined;
+    setAdminActionMessage("Zapisywanie zmiany…");
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+        },
+        body: JSON.stringify({
+          ...payload,
+          admin_id: String(telegramUser.id),
+        }),
+      });
+      const result = await readJson(response);
+      setAdminActionMessage(
+        typeof result.message === "string"
+          ? result.message
+          : "Zmiana została zapisana.",
+      );
+      await fetchAdminData();
+      return result as Record<string, unknown>;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Serwer odrzucił zmianę.";
+      setAdminActionMessage(message);
+      throw error;
+    }
+  }
+
+  async function approveGlobalRollout(
+    exchangeId: ExchangeId,
+    canaryRecordId: number,
+    feePolicy?: BitunixFeePolicy,
+  ) {
+    const target = exchangeMap[exchangeId];
+    const confirmed = window.confirm(
+      `Zwolnić ${target.name} globalnie do LIVE? Zrób to wyłącznie po zakończonym canary i sprawdzeniu rekordu ${canaryRecordId}.`,
+    );
+    if (!confirmed) return;
+    await adminMutation("/api/admin/approve_exchange_rollout", {
+      exchange: exchangeId,
+      canary_record_id: canaryRecordId,
+      ...(exchangeId === "bitunix"
+        ? { bitunix_fee_policy: feePolicy ?? rolloutFeePolicy }
+        : {}),
+    });
+    await fetchCapabilities();
+  }
+
+  function navigate(nextPage: PageName) {
+    if (nextPage === "admin" && !isAdmin) return;
+    setPage(nextPage);
+    if (nextPage === "admin") void fetchAdminData();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function chooseExchange(id: ExchangeId) {
+    const next = exchangeMap[id];
+    setInstructionExchange(id);
+    if (!canSelectExchange(next)) {
+      document
+        .getElementById("exchange-instructions")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    changeSelectedExchange(id);
+    setPage("dashboard");
+    window.setTimeout(() => {
+      document
+        .getElementById("exchange-form")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
+
+  function clearLocalSession() {
+    setTelegramUser(null);
+    setDashboard(null);
+    setIsAdmin(false);
+    setSessionVerified(false);
+    setLegacyMode(false);
+    setCsrfToken("");
+    setAdminUsers([]);
+    setApiKey("");
+    setApiSecret("");
+    setApiPassphrase("");
+    setSaveMessage("");
+    setConnectionState("idle");
+    setPage("landing");
+  }
+
+  async function logout() {
+    if (sessionVerified) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+            ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+          },
+        });
+        await readJson(response);
+      } catch (error) {
+        setConnectionState("error");
+        setSaveMessage(
+          error instanceof Error
+            ? `Nie udało się zakończyć sesji: ${error.message}`
+            : "Nie udało się zakończyć sesji. Spróbuj ponownie.",
+        );
+        setPage("dashboard");
+        return;
+      }
+    }
+    clearLocalSession();
+  }
+
+  function capabilityFor(item: ExchangeConfig) {
+    return exchangeCapabilities[item.id];
+  }
+
+  function effectiveStatus(item: ExchangeConfig): ExchangeStatus {
+    const status = capabilityFor(item)?.status;
+    if (status === "live") return "live";
+    if (status === "canary_required") return "test";
+    if (status === "manual_beta") return "beta";
+    if (status === "live_blocked") return "blocked";
+    return item.status;
+  }
+
+  function effectiveStatusLabel(item: ExchangeConfig) {
+    const capability = capabilityFor(item);
+    if (!capability) return item.statusLabel;
+    if (!capability.enabled) {
+      return capability.status === "live_blocked"
+        ? "LIVE ZABLOKOWANY"
+        : "WYŁĄCZONA";
+    }
+    if (capability.status === "live") return "LIVE";
+    if (capability.status === "canary_required") return "LIVE PO CANARY";
+    if (capability.status === "manual_beta") {
+      return "BETA — AKTYWACJA RĘCZNA";
+    }
+    return String(capability.status).replaceAll("_", " ").toUpperCase();
+  }
+
+  function canSelectExchange(item: ExchangeConfig) {
+    if (!item.selectable || item.status === "blocked") return false;
+    if (!multiExchangeEnabled) return item.id === "bitget";
+    const capability = capabilityFor(item);
+    return Boolean(
+      capability?.enabled && capability.status !== "live_blocked",
+    );
+  }
+
+  function changeSelectedExchange(id: ExchangeId) {
+    setSelectedExchange(id);
+    setInstructionExchange(id);
+    setApiPassphrase("");
+    setShowPassphrase(false);
+    setSaveMessage("");
+  }
+
+  return (
+    <div className="site-shell">
+      <header className="site-header">
+        <div className="container header-inner">
+          <button
+            className="brand"
+            onClick={() => navigate("landing")}
+            aria-label="Czarna Perła — strona główna"
+          >
+            <span aria-hidden="true">🏴‍☠️</span>
+            <span>
+              CZARNA <strong>PERŁA</strong>
+            </span>
+          </button>
+          <nav className="nav-tabs" aria-label="Główna nawigacja">
+            <button
+              className={page === "landing" ? "nav-link active" : "nav-link"}
+              onClick={() => navigate("landing")}
+            >
+              Strona główna
+            </button>
+            <button
+              className={page === "dashboard" ? "nav-link active" : "nav-link"}
+              onClick={() => navigate("dashboard")}
+            >
+              Panel inwestora
+            </button>
+            {isAdmin && (
+              <button
+                className={page === "admin" ? "nav-link admin active" : "nav-link admin"}
+                onClick={() => navigate("admin")}
+              >
+                Mostek kapitański
+              </button>
+            )}
+          </nav>
+        </div>
+      </header>
+
+      {page === "landing" && (
+        <main>
+          <section className="hero">
+            <div className="hero-glow" aria-hidden="true" />
+            <div className="container hero-grid">
+              <div className="hero-copy">
+                <div className="eyebrow">SMC • TRUE CVD • MULTI-EXCHANGE</div>
+                <h1>
+                  Jedna Czarna Perła.
+                  <span> Własna giełda każdego inwestora.</span>
+                </h1>
+                <p>
+                  System oddziela analizę rynku od egzekucji. Każde konto korzysta
+                  z adaptera swojej giełdy, a przed aktywacją przechodzi kontrolę
+                  Futures, trybu one-way/net, dziennego PnL i uprawnień API.
+                </p>
+                <div className="hero-actions">
+                  <button
+                    className="button primary"
+                    onClick={() =>
+                      document
+                        .getElementById("exchanges")
+                        ?.scrollIntoView({ behavior: "smooth" })
+                    }
+                  >
+                    Zobacz obsługiwane giełdy
+                  </button>
+                  <button
+                    className="button secondary"
+                    onClick={() => navigate("dashboard")}
+                  >
+                    Przejdź do panelu
+                  </button>
+                </div>
+                <div className="security-note">
+                  <span aria-hidden="true">🛡️</span>
+                  Klucze tylko Read + Futures/Trade. Uprawnienie do wypłat zawsze
+                  wyłączone.
+                </div>
+              </div>
+              <aside className="hero-console" aria-label="Stan systemu">
+                <div className="console-top">
+                  <span className="live-dot" />
+                  CZARNA PERŁA v13.8
+                </div>
+                <div className="console-line">
+                  <span>Bitget</span>
+                  <strong>PROD</strong>
+                </div>
+                <div className="console-line">
+                  <span>Binance / Bybit / OKX / Gate</span>
+                  <strong className="blue-text">CANARY</strong>
+                </div>
+                <div className="console-line">
+                  <span>Bitunix</span>
+                  <strong className="amber">BETA</strong>
+                </div>
+                <div className="console-line">
+                  <span>MEXC Futures</span>
+                  <strong className="red">LIVE BLOCK</strong>
+                </div>
+                <div className="console-line">
+                  <span>Maks. pozycji / konto</span>
+                  <strong>10</strong>
+                </div>
+                <div className="console-rule" />
+                <div className="risk-flow">
+                  <span>TP1 25%</span>
+                  <i>→</i>
+                  <span>SL +0,30%</span>
+                  <i>→</i>
+                  <span>TP2 50%</span>
+                </div>
+                <div className="runner-row">Runner 25% • trailing 0,40%</div>
+              </aside>
+            </div>
+          </section>
+
+          <section id="exchanges" className="section exchange-section">
+            <div className="container">
+              <div className="section-heading">
+                <div className="eyebrow">OBSŁUGIWANE RYNKI</div>
+                <h2>Bitget PROD • 4 po teście • Bitunix BETA • MEXC blokada</h2>
+                <p>
+                  Status oznacza realny poziom gotowości adaptera. Nie nazywamy
+                  giełdy działającą, dopóki nie przejdzie wymaganych kontroli.
+                </p>
+              </div>
+              <div className="exchange-grid">
+                {exchanges.map((item) => (
+                  <article
+                    className={`exchange-card ${statusClass[effectiveStatus(item)]}`}
+                    key={item.id}
+                  >
+                    <div className="exchange-card-top">
+                      <div>
+                        <h3>{item.name}</h3>
+                        <p>{item.market}</p>
+                      </div>
+                      <span className="status-chip">
+                        <span className="status-symbol" aria-hidden="true" />
+                        {effectiveStatusLabel(item)}
+                      </span>
+                    </div>
+                    <p className="exchange-description">{item.description}</p>
+                    <dl className="mini-specs">
+                      <div>
+                        <dt>Dane</dt>
+                        <dd>{item.fields}</dd>
+                      </div>
+                      <div>
+                        <dt>Tryb</dt>
+                        <dd>{item.mode}</dd>
+                      </div>
+                    </dl>
+                    <button
+                      className="card-action"
+                      onClick={() => chooseExchange(item.id)}
+                    >
+                      {!canSelectExchange(item) && item.id !== "mexc"
+                        ? "Giełda wyłączona w konfiguracji serwera"
+                        : effectiveStatus(item) === "blocked"
+                        ? "Dlaczego LIVE jest zablokowany"
+                        : effectiveStatus(item) === "beta"
+                          ? "Podłącz i poproś o aktywację"
+                          : "Podłącz w Panelu Inwestora"}
+                    </button>
+                  </article>
+                ))}
+              </div>
+              <p className="exchange-legend">
+                LIVE oznacza dostępny adapter egzekucyjny. Binance, Bybit, OKX i
+                Gate są uruchamiane dopiero po autoryzowanym teście odczytowym i
+                minimalnym canary na konkretnym koncie. Bitunix wymaga dodatkowej
+                ręcznej walidacji.
+              </p>
+            </div>
+          </section>
+
+          <section className="section proof-section">
+            <div className="container">
+              <div className="section-heading">
+                <div className="eyebrow">DANE Z RYNKU RZECZYWISTEGO</div>
+                <h2>Historia działania, nie obietnica wyniku</h2>
+                <p>
+                  Poniższe dane dotyczą historycznych kont Bitget i nie stanowią
+                  gwarancji przyszłych rezultatów.
+                </p>
+              </div>
+              <div className="proof-grid">
+                <article className="proof-card">
+                  <div className="proof-user">
+                    <span>👤 Kolega_Damian</span>
+                    <small>od 01.06.2026 • Bitget</small>
+                  </div>
+                  <strong className="win-rate">84,48%</strong>
+                  <div className="proof-stats">
+                    <span>
+                      <b>49</b> zyskownych
+                    </span>
+                    <span>
+                      <b>9</b> stratnych
+                    </span>
+                  </div>
+                </article>
+                <article className="proof-card">
+                  <div className="proof-user">
+                    <span>👤 Kolega_AREK</span>
+                    <small>od 19.06.2026 • Bitget</small>
+                  </div>
+                  <strong className="win-rate">93,10%</strong>
+                  <div className="proof-stats">
+                    <span>
+                      <b>27</b> zyskownych
+                    </span>
+                    <span>
+                      <b>2</b> stratne
+                    </span>
+                  </div>
+                </article>
+              </div>
+              <div className="risk-warning">
+                Handel kontraktami i dźwignią wiąże się z wysokim ryzykiem utraty
+                kapitału. Wyniki historyczne nie gwarantują wyników przyszłych.
+              </div>
+            </div>
+          </section>
+
+          <section className="section">
+            <div className="container">
+              <div className="section-heading">
+                <div className="eyebrow">ARCHITEKTURA SYSTEMU</div>
+                <h2>Analiza wspólna. Egzekucja właściwa dla giełdy.</h2>
+              </div>
+              <div className="feature-grid">
+                <article className="feature-card">
+                  <span>🌊</span>
+                  <h3>SMC + True CVD</h3>
+                  <p>
+                    Trend wyższych interwałów, FVG, knot, OTE i rzeczywisty napływ
+                    transakcji składają się na jeden wynik jakości setupu.
+                  </p>
+                </article>
+                <article className="feature-card">
+                  <span>🧭</span>
+                  <h3>Adapter per giełda</h3>
+                  <p>
+                    Wejście, SL, TP, anulowanie i recovery idą wyłącznie przez
+                    zweryfikowany adapter konta — bez awaryjnego przejścia na
+                    prywatne API innej giełdy.
+                  </p>
+                </article>
+                <article className="feature-card">
+                  <span>🛡️</span>
+                  <h3>Fail-closed</h3>
+                  <p>
+                    Brak wymaganej metody, PnL lub potwierdzenia one-way/net
+                    blokuje handel. Bot nie zgaduje i nie składa częściowo
+                    zabezpieczonego zlecenia.
+                  </p>
+                </article>
+                <article className="feature-card">
+                  <span>🎯</span>
+                  <h3>Zarządzanie po TP1</h3>
+                  <p>
+                    TP1 zamyka 25%, SL przechodzi na +0,30%, TP2 zamyka 50%, a
+                    pozostałe 25% prowadzi trailing stop 0,40%.
+                  </p>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section className="section pricing-section">
+            <div className="container">
+              <div className="section-heading">
+                <div className="eyebrow">DOSTĘP</div>
+                <h2>Wybierz model współpracy</h2>
+              </div>
+              <div className="pricing-grid">
+                <article className="pricing-card blue">
+                  <span className="pricing-badge">STARTOWA</span>
+                  <h3>Pakiet testowy</h3>
+                  <div className="price">0$ <small>pierwszy miesiąc</small></div>
+                  <p>
+                    Pełny dostęp przez 30 dni, później 50$/mies. przez kolejne
+                    trzy miesiące.
+                  </p>
+                  <ul>
+                    <li>Wybrana obsługiwana giełda</li>
+                    <li>Pełna automatyzacja przez API</li>
+                    <li>Raporty i alerty Telegram</li>
+                    <li>Kapitał pozostaje na Twoim koncie</li>
+                  </ul>
+                  <button className="button blue" onClick={() => setTermsOpen(true)}>
+                    Aktywuj promocję
+                  </button>
+                </article>
+                <article className="pricing-card gold">
+                  <span className="pricing-badge">LIMIT 10 MIEJSC</span>
+                  <h3>Pakiet roczny</h3>
+                  <div className="price">
+                    800$ <small>/ rok</small>
+                  </div>
+                  <p>
+                    Roczna licencja bez prowizji od zysków i z priorytetową
+                    konfiguracją.
+                  </p>
+                  <ul>
+                    <li>12 miesięcy dostępu</li>
+                    <li>Konfiguracja konta i test połączenia</li>
+                    <li>Obsługa migracji na inną giełdę</li>
+                    <li>Priorytetowe wsparcie</li>
+                  </ul>
+                  <button className="button primary" onClick={() => setTermsOpen(true)}>
+                    Zarezerwuj roczny
+                  </button>
+                </article>
+              </div>
+            </div>
+          </section>
+        </main>
+      )}
+
+      {page === "dashboard" && (
+        <main className="dashboard-page">
+          <div className="container">
+            <section className="dashboard-header">
+              <div>
+                <div className="eyebrow">PANEL INWESTORA</div>
+                <h1>
+                  {telegramUser
+                    ? `Witaj, ${dashboard?.custom_name || dashboard?.username || telegramUser.first_name}`
+                    : "Podłącz giełdę i ustaw handel"}
+                </h1>
+                <p>
+                  Jedna aktywna giełda na profil. Zmiana giełdy nie nastąpi, jeśli
+                  bot zarządza otwartą pozycją lub zleceniem.
+                </p>
+              </div>
+              <div className="dashboard-actions">
+                <div className="connection-pill">
+                  <span
+                    className={`connection-dot ${
+                      dashboard?.api_connected ? "connected" : ""
+                    }`}
+                  />
+                  {dashboard?.api_connected
+                    ? `${exchangeMap[dashboard.exchange ?? selectedExchange].name} połączony`
+                    : dashboard?.verification_status
+                      ? verificationStatusLabel(
+                          dashboard.verification_status,
+                        )
+                      : "Brak zweryfikowanego API"}
+                </div>
+                {telegramUser && (
+                  <button className="button danger-outline" onClick={logout}>
+                    Wyloguj
+                  </button>
+                )}
+              </div>
+            </section>
+
+            {!telegramUser && (
+              <section className="login-panel">
+                <div>
+                  <h2>Zaloguj się przez Telegram</h2>
+                  <p>
+                    Logowanie identyfikuje profil inwestora. Serwer musi
+                    zweryfikować podpis Telegram przed odczytem lub zmianą danych.
+                  </p>
+                </div>
+                <div id="telegram-login-widget" className="telegram-widget" />
+              </section>
+            )}
+
+            {telegramUser && legacyMode && (
+              <div className="legacy-warning" role="status">
+                <strong>Wymagana aktualizacja API strony:</strong> bot v13.8 zna
+                wiele giełd, ale obecny serwer panelu nie potwierdził jeszcze
+                bezpiecznej sesji Telegram ani capability{" "}
+                <code>multi_exchange</code>. Dlatego nowe giełdy są chwilowo
+                zablokowane fail-closed; dotychczasowy Bitget pozostaje dostępny.
+              </div>
+            )}
+
+            <ol className="steps" aria-label="Etapy podłączenia giełdy">
+              <li className="active">
+                <span>1</span>Wybierz giełdę
+              </li>
+              <li>
+                <span>2</span>Utwórz bezpieczny klucz
+              </li>
+              <li>
+                <span>3</span>Zapisz i zweryfikuj
+              </li>
+            </ol>
+
+            <div className="dashboard-grid">
+              <div>
+                <section id="exchange-form" className="panel-card form-card">
+                  <div className="panel-title-row">
+                    <div>
+                      <span className="card-kicker">KONFIGURACJA LIVE</span>
+                      <h2>Ustawienia handlowe</h2>
+                    </div>
+                    <span
+                      className={`status-chip ${statusClass[effectiveStatus(exchange)]}`}
+                    >
+                      <span className="status-symbol" />
+                      {effectiveStatusLabel(exchange)}
+                    </span>
+                  </div>
+
+                  <form onSubmit={saveSettings} noValidate>
+                    <div className="form-group">
+                      <label htmlFor="exchange">Giełda docelowa</label>
+                      <select
+                        id="exchange"
+                        value={selectedExchange}
+                        onChange={(event) =>
+                          changeSelectedExchange(
+                            event.target.value as ExchangeId,
+                          )
+                        }
+                      >
+                        {exchanges.map((item) => (
+                          <option
+                            value={item.id}
+                            key={item.id}
+                            disabled={!canSelectExchange(item)}
+                          >
+                            {item.name} — {effectiveStatusLabel(item)}
+                            {!canSelectExchange(item) && item.id !== "mexc"
+                              ? " / wyłączona przez serwer"
+                              : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <small>
+                        {exchange.market} • wymagany tryb {exchange.mode}
+                      </small>
+                    </div>
+
+                    <div
+                      className={`exchange-alert ${statusClass[effectiveStatus(exchange)]}`}
+                    >
+                      <strong>{exchange.name}: </strong>
+                      {exchange.activation}
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="api-key">API Key</label>
+                      <input
+                        id="api-key"
+                        value={apiKey}
+                        onChange={(event) => setApiKey(event.target.value)}
+                        autoComplete="off"
+                        spellCheck={false}
+                        placeholder="Wklej API Key"
+                        required
+                        disabled={!canSelectExchange(exchange)}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="api-secret">API Secret</label>
+                      <div className="password-field">
+                        <input
+                          id="api-secret"
+                          type={showSecret ? "text" : "password"}
+                          value={apiSecret}
+                          onChange={(event) => setApiSecret(event.target.value)}
+                          autoComplete="new-password"
+                          spellCheck={false}
+                          placeholder="Wklej API Secret"
+                          required
+                          disabled={!canSelectExchange(exchange)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSecret((value) => !value)}
+                          aria-label={
+                            showSecret ? "Ukryj API Secret" : "Pokaż API Secret"
+                          }
+                        >
+                          {showSecret ? "Ukryj" : "Pokaż"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {exchange.passphrase && (
+                      <div className="form-group">
+                        <label htmlFor="api-passphrase">Passphrase</label>
+                        <div className="password-field">
+                          <input
+                            id="api-passphrase"
+                            type={showPassphrase ? "text" : "password"}
+                            value={apiPassphrase}
+                            onChange={(event) =>
+                              setApiPassphrase(event.target.value)
+                            }
+                            autoComplete="new-password"
+                            spellCheck={false}
+                            placeholder={`Passphrase z ${exchange.name}`}
+                            required
+                            disabled={!canSelectExchange(exchange)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowPassphrase((value) => !value)
+                            }
+                            aria-label={
+                              showPassphrase
+                                ? "Ukryj Passphrase"
+                                : "Pokaż Passphrase"
+                            }
+                          >
+                            {showPassphrase ? "Ukryj" : "Pokaż"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="two-columns">
+                      <div className="form-group">
+                        <label htmlFor="trade-margin">Margin / pozycję (USDT)</label>
+                        <input
+                          id="trade-margin"
+                          type="number"
+                          min="1"
+                          step="0.01"
+                          value={margin}
+                          onChange={(event) => setMargin(event.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="trade-leverage">Dźwignia</label>
+                        <input
+                          id="trade-leverage"
+                          type="number"
+                          min="1"
+                          max="100"
+                          step="1"
+                          value={leverage}
+                          onChange={(event) => setLeverage(event.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="max-risk">Dzienny limit straty (USDT)</label>
+                        <input
+                          id="max-risk"
+                          type="number"
+                          min="1"
+                          step="0.01"
+                          value={maxRisk}
+                          onChange={(event) => setMaxRisk(event.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="margin-mode">Tryb marży</label>
+                        <select
+                          id="margin-mode"
+                          value={marginMode}
+                          onChange={(event) =>
+                            setMarginMode(
+                              event.target.value as "isolated" | "cross",
+                            )
+                          }
+                        >
+                          <option value="isolated">Isolated (zalecany)</option>
+                          <option value="cross">Cross</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="advanced-toggle"
+                      onClick={() => setShowAdvanced((value) => !value)}
+                      aria-expanded={showAdvanced}
+                    >
+                      {showAdvanced ? "−" : "+"} Ustawienia zaawansowane
+                    </button>
+                    {showAdvanced && (
+                      <div className="two-columns advanced-fields">
+                        <div className="form-group">
+                          <label htmlFor="api-uid">UID API (opcjonalnie)</label>
+                          <input
+                            id="api-uid"
+                            value={apiUid}
+                            onChange={(event) => setApiUid(event.target.value)}
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label htmlFor="subaccount">
+                            Subaccount (opcjonalnie)
+                          </label>
+                          <input
+                            id="subaccount"
+                            value={subaccount}
+                            onChange={(event) => setSubaccount(event.target.value)}
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="form-safety">
+                      <span>✓ Brak uprawnień Withdrawal</span>
+                      <span>✓ Whitelist IP</span>
+                      <span>✓ One-way / Net</span>
+                    </div>
+
+                    <button
+                      className="button primary submit-button"
+                      type="submit"
+                      disabled={
+                        !telegramUser ||
+                        !canSelectExchange(exchange) ||
+                        connectionState === "loading"
+                      }
+                    >
+                      {connectionState === "loading"
+                        ? "Weryfikuję połączenie…"
+                        : telegramUser
+                          ? `Zapisz i sprawdź ${exchange.name}`
+                          : "Zaloguj się, aby zapisać"}
+                    </button>
+                    <div
+                      className={`save-message ${connectionState}`}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {saveMessage}
+                    </div>
+                  </form>
+                </section>
+              </div>
+
+              <aside>
+                <section className="panel-card account-card">
+                  <span className="card-kicker">TWÓJ PROFIL</span>
+                  <h2>Status konta</h2>
+                  <dl className="account-list">
+                    <div>
+                      <dt>Plan</dt>
+                      <dd>{dashboard?.plan_name ?? "Brak danych"}</dd>
+                    </div>
+                    <div>
+                      <dt>Giełda</dt>
+                      <dd>
+                        {dashboard?.exchange
+                          ? exchangeMap[dashboard.exchange].name
+                          : "Nie wybrano"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Weryfikacja</dt>
+                      <dd>
+                        {dashboard?.verification_status
+                          ? verificationStatusLabel(
+                              dashboard.verification_status,
+                            )
+                          : dashboard?.api_connected
+                            ? "Połączenie LIVE zweryfikowane"
+                            : "Oczekuje"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Margin / dźwignia</dt>
+                      <dd>
+                        {dashboard?.margin ?? margin} USDT /{" "}
+                        {dashboard?.leverage ?? leverage}x
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Ważność licencji</dt>
+                      <dd>{formatTimeLeft(dashboard?.subscription_end_date)}</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <section className="panel-card safety-card">
+                  <span className="card-kicker">ZANIM ZAPISZESZ</span>
+                  <h2>5 zasad bezpieczeństwa</h2>
+                  <ol>
+                    <li>Osobny klucz tylko dla Czarnej Perły.</li>
+                    <li>Wyłącznie Read + Futures/Trade.</li>
+                    <li>Withdrawal i transfery zawsze OFF.</li>
+                    <li>Whitelist adresu IP serwera.</li>
+                    <li>Pierwszy test minimalnym marginem.</li>
+                  </ol>
+                </section>
+
+                <section className="panel-card referral-card">
+                  <span className="card-kicker">PROGRAM POLECEŃ</span>
+                  <h2>Twój link</h2>
+                  <div className="referral-value">
+                    {dashboard?.referral_code
+                      ? `https://msliwa610-oss.github.io/czarnaperla-bot/?ref=${dashboard.referral_code}`
+                      : "Dostępny po zalogowaniu"}
+                  </div>
+                  <button
+                    className="button secondary compact"
+                    type="button"
+                    disabled={!dashboard?.referral_code}
+                    onClick={async () => {
+                      if (!dashboard?.referral_code) return;
+                      await navigator.clipboard.writeText(
+                        `https://msliwa610-oss.github.io/czarnaperla-bot/?ref=${dashboard.referral_code}`,
+                      );
+                      setSaveMessage("Link polecający skopiowany.");
+                    }}
+                  >
+                    Kopiuj link
+                  </button>
+                </section>
+              </aside>
+            </div>
+
+            <section id="exchange-instructions" className="instructions-section">
+              <div className="section-heading left">
+                <div className="eyebrow">INSTRUKCJA KROK PO KROKU</div>
+                <h2>Jak podłączyć każdą giełdę</h2>
+                <p>
+                  Wybierz giełdę. Pokażemy tylko pola i kroki, których naprawdę
+                  wymaga.
+                </p>
+              </div>
+              <div className="instruction-tabs" role="tablist">
+                {exchanges.map((item) => (
+                  <button
+                    role="tab"
+                    aria-selected={instructionExchange === item.id}
+                    className={
+                      instructionExchange === item.id ? "active" : undefined
+                    }
+                    key={item.id}
+                    onClick={() => setInstructionExchange(item.id)}
+                  >
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+              <article
+                className={`instruction-card ${statusClass[effectiveStatus(instruction)]}`}
+              >
+                <div className="instruction-head">
+                  <div>
+                    <span className="status-chip">
+                      <span className="status-symbol" />
+                      {effectiveStatusLabel(instruction)}
+                    </span>
+                    <h3>
+                      {instruction.name} • {instruction.market}
+                    </h3>
+                  </div>
+                  <div className="instruction-meta">
+                    <span>{instruction.fields}</span>
+                    <span>Tryb: {instruction.mode}</span>
+                  </div>
+                </div>
+                <ol>
+                  {instruction.instructions.map((step, index) => (
+                    <li key={step}>
+                      <span>{index + 1}</span>
+                      <p>{step}</p>
+                    </li>
+                  ))}
+                </ol>
+                <div className="instruction-footer">
+                  <p>
+                    <strong>Ważne:</strong> nigdy nie przyznawaj kluczowi
+                    uprawnienia do wypłat.
+                  </p>
+                  {instruction.docsUrl && (
+                    <a
+                      href={instruction.docsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Oficjalna dokumentacja {instruction.name} ↗
+                    </a>
+                  )}
+                </div>
+              </article>
+            </section>
+          </div>
+        </main>
+      )}
+
+      {page === "admin" && isAdmin && (
+        <main className="admin-page">
+          <div className="container">
+            <section className="dashboard-header">
+              <div>
+                <div className="eyebrow red-eyebrow">MOSTEK KAPITAŃSKI</div>
+                <h1>Zarządzanie załogą</h1>
+                <p>
+                  Klucze API nigdy nie są wyświetlane. Widzisz wyłącznie giełdę i
+                  wynik weryfikacji.
+                </p>
+              </div>
+              <button className="button secondary" onClick={fetchAdminData}>
+                Odśwież dane
+              </button>
+            </section>
+            <section className="panel-card rollout-card">
+              <div className="panel-title-row">
+                <div>
+                  <span className="card-kicker">GLOBALNY ROLLOUT</span>
+                  <h2>Zwolnienie adaptera do LIVE</h2>
+                </div>
+              </div>
+              <p className="rollout-warning">
+                Ten przycisk nie wykonuje testu. Użyj go dopiero po realnym
+                canary, sprawdzeniu zleceń ochronnych i dziennego PnL.
+              </p>
+              <div className="rollout-grid">
+                {exchanges
+                  .filter(
+                    (item) => item.id !== "bitget" && item.id !== "mexc",
+                  )
+                  .map((item) => (
+                    <RolloutControl
+                      key={item.id}
+                      exchange={item}
+                      capability={exchangeCapabilities[item.id]}
+                      defaultFeePolicy={rolloutFeePolicy}
+                      onFeePolicyChange={setRolloutFeePolicy}
+                      onApprove={approveGlobalRollout}
+                    />
+                  ))}
+              </div>
+              {adminActionMessage && (
+                <div className="admin-action-message" role="status">
+                  {adminActionMessage}
+                </div>
+              )}
+            </section>
+            <section className="panel-card admin-card">
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Telegram ID</th>
+                      <th>Imię</th>
+                      <th>Giełda</th>
+                      <th>Weryfikacja</th>
+                      <th>Licencja</th>
+                      <th>Bot</th>
+                      <th>Admin</th>
+                      <th>Aktywacja LIVE</th>
+                      <th>Akcja</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminLoading && (
+                      <tr>
+                        <td colSpan={9}>Pobieranie danych…</td>
+                      </tr>
+                    )}
+                    {!adminLoading && adminUsers.length === 0 && (
+                      <tr>
+                        <td colSpan={9}>Brak danych lub brak połączenia z API.</td>
+                      </tr>
+                    )}
+                    {adminUsers.map((user) => (
+                      <AdminRow
+                        key={String(user.telegram_id)}
+                        user={user}
+                        onMutation={adminMutation}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </main>
+      )}
+
+      <footer className="site-footer">
+        <div className="container footer-grid">
+          <div>
+            <div className="brand footer-brand">
+              <span>🏴‍☠️</span>
+              <span>
+                CZARNA <strong>PERŁA</strong>
+              </span>
+            </div>
+            <p>Oprogramowanie do automatyzacji i analizy ilościowej.</p>
+          </div>
+          <div className="footer-links">
+            <button onClick={() => setTermsOpen(true)}>
+              Regulamin i ryzyko
+            </button>
+            <button onClick={() => navigate("dashboard")}>Panel inwestora</button>
+          </div>
+        </div>
+        <div className="container legal-line">
+          © 2026 Czarna Perła. Kryptowaluty i kontrakty z dźwignią wiążą
+          się z ryzykiem utraty kapitału.
+        </div>
+      </footer>
+
+      {termsOpen && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setTermsOpen(false);
+          }}
+        >
+          <section
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="terms-title"
+          >
+            <div className="modal-header">
+              <h2 id="terms-title">Regulamin i warunki korzystania</h2>
+              <button
+                aria-label="Zamknij regulamin"
+                onClick={() => setTermsOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <h3>Charakter systemu</h3>
+              <p>
+                Czarna Perła jest oprogramowaniem do automatyzacji decyzji
+                zgodnych z ustaloną strategią. Nie stanowi porady inwestycyjnej
+                ani gwarancji wyniku.
+              </p>
+              <h3>Ryzyko</h3>
+              <p>
+                Handel kryptowalutami, kontraktami i dźwignią może prowadzić do
+                częściowej lub całkowitej utraty kapitału. Użytkownik sam ustala
+                margin, dźwignię i limit straty.
+              </p>
+              <h3>Bezpieczeństwo API</h3>
+              <p>
+                Klucz powinien mieć jedynie odczyt oraz handel Futures. Wypłaty i
+                transfery muszą pozostać wyłączone, a dostęp powinien być
+                ograniczony adresem IP serwera.
+              </p>
+              <h3>Status giełd</h3>
+              <p>
+                MEXC LIVE jest zablokowany. Bitunix wymaga ręcznej walidacji
+                BETA. Pozostałe nowe giełdy są aktywowane dopiero po teście
+                konkretnego konta.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <label className="terms-check">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(event) => setTermsAccepted(event.target.checked)}
+                />
+                <span>Akceptuję regulamin i rozumiem ryzyko.</span>
+              </label>
+              <button
+                className="button blue"
+                disabled={!termsAccepted}
+                onClick={() => {
+                  window.open(TELEGRAM_GROUP, "_blank", "noopener,noreferrer");
+                  setTermsOpen(false);
+                }}
+              >
+                Przejdź do Telegrama
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminRow({
+  user,
+  onMutation,
+}: {
+  user: AdminUser;
+  onMutation: (
+    endpoint: string,
+    payload: Record<string, unknown>,
+  ) => Promise<Record<string, unknown> | undefined>;
+}) {
+  const [name, setName] = useState(user.custom_name ?? "");
+  const [canaryEvidence, setCanaryEvidence] = useState("");
+  const [feePolicy, setFeePolicy] =
+    useState<BitunixFeePolicy>("deduct_positive");
+  const exchangeName =
+    user.exchange && exchangeMap[user.exchange]
+      ? exchangeMap[user.exchange].name
+      : "Bitget / legacy";
+  const approvalRequired =
+    Boolean(user.exchange) &&
+    ["canary_required", "manual_beta"].includes(
+      user.verification_status ?? "",
+    );
+
+  return (
+    <tr>
+      <td className="mono">{String(user.telegram_id)}</td>
+      <td>
+        <input
+          className="table-input"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          aria-label={`Imię użytkownika ${user.telegram_id}`}
+        />
+      </td>
+      <td>{exchangeName}</td>
+      <td>{verificationStatusLabel(user.verification_status)}</td>
+      <td>{user.sub_end ?? "Brak danych"}</td>
+      <td>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={Boolean(user.bot_active)}
+            onChange={(event) =>
+              void onMutation("/api/admin/toggle_bot", {
+                target_user: String(user.telegram_id),
+                active: event.target.checked,
+              }).catch(() => undefined)
+            }
+          />
+          <span />
+          <b className="sr-only">Bot aktywny</b>
+        </label>
+      </td>
+      <td>
+        <label className="toggle admin-toggle">
+          <input
+            type="checkbox"
+            checked={Boolean(user.is_admin)}
+            onChange={(event) =>
+              void onMutation("/api/admin/toggle_admin", {
+                target_user: String(user.telegram_id),
+                is_admin: event.target.checked,
+              }).catch(() => undefined)
+            }
+          />
+          <span />
+          <b className="sr-only">Uprawnienia administratora</b>
+        </label>
+      </td>
+      <td>
+        {approvalRequired && user.exchange ? (
+          <div className="approval-controls">
+            <input
+              className="table-input evidence-input"
+              value={canaryEvidence}
+              minLength={8}
+              maxLength={512}
+              placeholder="Dowód canary / numer logu"
+              aria-label={`Dowód canary dla ${user.telegram_id}`}
+              onChange={(event) => setCanaryEvidence(event.target.value)}
+            />
+            {user.exchange === "bitunix" && (
+              <select
+                className="table-input"
+                value={feePolicy}
+                aria-label={`Polityka opłat Bitunix dla ${user.telegram_id}`}
+                onChange={(event) =>
+                  setFeePolicy(event.target.value as BitunixFeePolicy)
+                }
+              >
+                <option value="deduct_positive">
+                  Opłata dodatnia — odejmij
+                </option>
+                <option value="signed_value">Opłata ze znakiem</option>
+              </select>
+            )}
+            <button
+              className="table-button approve-button"
+              disabled={canaryEvidence.trim().length < 8}
+              onClick={() => {
+                const confirmed = window.confirm(
+                  `Potwierdzasz zakończony test ${exchangeName} dla konta ${user.telegram_id}?`,
+                );
+                if (!confirmed) return;
+                void onMutation("/api/admin/approve_exchange", {
+                  target_user: String(user.telegram_id),
+                  exchange: user.exchange,
+                  canary_evidence: canaryEvidence.trim(),
+                  ...(user.exchange === "bitunix"
+                    ? { bitunix_fee_policy: feePolicy }
+                    : {}),
+                }).catch(() => undefined);
+              }}
+            >
+              Zatwierdź konto
+            </button>
+          </div>
+        ) : (
+          <span className="muted-cell">
+            {user.verification_status === "canary_verified" ||
+            user.verification_status === "manual_verified" ||
+            user.verification_status === "verified"
+              ? "Zatwierdzone"
+              : "—"}
+          </span>
+        )}
+      </td>
+      <td>
+        <button
+          className="table-button"
+          onClick={() =>
+            void onMutation("/api/admin/update_name", {
+              target_user: String(user.telegram_id),
+              custom_name: name,
+            }).catch(() => undefined)
+          }
+        >
+          Zapisz
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function RolloutControl({
+  exchange,
+  capability,
+  defaultFeePolicy,
+  onFeePolicyChange,
+  onApprove,
+}: {
+  exchange: ExchangeConfig;
+  capability?: ExchangeCapability;
+  defaultFeePolicy: BitunixFeePolicy;
+  onFeePolicyChange: (value: BitunixFeePolicy) => void;
+  onApprove: (
+    exchangeId: ExchangeId,
+    canaryRecordId: number,
+    feePolicy?: BitunixFeePolicy,
+  ) => Promise<void>;
+}) {
+  const [canaryRecordId, setCanaryRecordId] = useState("");
+  const canRelease =
+    capability?.enabled === true &&
+    ["canary_required", "manual_beta"].includes(capability.status);
+  const parsedRecordId = Number.parseInt(canaryRecordId, 10);
+  const statusLabel =
+    capability?.status === "live"
+      ? "LIVE"
+      : capability?.status === "canary_required"
+        ? "WYMAGA CANARY"
+        : capability?.status === "manual_beta"
+          ? "WYMAGA WALIDACJI BETA"
+          : capability?.status === "live_blocked"
+            ? "ZABLOKOWANA"
+            : capability?.enabled === false
+              ? "WYŁĄCZONA"
+              : "BRAK DANYCH";
+
+  return (
+    <article className="rollout-item">
+      <div>
+        <strong>{exchange.name}</strong>
+        <span>{statusLabel}</span>
+      </div>
+      {canRelease ? (
+        <>
+          <label>
+            ID rekordu zakończonego canary
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={canaryRecordId}
+              onChange={(event) => setCanaryRecordId(event.target.value)}
+              placeholder="np. 42"
+            />
+          </label>
+          {exchange.id === "bitunix" && (
+            <label>
+              Potwierdzona polityka opłat
+              <select
+                value={defaultFeePolicy}
+                onChange={(event) =>
+                  onFeePolicyChange(
+                    event.target.value as BitunixFeePolicy,
+                  )
+                }
+              >
+                <option value="deduct_positive">
+                  Dodatnią opłatę odejmuj od PnL
+                </option>
+                <option value="signed_value">
+                  Wartość opłaty ma poprawny znak
+                </option>
+              </select>
+            </label>
+          )}
+          <button
+            className="table-button rollout-button"
+            disabled={!Number.isInteger(parsedRecordId) || parsedRecordId <= 0}
+            onClick={() =>
+              void onApprove(
+                exchange.id,
+                parsedRecordId,
+                exchange.id === "bitunix" ? defaultFeePolicy : undefined,
+              ).catch(() => undefined)
+            }
+          >
+            Zwolnij globalnie do LIVE
+          </button>
+        </>
+      ) : (
+        <p>
+          {capability?.status === "live"
+            ? "Adapter został już zwolniony."
+            : "Aktywacja globalna nie jest obecnie dostępna."}
+        </p>
+      )}
+    </article>
+  );
+}
