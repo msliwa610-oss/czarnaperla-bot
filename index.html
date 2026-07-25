@@ -1,820 +1,2031 @@
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Czarna Perła – Zautomatyzowany System Tradingowy</title>
-    <style>
-        :root {
-            --bg-color: #0b0d10;
-            --card-bg: rgba(19, 23, 34, 0.85);
-            --card-border: #2a2e39;
-            --accent-gold: #f3a63b;
-            --accent-green: #00c087;
-            --accent-red: #ff4d4d;
-            --accent-blue: #26a5e4;
-            --text-main: #f0f2f5;
-            --text-muted: #848e9c;
-            --modal-overlay: rgba(0, 0, 0, 0.85);
+"""Secure multi-exchange portal API for Czarna Perla v13.8.
+
+The browser never proves identity by sending a Telegram ID.  Identity comes
+only from a verified Telegram Login Widget payload and the resulting secure
+session cookie.  Exchange credentials are encrypted as one authenticated JSON
+object and are never returned by any endpoint.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict, deque
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+import datetime as dt
+import hashlib
+import hmac
+import json
+import math
+import os
+from pathlib import Path
+import secrets
+import threading
+import time
+from typing import Any, Literal, Mapping
+from urllib.parse import urlsplit
+
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .account_lock import acquire_account_switch_lock
+from .database import (
+    ensure_schema,
+    get_db_connection,
+    table_columns,
+    unmigrated_legacy_credential_users,
+)
+from .exchange_validation import (
+    EXCHANGE_CAPABILITIES,
+    ExchangeValidationError,
+    assert_no_open_exchange_state,
+    canonical_exchange_id,
+    run_read_only_smoke_test,
+)
+from .security import (
+    SESSION_COOKIE_NAME,
+    SecurityConfigurationError,
+    TelegramAuthError,
+    credential_aad,
+    csrf_token_matches,
+    get_credential_cipher_from_env,
+    hash_session_token,
+    issue_session_secrets,
+    require_exact_origin,
+    verify_telegram_auth,
+)
+
+
+UTC = dt.timezone.utc
+PRODUCTION_ORIGIN = "https://czarna-perla-panel.mateushpro.chatgpt.site"
+DEFAULT_TRADES_PATH = "/home/botkot/czarna_perla/trades.json"
+MAX_BODY_BYTES = 64 * 1024
+FRESH_ADMIN_SESSION_SECONDS = 10 * 60
+
+
+def _utc_now() -> dt.datetime:
+    return dt.datetime.now(UTC)
+
+
+def _iso(value: dt.datetime) -> str:
+    return value.astimezone(UTC).isoformat(timespec="seconds")
+
+
+def _parse_datetime(value: str | None) -> dt.datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _split_origins(raw: str | None) -> tuple[str, ...]:
+    values = [item.strip().rstrip("/") for item in str(raw or "").split(",")]
+    origins = tuple(dict.fromkeys(item for item in values if item))
+    origins = origins or (PRODUCTION_ORIGIN,)
+    for origin in origins:
+        parsed = urlsplit(origin)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+            or "*" in origin
+            or origin == "null"
+        ):
+            raise RuntimeError(
+                "ALLOWED_ORIGINS może zawierać wyłącznie pełne originy HTTPS "
+                "bez ścieżki, wildcardów i danych logowania."
+            )
+    return origins
+
+
+@dataclass(frozen=True)
+class Settings:
+    telegram_bot_token: str
+    allowed_origins: tuple[str, ...]
+    session_ttl_seconds: int
+    trades_path: str
+    audit_hash_salt: str
+    superadmin_ids: frozenset[int]
+    bitunix_fee_policy: str | None
+    adapter_release: str
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        raw_admins = os.getenv("SUPERADMIN_TELEGRAM_IDS", "")
+        admins: set[int] = set()
+        for value in raw_admins.split(","):
+            value = value.strip()
+            if not value:
+                continue
+            try:
+                normalized = int(value)
+            except ValueError as exc:
+                raise RuntimeError(
+                    "SUPERADMIN_TELEGRAM_IDS zawiera nieprawidłową wartość."
+                ) from exc
+            if normalized <= 0:
+                raise RuntimeError(
+                    "SUPERADMIN_TELEGRAM_IDS zawiera nieprawidłową wartość."
+                )
+            admins.add(normalized)
+        ttl = int(os.getenv("SESSION_TTL_SECONDS", str(12 * 60 * 60)))
+        ttl = min(max(ttl, 15 * 60), 24 * 60 * 60)
+        bitunix_fee_policy = os.getenv("BITUNIX_FEE_POLICY", "").strip()
+        if bitunix_fee_policy not in {
+            "",
+            "deduct_positive",
+            "signed_value",
+        }:
+            raise RuntimeError(
+                "BITUNIX_FEE_POLICY ma nieprawidłową wartość."
+            )
+        return cls(
+            telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
+            allowed_origins=_split_origins(os.getenv("ALLOWED_ORIGINS")),
+            session_ttl_seconds=ttl,
+            trades_path=os.getenv("BOT_TRADES_PATH", DEFAULT_TRADES_PATH),
+            audit_hash_salt=os.getenv("AUDIT_HASH_SALT", ""),
+            superadmin_ids=frozenset(admins),
+            bitunix_fee_policy=bitunix_fee_policy or None,
+            adapter_release=(
+                os.getenv("ADAPTER_RELEASE_ID", "v13.8.0").strip()
+                or "v13.8.0"
+            )[:128],
+        )
+
+
+SETTINGS = Settings.from_env()
+
+
+class SlidingWindowLimiter:
+    """Small in-process guard; production should also rate-limit in nginx."""
+
+    def __init__(self) -> None:
+        self._events: dict[str, deque[float]] = defaultdict(deque)
+        self._lock = threading.Lock()
+
+    def check(self, key: str, limit: int, window_seconds: float) -> None:
+        now = time.monotonic()
+        cutoff = now - window_seconds
+        with self._lock:
+            events = self._events[key]
+            while events and events[0] <= cutoff:
+                events.popleft()
+            if len(events) >= limit:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Zbyt wiele prób. Spróbuj ponownie za chwilę.",
+                    headers={"Retry-After": str(max(1, int(window_seconds)))},
+                )
+            events.append(now)
+            if len(self._events) > 20_000:
+                for old_key in list(self._events)[:2_000]:
+                    if not self._events[old_key] or self._events[old_key][-1] <= cutoff:
+                        self._events.pop(old_key, None)
+
+
+RATE_LIMITER = SlidingWindowLimiter()
+
+
+class TelegramLoginPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    id: int = Field(gt=0)
+    first_name: str = Field(min_length=1, max_length=128)
+    last_name: str | None = Field(default=None, max_length=128)
+    username: str | None = Field(default=None, max_length=64)
+    photo_url: str | None = Field(default=None, max_length=2048)
+    auth_date: int = Field(ge=0)
+    hash: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+
+
+class UserSettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Legacy fields are accepted for frontend compatibility but never used to
+    # establish identity.
+    telegram_id: str | int | None = None
+    telegram_auth: dict[str, Any] | None = None
+    exchange: str = Field(min_length=2, max_length=32)
+    api_key: str = Field(min_length=1, max_length=1024)
+    api_secret: str = Field(min_length=1, max_length=2048)
+    api_passphrase: str = Field(default="", max_length=1024)
+    api_uid: str = Field(default="", max_length=256)
+    subaccount: str = Field(default="", max_length=256)
+    margin_mode: Literal["isolated", "cross"] = "isolated"
+    leverage: int = Field(ge=1, le=100)
+    margin: float = Field(gt=0, le=1_000_000)
+    max_risk: float = Field(gt=0, le=1_000_000)
+
+    @field_validator("margin", "max_risk")
+    @classmethod
+    def finite_numbers_only(cls, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("wartość musi być skończona")
+        return value
+
+
+class AdminRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    admin_id: str | int | None = None
+    telegram_auth: dict[str, Any] | None = None
+
+
+class ToggleBotRequest(AdminRequest):
+    target_user: int = Field(gt=0)
+    active: bool
+
+
+class ToggleAdminRequest(AdminRequest):
+    target_user: int = Field(gt=0)
+    is_admin: bool
+
+
+class UpdateNameRequest(AdminRequest):
+    target_user: int = Field(gt=0)
+    custom_name: str = Field(min_length=1, max_length=128)
+
+
+class ApproveExchangeRequest(AdminRequest):
+    target_user: int = Field(gt=0)
+    exchange: str = Field(min_length=2, max_length=32)
+    bitunix_fee_policy: Literal["deduct_positive", "signed_value"] | None = None
+    canary_evidence: str = Field(min_length=8, max_length=512)
+
+
+class ApproveRolloutRequest(AdminRequest):
+    exchange: str = Field(min_length=2, max_length=32)
+    bitunix_fee_policy: Literal["deduct_positive", "signed_value"] | None = None
+    canary_record_id: int = Field(gt=0)
+
+
+@dataclass(frozen=True)
+class SessionUser:
+    telegram_id: int
+    is_admin: bool
+    is_superadmin: bool
+    csrf_hash: str
+    session_id: str
+    created_at: dt.datetime
+
+
+def _origin(request: Request) -> str | None:
+    return request.headers.get("origin")
+
+
+def _require_origin(request: Request) -> None:
+    try:
+        require_exact_origin(_origin(request), SETTINGS.allowed_origins)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Niedozwolone źródło żądania.",
+        ) from exc
+
+
+def _client_rate_key(request: Request) -> str:
+    # Do not blindly trust X-Forwarded-For supplied by the public internet.
+    return request.client.host if request.client else "unknown"
+
+
+def _privacy_hash(value: str) -> str | None:
+    if not value or not SETTINGS.audit_hash_salt:
+        return None
+    return hmac.new(
+        SETTINGS.audit_hash_salt.encode("utf-8"),
+        value.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _audit(
+    connection: Any,
+    *,
+    actor: int | None,
+    action: str,
+    outcome: str = "success",
+    target: int | None = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
+    request: Request | None = None,
+) -> None:
+    safe_metadata = json.dumps(
+        dict(metadata or {}),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    ip_hash = _privacy_hash(_client_rate_key(request)) if request else None
+    connection.execute(
+        """
+        INSERT INTO audit_log (
+            actor_telegram_id, target_telegram_id, action, resource_type,
+            resource_id, outcome, metadata_json, ip_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            actor,
+            target,
+            action,
+            resource_type,
+            resource_id,
+            outcome,
+            safe_metadata,
+            ip_hash,
+        ),
+    )
+
+
+def _session_from_request(request: Request) -> SessionUser:
+    _require_origin(request)
+    raw_token = request.cookies.get(SESSION_COOKIE_NAME, "")
+    if not raw_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Brak aktywnej sesji.",
+        )
+    token_hash = hash_session_token(raw_token)
+    now = _utc_now()
+    with get_db_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT s.session_id, s.csrf_hash, s.telegram_id, s.expires_at,
+                   s.revoked_at, s.created_at, s.last_seen_at, u.is_admin
+              FROM sessions AS s
+              JOIN users AS u ON u.telegram_id = s.telegram_id
+             WHERE s.token_hash = ?
+             LIMIT 1
+            """,
+            (token_hash,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Sesja jest nieprawidłowa.",
+            )
+        expiry = _parse_datetime(row["expires_at"])
+        if row["revoked_at"] or expiry is None or expiry <= now:
+            connection.execute(
+                "UPDATE sessions SET revoked_at = COALESCE(revoked_at, ?) "
+                "WHERE session_id = ?",
+                (_iso(now), row["session_id"]),
+            )
+            connection.commit()
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Sesja wygasła.",
+            )
+        last_seen = _parse_datetime(row["last_seen_at"])
+        if (
+            last_seen is None
+            or (now - last_seen).total_seconds() >= 5 * 60
+        ):
+            connection.execute(
+                "UPDATE sessions SET last_seen_at = ? WHERE session_id = ?",
+                (_iso(now), row["session_id"]),
+            )
+            connection.commit()
+        return SessionUser(
+            telegram_id=int(row["telegram_id"]),
+            is_admin=bool(row["is_admin"]),
+            is_superadmin=(
+                int(row["telegram_id"]) in SETTINGS.superadmin_ids
+            ),
+            csrf_hash=str(row["csrf_hash"]),
+            session_id=str(row["session_id"]),
+            created_at=(
+                _parse_datetime(row["created_at"])
+                or dt.datetime.min.replace(tzinfo=UTC)
+            ),
+        )
+
+
+def require_session(request: Request) -> SessionUser:
+    return _session_from_request(request)
+
+
+def require_mutation_session(request: Request) -> SessionUser:
+    user = _session_from_request(request)
+    supplied = request.headers.get("x-csrf-token", "")
+    if not csrf_token_matches(supplied, user.csrf_hash):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nieprawidłowy token CSRF.",
+        )
+    RATE_LIMITER.check(
+        f"mutate:{user.telegram_id}",
+        limit=30,
+        window_seconds=60,
+    )
+    return user
+
+
+def require_admin(request: Request) -> SessionUser:
+    user = require_mutation_session(request)
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Brak uprawnień administratora.",
+        )
+    return user
+
+
+def require_superadmin(request: Request) -> SessionUser:
+    user = require_admin(request)
+    if not user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ta operacja wymaga roli SUPERADMIN.",
+        )
+    if (_utc_now() - user.created_at).total_seconds() > FRESH_ADMIN_SESSION_SECONDS:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Zaloguj się ponownie przed operacją krytyczną.",
+        )
+    return user
+
+
+def _random_referral_code() -> str:
+    return "CP-" + secrets.token_urlsafe(9).replace("-", "").replace("_", "")[:12]
+
+
+def _display_name(payload: Mapping[str, Any]) -> str:
+    first = str(payload.get("first_name") or "").strip()
+    last = str(payload.get("last_name") or "").strip()
+    return " ".join(item for item in (first, last) if item)[:128]
+
+
+@dataclass(frozen=True)
+class LicenseState:
+    active: bool
+    end_date: str | None
+    plan_name: str | None
+
+
+def _license_expiry(value: Any) -> dt.datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        if len(text) == 10:
+            return dt.datetime.combine(
+                dt.date.fromisoformat(text) + dt.timedelta(days=1),
+                dt.time.min,
+                tzinfo=UTC,
+            )
+        parsed = dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _license_state(
+    connection: Any,
+    telegram_id: int,
+    *,
+    require_user_enabled: bool = True,
+) -> LicenseState:
+    user = connection.execute(
+        "SELECT is_active, sub_end FROM users WHERE telegram_id = ?",
+        (telegram_id,),
+    ).fetchone()
+    if not user or (require_user_enabled and not bool(user["is_active"])):
+        return LicenseState(False, None, None)
+
+    rows = connection.execute(
+        "SELECT plan_name, end_date, is_active FROM subscriptions "
+        "WHERE telegram_id = ? ORDER BY id DESC",
+        (telegram_id,),
+    ).fetchall()
+    candidates: list[tuple[dt.datetime, str, str | None]] = []
+    if rows:
+        for row in rows:
+            if not bool(row["is_active"]):
+                continue
+            raw_expiry = row["end_date"] or user["sub_end"]
+            expiry = _license_expiry(raw_expiry)
+            if expiry is not None:
+                candidates.append(
+                    (expiry, str(raw_expiry), row["plan_name"])
+                )
+    else:
+        expiry = _license_expiry(user["sub_end"])
+        if expiry is not None:
+            candidates.append((expiry, str(user["sub_end"]), None))
+
+    if not candidates:
+        return LicenseState(False, None, None)
+    expiry, raw_expiry, plan_name = max(candidates, key=lambda item: item[0])
+    return LicenseState(expiry > _utc_now(), raw_expiry, plan_name)
+
+
+def _require_active_license(telegram_id: int) -> None:
+    with get_db_connection(readonly=True) as connection:
+        license_state = _license_state(connection, telegram_id)
+    if not license_state.active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Licencja jest nieaktywna lub wygasła.",
+        )
+
+
+def _create_or_update_authenticated_user(
+    connection: Any,
+    payload: Mapping[str, Any],
+) -> None:
+    telegram_id = int(payload["id"])
+    now = _utc_now()
+    join_date = now.date().isoformat()
+    trial_end = (now + dt.timedelta(days=30)).date().isoformat()
+    username = str(payload.get("username") or f"Inwestor_{telegram_id}")[:128]
+    custom_name = _display_name(payload)
+    existing = connection.execute(
+        "SELECT * FROM users WHERE telegram_id = ?",
+        (telegram_id,),
+    ).fetchone()
+    is_new_user = existing is None
+    if is_new_user:
+        for _ in range(5):
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO users (
+                        telegram_id, username, custom_name, referral_code,
+                        join_date, sub_end, trial_used_at,
+                        is_admin, is_active,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                    """,
+                    (
+                        telegram_id,
+                        username,
+                        custom_name,
+                        _random_referral_code(),
+                        join_date,
+                        trial_end,
+                        _iso(now),
+                        int(telegram_id in SETTINGS.superadmin_ids),
+                        _iso(now),
+                        _iso(now),
+                    ),
+                )
+                break
+            except Exception as exc:
+                if "referral" not in str(exc).lower():
+                    raise
+        else:
+            raise RuntimeError("Nie można utworzyć unikalnego kodu polecającego.")
+    else:
+        connection.execute(
+            """
+            UPDATE users
+               SET username = ?,
+                   custom_name = COALESCE(NULLIF(custom_name, ''), ?),
+                   join_date = COALESCE(NULLIF(join_date, ''), ?),
+                   is_admin = CASE WHEN ? = 1 THEN 1 ELSE is_admin END,
+                   updated_at = ?
+             WHERE telegram_id = ?
+            """,
+            (
+                username,
+                custom_name,
+                join_date,
+                int(telegram_id in SETTINGS.superadmin_ids),
+                _iso(now),
+                telegram_id,
+            ),
+        )
+        if not existing["referral_code"]:
+            connection.execute(
+                "UPDATE users SET referral_code = ? WHERE telegram_id = ?",
+                (_random_referral_code(), telegram_id),
+            )
+    subscription_history = connection.execute(
+        "SELECT id FROM subscriptions WHERE telegram_id = ? LIMIT 1",
+        (telegram_id,),
+    ).fetchone()
+    if is_new_user and not subscription_history:
+        connection.execute(
+            """
+            INSERT INTO subscriptions (
+                telegram_id, plan_name, start_date, end_date, is_active
+            ) VALUES (?, 'Pakiet Startowy (30 dni)', ?, ?, 1)
+            """,
+            (telegram_id, _iso(now), trial_end),
+        )
+
+
+def _issue_database_session(
+    connection: Any,
+    telegram_id: int,
+    request: Request,
+) -> tuple[str, str]:
+    issued = issue_session_secrets()
+    now = _utc_now()
+    expires = now + dt.timedelta(seconds=SETTINGS.session_ttl_seconds)
+    session_id = secrets.token_hex(16)
+    user_agent = request.headers.get("user-agent", "")
+    connection.execute(
+        """
+        INSERT INTO sessions (
+            session_id, token_hash, csrf_hash, telegram_id, created_at,
+            expires_at, last_seen_at, user_agent_hash, ip_prefix_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            session_id,
+            issued.session_hash,
+            issued.csrf_hash,
+            telegram_id,
+            _iso(now),
+            _iso(expires),
+            _iso(now),
+            _privacy_hash(user_agent),
+            _privacy_hash(_client_rate_key(request)),
+        ),
+    )
+    connection.execute(
+        "DELETE FROM sessions WHERE expires_at <= ? OR revoked_at IS NOT NULL",
+        (_iso(now - dt.timedelta(days=2)),),
+    )
+    # Bound session accumulation without invalidating the just-issued session.
+    rows = connection.execute(
+        """
+        SELECT session_id FROM sessions
+         WHERE telegram_id = ? AND revoked_at IS NULL
+         ORDER BY created_at DESC
+        """,
+        (telegram_id,),
+    ).fetchall()
+    for row in rows[10:]:
+        connection.execute(
+            "UPDATE sessions SET revoked_at = ? WHERE session_id = ?",
+            (_iso(now), row["session_id"]),
+        )
+    return issued.session_token, issued.csrf_token
+
+
+def _selected_account(connection: Any, telegram_id: int) -> Any:
+    return connection.execute(
+        """
+        SELECT a.*, c.account_id AS credentials_row,
+               r.leverage, r.margin, r.max_risk
+          FROM exchange_accounts AS a
+          LEFT JOIN exchange_credentials AS c ON c.account_id = a.id
+          LEFT JOIN exchange_risk_settings AS r ON r.account_id = a.id
+         WHERE a.telegram_id = ? AND a.is_selected = 1
+         LIMIT 1
+        """,
+        (telegram_id,),
+    ).fetchone()
+
+
+def _selected_credential_config(
+    connection: Any,
+    telegram_id: int,
+) -> tuple[str, dict[str, Any]] | None:
+    row = connection.execute(
+        """
+        SELECT a.exchange, a.margin_mode, a.bitunix_fee_policy,
+               c.ciphertext, c.nonce, c.key_id
+          FROM exchange_accounts AS a
+          JOIN exchange_credentials AS c ON c.account_id = a.id
+         WHERE a.telegram_id = ? AND a.is_selected = 1
+         LIMIT 1
+        """,
+        (telegram_id,),
+    ).fetchone()
+    if not row:
+        return None
+    exchange = str(row["exchange"])
+    try:
+        cipher = get_credential_cipher_from_env()
+        plaintext = cipher.decrypt(
+            bytes(row["ciphertext"]),
+            bytes(row["nonce"]),
+            str(row["key_id"]),
+            credential_aad(telegram_id, exchange, str(row["key_id"])),
+        )
+        payload = json.loads(plaintext)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Nie można bezpiecznie odczytać dotychczasowego połączenia "
+                "API. Zmiana została zablokowana."
+            ),
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Dotychczasowa konfiguracja API ma nieprawidłowy format.",
+        )
+    payload["margin_mode"] = row["margin_mode"] or "isolated"
+    payload["bitunix_fee_policy"] = row["bitunix_fee_policy"]
+    return exchange, payload
+
+
+def _catalog_capabilities() -> dict[str, dict[str, Any]]:
+    """Return rollout state from SQLite while keeping MEXC fail-closed."""
+
+    capabilities = {
+        exchange: dict(value)
+        for exchange, value in EXCHANGE_CAPABILITIES.items()
+    }
+    try:
+        with get_db_connection(readonly=True) as connection:
+            rows = connection.execute(
+                "SELECT exchange, enabled, status FROM exchange_catalog"
+            ).fetchall()
+    except Exception:
+        return capabilities
+    for row in rows:
+        exchange = str(row["exchange"])
+        if exchange not in capabilities:
+            continue
+        if exchange == "mexc":
+            capabilities[exchange] = {
+                "enabled": False,
+                "status": "live_blocked",
+            }
+        else:
+            capabilities[exchange] = {
+                "enabled": bool(row["enabled"]),
+                "status": str(row["status"]),
+            }
+    return capabilities
+
+
+def _rollout_config(connection: Any, exchange: str) -> tuple[str, dict[str, Any]]:
+    row = connection.execute(
+        "SELECT status, config_json FROM exchange_catalog WHERE exchange = ?",
+        (exchange,),
+    ).fetchone()
+    if not row:
+        capability = EXCHANGE_CAPABILITIES[exchange]
+        return str(capability["status"]), {}
+    try:
+        config = json.loads(row["config_json"] or "{}")
+    except (TypeError, ValueError):
+        config = {}
+    if not isinstance(config, dict):
+        config = {}
+    return str(row["status"]), config
+
+
+def _dashboard_payload(telegram_id: int) -> dict[str, Any]:
+    with get_db_connection(readonly=True) as connection:
+        user = connection.execute(
+            "SELECT * FROM users WHERE telegram_id = ?",
+            (telegram_id,),
+        ).fetchone()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nie znaleziono użytkownika.",
+            )
+        user_data = dict(user)
+        subscription = connection.execute(
+            """
+            SELECT * FROM subscriptions
+             WHERE telegram_id = ? AND is_active = 1
+             ORDER BY id DESC LIMIT 1
+            """,
+            (telegram_id,),
+        ).fetchone()
+        license_state = _license_state(connection, telegram_id)
+        account = _selected_account(connection, telegram_id)
+
+        if account:
+            account_data = dict(account)
+            exchange = str(account_data["exchange"])
+            credentials_configured = bool(account_data.get("credentials_row"))
+            verification_status = str(
+                account_data.get("verification_status") or "not_configured"
+            )
+            approved = verification_status in {
+                "verified",
+                "canary_verified",
+                "manual_verified",
+                "legacy_migrated",
+            }
+            api_connected = bool(
+                license_state.active
+                and
+                user_data.get("is_active", 1)
+                and account_data.get("is_enabled")
+                and account_data.get("live_trading_enabled")
+                and credentials_configured
+                and approved
+            )
+            leverage = account_data.get("leverage") or 20
+            margin = account_data.get("margin") or 4.0
+            max_risk = account_data.get("max_risk") or 20.0
+            margin_mode = account_data.get("margin_mode") or "isolated"
+        else:
+            columns = table_columns(connection, "users")
+            legacy_key = next(
+                (
+                    user_data.get(column)
+                    for column in (
+                        "bitget_api_key",
+                        "api_key",
+                        "disabled_api_key",
+                    )
+                    if column in columns and user_data.get(column)
+                ),
+                None,
+            )
+            legacy_secret = next(
+                (
+                    user_data.get(column)
+                    for column in ("bitget_api_secret", "api_secret")
+                    if column in columns and user_data.get(column)
+                ),
+                None,
+            )
+            legacy_passphrase = next(
+                (
+                    user_data.get(column)
+                    for column in ("bitget_passphrase", "api_passphrase")
+                    if column in columns and user_data.get(column)
+                ),
+                None,
+            )
+            exchange = "bitget"
+            credentials_configured = bool(
+                legacy_key and legacy_secret and legacy_passphrase
+            )
+            verification_status = (
+                "legacy_migrated" if credentials_configured else "not_configured"
+            )
+            api_connected = bool(
+                license_state.active
+                and credentials_configured
+                and user_data.get("is_active", 1)
+            )
+            leverage = user_data.get("leverage") or 20
+            margin = user_data.get("margin") or 4.0
+            max_risk = user_data.get("max_risk") or 20.0
+            margin_mode = user_data.get("margin_mode") or "isolated"
+
+        sub_data = dict(subscription) if subscription else {}
+        return {
+            "status": "success",
+            "telegram_id": str(user_data["telegram_id"]),
+            "username": user_data.get("username") or "",
+            "custom_name": user_data.get("custom_name") or "",
+            "referral_code": user_data.get("referral_code") or "",
+            "plan_name": (
+                license_state.plan_name
+                or sub_data.get("plan_name")
+                or "Brak aktywnego pakietu"
+            ),
+            "license_active": license_state.active,
+            "api_connected": api_connected,
+            "credentials_configured": credentials_configured,
+            "verification_status": verification_status,
+            "exchange": exchange,
+            "leverage": int(leverage),
+            "margin": float(margin),
+            "max_risk": float(max_risk),
+            "margin_mode": margin_mode,
+            "subscription_end_date": (
+                license_state.end_date
+                or "Brak danych"
+            ),
+            "is_admin": bool(user_data.get("is_admin", False)),
+            "multi_exchange": True,
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
 
-        body {
-            background-color: var(--bg-color);
-            background-image: linear-gradient(rgba(11, 13, 16, 0.85), rgba(11, 13, 16, 0.98)), url('50z3n.jpg');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-            color: var(--text-main);
-            line-height: 1.6;
-            overflow-x: hidden;
-        }
+def _managed_state_exists(
+    telegram_id: int,
+    *,
+    require_state_file: bool = False,
+) -> bool:
+    path = Path(SETTINGS.trades_path)
+    if not path.exists():
+        if require_state_file:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Brakuje trades.json, więc nie można bezpiecznie "
+                    "potwierdzić braku otwartych zleceń."
+                ),
+            )
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        # A corrupt/unreadable state file must not permit a connection switch.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Nie można bezpiecznie potwierdzić stanu otwartych zleceń. "
+                "Najpierw sprawdź trades.json."
+            ),
+        ) from exc
+    if not isinstance(payload, Mapping):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Nieprawidłowy format stanu otwartych zleceń.",
+        )
+    managed = payload.get(str(telegram_id), {})
+    return isinstance(managed, Mapping) and bool(managed)
 
-        .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 
-        /* Navigation Header */
-        header { padding: 20px 0; border-bottom: 1px solid rgba(42, 46, 57, 0.4); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 99; background: rgba(11, 13, 16, 0.7); }
-        .header-container { display: flex; justify-content: space-between; align-items: center; }
-        .logo { font-size: 22px; font-weight: 800; letter-spacing: 2px; color: var(--text-main); }
-        .logo span { color: var(--accent-gold); }
-        .nav-tabs { display: flex; gap: 10px; }
-        .nav-btn { background: transparent; border: 1px solid transparent; color: var(--text-muted); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s ease; }
-        .nav-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
-        .nav-btn.active { border-color: var(--accent-gold); color: var(--accent-gold); background: rgba(243, 166, 59, 0.05); }
-        
-        /* Styl dla ukrytego przycisku Admina */
-        #btnNavAdmin { display: none; border-color: var(--accent-red); color: var(--accent-red); }
-        #btnNavAdmin.active { background: rgba(255, 77, 77, 0.1); }
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    with get_db_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            ensure_schema(connection)
+            unmigrated = unmigrated_legacy_credential_users(connection)
+            if unmigrated:
+                raise RuntimeError(
+                    "Wykryto kompletne stare klucze API bez bezpiecznej "
+                    "migracji. Zatrzymaj API i bota, następnie uruchom "
+                    "migrate_db.py przed startem nowej wersji. Liczba kont: "
+                    f"{len(unmigrated)}."
+                )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+    yield
 
-        /* Pages control */
-        .page-content { display: none; }
-        .page-content.active { display: block; }
 
-        /* Hero Section */
-        .hero { padding: 80px 0 60px 0; text-align: center; }
-        .hero h1 { font-size: 46px; font-weight: 800; line-height: 1.2; margin-bottom: 20px; background: linear-gradient(135deg, #fff 0%, var(--accent-gold) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .hero p { font-size: 18px; color: #cbd5e1; max-width: 800px; margin: 0 auto 40px auto; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
-        .stats-badge-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 40px; }
-        .stats-badge { background: rgba(0, 192, 135, 0.15); border: 1px solid var(--accent-green); color: var(--accent-green); padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 14px; backdrop-filter: blur(5px); }
+app = FastAPI(
+    title="Czarna Perła Portal API",
+    version="13.8.0",
+    docs_url=None,
+    redoc_url=None,
+    lifespan=lifespan,
+)
 
-        /* General Sections */
-        .section-padding { padding: 60px 0; }
-        .section-title { font-size: 32px; font-weight: 800; text-align: center; margin-bottom: 50px; position: relative; color: #fff; }
-        .section-title::after { content: ''; display: block; width: 60px; height: 4px; background-color: var(--accent-gold); margin: 15px auto 0 auto; border-radius: 2px;}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(SETTINGS.allowed_origins),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=[
+        "Accept",
+        "Content-Type",
+        "X-CSRF-Token",
+        "X-Telegram-Auth",
+    ],
+)
 
-        /* Results / Proof Section */
-        .results-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 30px; margin-bottom: 40px; }
-        .result-card { background-color: var(--card-bg); border: 1px solid var(--card-border); border-top: 4px solid var(--accent-green); border-radius: 12px; padding: 25px; backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .result-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px; margin-bottom: 15px; }
-        .result-name { font-size: 18px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
-        .result-date { font-size: 12px; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 12px; }
-        .winrate-big { font-size: 42px; font-weight: 900; color: var(--accent-green); text-align: center; margin: 20px 0; }
-        .trade-stats { display: flex; justify-content: space-between; text-align: center; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; }
-        .trade-stat-item div:first-child { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
-        .trade-stat-item div:last-child { font-size: 18px; font-weight: 700; color: #fff; }
-        .trade-stat-item .win { color: var(--accent-green); }
-        .trade-stat-item .loss { color: var(--accent-red); }
-        
-        /* Trades Highlights */
-        .trades-showcase { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin-top: 30px; }
-        .trade-pill { background: rgba(0, 192, 135, 0.1); border: 1px solid rgba(0, 192, 135, 0.3); padding: 12px 20px; border-radius: 30px; display: flex; align-items: center; gap: 10px; font-weight: 700; }
-        .trade-pair { color: #fff; font-size: 15px; }
-        .trade-profit { color: var(--accent-green); font-size: 18px; }
-        .trade-type { background: var(--accent-red); color: #fff; font-size: 10px; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; }
 
-        /* Anatomy Section */
-        .anatomy-card { background-color: var(--card-bg); border-left: 4px solid var(--accent-gold); padding: 30px; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); backdrop-filter: blur(10px); }
-        .anatomy-card h3 { color: #fff; font-size: 20px; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
-        .anatomy-card h3 span { font-size: 24px; }
-        .anatomy-list { list-style: none; margin-left: 10px; }
-        .anatomy-list li { font-size: 15px; color: var(--text-muted); margin-bottom: 12px; position: relative; padding-left: 20px; line-height: 1.5; }
-        .anatomy-list li::before { content: "⚡"; position: absolute; left: -5px; font-size: 12px; top: 3px; }
-        .anatomy-list li strong { color: var(--text-main); font-weight: 600; }
+@app.middleware("http")
+async def security_headers_and_body_limit(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_BODY_BYTES:
+                return JSONResponse(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    content={
+                        "status": "error",
+                        "message": "Żądanie jest zbyt duże.",
+                    },
+                )
+        except ValueError:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"status": "error", "message": "Błędny Content-Length."},
+            )
+    if request.method in {"POST", "PUT", "PATCH"}:
+        chunks: list[bytes] = []
+        received = 0
+        async for chunk in request.stream():
+            received += len(chunk)
+            if received > MAX_BODY_BYTES:
+                return JSONResponse(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    content={
+                        "status": "error",
+                        "message": "Żądanie jest zbyt duże.",
+                    },
+                )
+            chunks.append(chunk)
+        # Starlette reuses this cached body in the endpoint parser.
+        request._body = b"".join(chunks)
+    try:
+        response = await call_next(request)
+    finally:
+        switch_lock = getattr(
+            getattr(request, "state", None),
+            "account_switch_lock",
+            None,
+        )
+        if switch_lock is not None:
+            switch_lock.release()
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=()"
+    )
+    response.headers["Strict-Transport-Security"] = (
+        "max-age=63072000; includeSubDomains"
+    )
+    response.headers.append("Vary", "Origin")
+    return response
 
-        /* Pricing */
-        .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; max-width: 1000px; margin: 0 auto; }
-        .pricing-card { background-color: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 40px 30px; position: relative; display: flex; flex-direction: column; backdrop-filter: blur(10px); }
-        .pricing-card.featured { border-color: var(--accent-gold); box-shadow: 0 4px 25px rgba(243, 166, 59, 0.1); }
-        .pricing-card.telecom { border-color: var(--accent-blue); }
-        .badge-premium { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); background-color: var(--accent-gold); color: #000; padding: 4px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; white-space: nowrap;}
-        .badge-telecom { background-color: var(--accent-blue); color: #fff; }
-        .pricing-card h3 { font-size: 20px; text-align: center; margin-bottom: 10px; }
-        .pricing-card .price { font-size: 32px; font-weight: 800; text-align: center; margin: 15px 0; color: #fff; }
-        .pricing-card .price .old-price { font-size: 18px; color: var(--text-muted); text-decoration: line-through; font-weight: 500; display: block; margin-bottom: -5px; }
-        .pricing-card .price span { font-size: 14px; color: var(--text-muted); font-weight: 400; }
-        .pricing-card .desc { font-size: 14px; color: var(--text-muted); text-align: center; margin-bottom: 25px; min-height: 50px; }
-        .pricing-list { list-style: none; margin-bottom: 30px; flex-grow: 1; }
-        .pricing-list li { font-size: 14px; margin-bottom: 10px; padding-left: 20px; position: relative; }
-        .pricing-list li::before { content: "✓"; position: absolute; left: 0; color: var(--accent-green); font-weight: 700; }
-        .btn-card { width: 100%; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; border: 1px solid var(--card-border); background: transparent; color: #fff; transition: all 0.2s ease; text-align: center; }
-        .pricing-card.featured .btn-card { background: var(--accent-gold); color: #000; border: none; }
-        .pricing-card.telecom .btn-card { background: var(--accent-blue); color: #fff; border: none; }
-        .pricing-card .btn-card:hover { background-color: rgba(255, 255, 255, 0.05); border-color: var(--text-muted); }
-        .pricing-card.featured .btn-card:hover { background-color: #f4b356; transform: translateY(-1px); }
 
-        /* DASHBOARD STYLES */
-        .db-header-panel { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 24px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; backdrop-filter: blur(10px); margin-top: 40px; }
-        .user-info h2 { font-size: 22px; color: #fff; }
-        .user-info p { color: var(--text-muted); font-size: 14px; }
-        .header-actions { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
-        .status-box { display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.3); padding: 10px 20px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.05); }
-        .status-lamp { width: 12px; height: 12px; background-color: var(--text-muted); border-radius: 50%; display: inline-block; }
-        @keyframes blink { 0% { opacity: 0.4; box-shadow: 0 0 4px var(--accent-green); } 50% { opacity: 1; box-shadow: 0 0 14px var(--accent-green); } 100% { opacity: 0.4; box-shadow: 0 0 4px var(--accent-green); } }
-        .status-text { font-size: 14px; font-weight: 700; color: #fff; }
-        .btn-logout { background: transparent; border: 1px solid var(--accent-red); color: var(--accent-red); padding: 8px 16px; border-radius: 30px; cursor: pointer; font-weight: 600; font-size: 13px; transition: 0.2s; }
-        .btn-logout:hover { background: rgba(255, 77, 77, 0.1); color: #fff; }
-        
-        .db-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; }
-        @media (max-width: 900px) { .db-grid { grid-template-columns: 1fr; } }
-        .db-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 24px; margin-bottom: 30px; backdrop-filter: blur(10px); }
-        .db-card h3 { font-size: 18px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; color: #fff; }
-        .info-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
-        .info-label { color: var(--text-muted); }
-        .info-value { font-weight: 600; color: #fff; }
-        .api-input { width: 100%; padding: 10px; border-radius: 6px; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); color: #fff; font-family: monospace; font-size: 13px; margin-top: 4px;}
-        .api-input:focus { outline: none; border-color: var(--accent-gold); }
-        .form-group { margin-bottom: 15px; }
-        .referral-box { background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); padding: 15px; border-radius: 8px; margin-top: 15px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-        .referral-link { font-family: monospace; font-size: 13px; color: var(--accent-gold); word-break: break-all; }
-        .btn-copy { background: var(--card-border); border: none; color: #fff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; }
-        .btn-copy:hover { background: rgba(255,255,255,0.1); }
-        .affiliate-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
-        .stat-box { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; text-align: center; }
-        .stat-num { font-size: 24px; font-weight: 800; color: var(--accent-gold); }
-        .stat-num.green { color: var(--accent-green); }
-        .stat-label { font-size: 12px; color: var(--text-muted); }
+@app.exception_handler(HTTPException)
+async def http_exception_handler(_: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"status": "error", "message": str(exc.detail)},
+        headers=exc.headers,
+    )
 
-        /* Odliczanie czasu (Licencja) */
-        .time-left { font-family: monospace; color: var(--accent-gold); font-weight: bold; }
-        .time-expired { color: var(--accent-red); font-weight: bold; }
 
-        /* ADMIN PANEL STYLES */
-        .admin-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
-        .admin-table th, .admin-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .admin-table th { color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
-        .admin-table tr:hover { background: rgba(255,255,255,0.02); }
-        .admin-input { background: rgba(0,0,0,0.5); border: 1px solid var(--card-border); color: #fff; padding: 6px; border-radius: 4px; width: 120px; }
-        
-        /* Toggle Switch CSS */
-        .switch { position: relative; display: inline-block; width: 44px; height: 22px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #2a2e39; transition: .4s; border-radius: 34px; }
-        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: var(--accent-green); }
-        input:checked + .slider.admin-slider { background-color: var(--accent-gold); }
-        input:checked + .slider:before { transform: translateX(22px); }
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_: Request, __: RequestValidationError):
+    # Pydantic error objects can echo the rejected input, including secrets.
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "status": "error",
+            "message": "Nieprawidłowe dane wejściowe.",
+        },
+    )
 
-        /* Modals */
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--modal-overlay); display: flex; justify-content: center; align-items: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; backdrop-filter: blur(8px); }
-        .modal-overlay.active { opacity: 1; pointer-events: auto; }
-        .modal-box { background-color: #131722; border: 1px solid var(--card-border); width: 100%; max-width: 650px; max-height: 85vh; border-radius: 16px; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
-        .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; }
-        .modal-header h2 { font-size: 18px; color: #fff; }
-        .close-modal { background: transparent; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; }
-        .modal-body { padding: 24px; overflow-y: auto; font-size: 14px; color: #cbd5e1; }
-        .modal-body h3 { font-size: 15px; margin: 20px 0 8px 0; color: var(--accent-gold); }
-        .modal-footer { padding: 20px 24px; background-color: rgba(0,0,0,0.3); border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; }
-        .accept-container { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
-        .accept-container input[type="checkbox"] { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--accent-gold); cursor: pointer; }
-        .accept-container label { font-size: 13px; color: var(--text-muted); }
-        .btn-tg { width: 100%; background-color: #26a5e4; color: #fff; border: none; padding: 14px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; opacity: 0.5; pointer-events: none; }
-        .btn-tg.enabled { opacity: 1; pointer-events: auto; }
 
-        footer { text-align: center; padding: 40px 0; border-top: 1px solid rgba(42, 46, 57, 0.4); color: var(--text-muted); font-size: 13px; margin-top: 40px; }
-        footer a { color: var(--text-muted); text-decoration: underline; cursor: pointer; }
-    </style>
-</head>
-<body>
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_: Request, __: Exception):
+    # Do not expose CCXT, SQLite, filesystem or credential metadata.
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "status": "error",
+            "message": "Wewnętrzny błąd serwera.",
+        },
+    )
 
-    <!-- Header Navigation -->
-    <header>
-        <div class="container header-container">
-            <div class="logo">🏴‍☠️ CZARNA <span>PERŁA</span></div>
-            <div class="nav-tabs">
-                <button class="nav-btn active" onclick="switchPage('landing', this)">Strona Główna</button>
-                <button class="nav-btn" onclick="switchPage('dashboard', this)">Panel Inwestora</button>
-                <!-- Przycisk ukryty, pokaże się tylko po weryfikacji Admina -->
-                <button class="nav-btn" id="btnNavAdmin" onclick="switchPage('admin', this)">Mostek Kapitański (Admin)</button>
-            </div>
-        </div>
-    </header>
 
-    <!-- PAGE 1: LANDING PAGE -->
-    <div id="landingPage" class="page-content active">
-        <section class="hero">
-            <div class="container">
-                <div class="stats-badge-container">
-                    <div class="stats-badge">WinRate > 80% na rynku rzeczywistym</div>
-                    <div class="stats-badge">Autorski system z logiką SMC & CVD</div>
-                </div>
-                <h1>Twój kapitał pod pełną kontrolą algorytmu</h1>
-                <p>
-                    Większość detalicznych botów tradingowych przegrywa, bo opierają się na przestarzałych, sztywnych wskaźnikach. Czarna Perła to elitarny system stworzony do precyzyjnego snajperstwa rynkowego i restrykcyjnej ochrony kapitału.
-                </p>
-                
-                <script async src="https://telegram.org/js/telegram-widget.js?22" 
-                        data-telegram-login="czarna_perla_auth_bot" 
-                        data-size="large" 
-                        data-onauth="onTelegramAuth(user)" 
-                        data-request-access="write">
-                </script>
-            </div>
-        </section>
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok", "version": "13.8.0"}
 
-        <!-- SEKCJA WYNIKÓW -->
-        <section class="section-padding" style="background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <div class="container">
-                <h2 class="section-title">Dowody Skuteczności (Live Results)</h2>
-                <p style="text-align: center; color: var(--text-muted); margin-bottom: 40px; max-width: 800px; margin-left: auto; margin-right: auto;">
-                    Nie sprzedajemy obietnic ani wyidealizowanych backtestów z przeszłości. Nasz autorski kod, stale udoskonalany od kwietnia 2026, operuje na realnych kontach grupy. Poniżej weryfikowalne statystyki użytkowników "Czarnej Perły" spięte przez nasze API:
-                </p>
 
-                <div class="results-grid">
-                    <!-- Karta Damian -->
-                    <div class="result-card">
-                        <div class="result-header">
-                            <div class="result-name">👤 Kolega_Damian</div>
-                            <div class="result-date">Start: 01.06.2026</div>
-                        </div>
-                        <div style="font-size: 14px; color: var(--text-muted); text-align: center;">Skuteczność (WinRate)</div>
-                        <div class="winrate-big">84.48%</div>
-                        <div class="trade-stats">
-                            <div class="trade-stat-item">
-                                <div>Zyskowne (W)</div>
-                                <div class="win">49 ✅</div>
-                            </div>
-                            <div class="trade-stat-item" style="border-left: 1px solid rgba(255,255,255,0.1); padding-left: 20px;">
-                                <div>Stratne (L)</div>
-                                <div class="loss">9 ❌</div>
-                            </div>
-                        </div>
-                    </div>
+@app.get("/api/capabilities")
+def capabilities():
+    return {
+        "status": "success",
+        "multi_exchange": True,
+        "telegram_session": True,
+        "exchanges": _catalog_capabilities(),
+    }
 
-                    <!-- Karta Arek -->
-                    <div class="result-card">
-                        <div class="result-header">
-                            <div class="result-name">👤 Kolega_AREK</div>
-                            <div class="result-date">Start: 19.06.2026</div>
-                        </div>
-                        <div style="font-size: 14px; color: var(--text-muted); text-align: center;">Skuteczność (WinRate)</div>
-                        <div class="winrate-big">93.10%</div>
-                        <div class="trade-stats">
-                            <div class="trade-stat-item">
-                                <div>Zyskowne (W)</div>
-                                <div class="win">27 ✅</div>
-                            </div>
-                            <div class="trade-stat-item" style="border-left: 1px solid rgba(255,255,255,0.1); padding-left: 20px;">
-                                <div>Stratne (L)</div>
-                                <div class="loss">2 ❌</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Najlepsze strzały -->
-                <div style="text-align: center; margin-top: 20px;">
-                    <h4 style="color: #fff; margin-bottom: 20px; font-weight: 600;">Ostatnie potężne realizacje zysków (Konta Bitget, dźwignia 20x):</h4>
-                    <div class="trades-showcase">
-                        <div class="trade-pill">
-                            <span class="trade-pair">NEAR/USDT</span>
-                            <span class="trade-type">SHORT</span>
-                            <span class="trade-profit">+117.46%</span>
-                        </div>
-                        <div class="trade-pill">
-                            <span class="trade-pair">FET/USDT</span>
-                            <span class="trade-type">SHORT</span>
-                            <span class="trade-profit">+83.68%</span>
-                        </div>
-                        <div class="trade-pill">
-                            <span class="trade-pair">BNB/USDT</span>
-                            <span class="trade-type">SHORT</span>
-                            <span class="trade-profit">+80.42%</span>
-                        </div>
-                        <div class="trade-pill">
-                            <span class="trade-pair">ARB/USDT</span>
-                            <span class="trade-type">SHORT</span>
-                            <span class="trade-profit">+70.04%</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
+@app.post("/api/auth/telegram")
+def authenticate_telegram(
+    payload: TelegramLoginPayload,
+    request: Request,
+    response: Response,
+):
+    _require_origin(request)
+    RATE_LIMITER.check(
+        f"auth:{_client_rate_key(request)}",
+        limit=10,
+        window_seconds=5 * 60,
+    )
+    if not SETTINGS.telegram_bot_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Logowanie Telegram nie jest skonfigurowane na serwerze.",
+        )
+    signed_payload = payload.model_dump(exclude_none=True)
+    try:
+        verified = verify_telegram_auth(
+            signed_payload,
+            SETTINGS.telegram_bot_token,
+        )
+    except (TelegramAuthError, SecurityConfigurationError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Weryfikacja Telegram nie powiodła się.",
+        ) from exc
 
-        <!-- Anatomia Algorytmu -->
-        <section class="section-padding">
-            <div class="container">
-                <h2 class="section-title">Anatomia Algorytmu: Dlaczego to działa?</h2>
-                
-                <div class="anatomy-card">
-                    <h3><span>⚙️</span> Pełna Automatyzacja i Ekosystem Telegram</h3>
-                    <ul class="anatomy-list">
-                        <li><strong>Asynchroniczna architektura:</strong> Skaner rynku działa w osobnym wątku, analizując dziesiątki rynków jednocześnie. Zero opóźnień (lagów) pomiędzy sygnałem z giełdy a egzekucją.</li>
-                        <li><strong>Smart Handling kontraktów:</strong> Hybrydowy mechanizm obliczeniowy całkowicie eliminuje problem "ucinania" resztek kontraktów. Algorytm idealnie wylicza tolerancję, zawsze realizując zysk w 100%.</li>
-                        <li><strong>System raportowania na żywo:</strong> Nie musisz non-stop śledzić wykresów. Dedykowany bot na Telegramie natychmiast powiadamia Cię o każdej reakcji, a autorski system na bieżąco raportuje aktualne saldo Twojego portfela w komunikatorze.</li>
-                    </ul>
-                </div>
+    telegram_id = int(verified["id"])
+    with get_db_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            _create_or_update_authenticated_user(connection, verified)
+            session_token, csrf_token = _issue_database_session(
+                connection,
+                telegram_id,
+                request,
+            )
+            _audit(
+                connection,
+                actor=telegram_id,
+                action="auth.telegram.login",
+                resource_type="session",
+                request=request,
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
 
-                <div class="anatomy-card" style="border-left-color: var(--accent-blue);">
-                    <h3><span>🎯</span> Rygorystyczny Protokół Wejścia (SMC)</h3>
-                    <ul class="anatomy-list">
-                        <li><strong>Zgoda Makro-Strukturalna:</strong> Wykres 15-minutowy musi idealnie zgadzać się z trendem na wyższych interwałach (4H, 1D), a wskaźnik wolumenowy CVD musi potwierdzać prawdziwą obecność kapitału.</li>
-                        <li><strong>Weryfikacja Płynności (Pin Bar Filter):</strong> Skanowanie ekstremów w poszukiwaniu tzw. Pin Barów (minimum 50% knota odrzucającego cenę) – matematyczny dowód na zebranie Stop Lossów detalistów (Liquidity Sweep).</li>
-                        <li><strong>Zasadzka Snajperska (OTE):</strong> Zero chciwości i wchodzenia na szczytach. Cierpliwie oczekujące zlecenia Limit lądują bezwzględnie w strefie Optimal Trade Entry (Złota Strefa Fibonacciego: 61.8% - 78.6%).</li>
-                    </ul>
-                </div>
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_token,
+        max_age=SETTINGS.session_ttl_seconds,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+    )
+    return {"status": "success", "csrf_token": csrf_token}
 
-                <div class="anatomy-card" style="border-left-color: var(--accent-green);">
-                    <h3><span>📊</span> Defensywne Zarządzanie Ryzykiem</h3>
-                    <ul class="anatomy-list">
-                        <li><strong>Ucinanie ryzyka w locie:</strong> Po osiągnięciu zaledwie 1% czystego ruchu ceny, system realizuje część profitu i natychmiast przestawia pozycję na Break-Even (+0.2%). Transakcja staje się darmowa.</li>
-                        <li><strong>Bezpieczny Stop Loss:</strong> Ukryty za ekstremum z dodatkowym buforem ochronnym (1.5x ATR), chroniącym Twój kapitał przed rynkowym szumem i celowymi "szpilkami" Bitgeta.</li>
-                        <li><strong>Wieloetapowe księgowanie:</strong> Zabezpieczamy to co nasze, a na koniec wypuszczamy tzw. Runnera na Trailing Stopie, który może bezpiecznie surfować po trendzie łapiąc potężne zyski bez górnego limitu.</li>
-                    </ul>
-                </div>
-            </div>
-        </section>
 
-        <!-- Pricing Section -->
-        <section class="section-padding pricing" style="background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.05);">
-            <div class="container">
-                <h2 class="section-title">Wybierz model współpracy</h2>
-                <div class="pricing-grid">
-                    <div class="pricing-card telecom">
-                        <div class="badge-premium badge-telecom">🔥 STARTOWA 🔥</div>
-                        <h3>📱 PAKIET TESTOWY</h3>
-                        <div class="price">1. miesiąc 0$ <span>następnie 50$ / mc</span></div>
-                        <div class="desc">Pełen dostęp do algorytmu przez 30 dni bez żadnych opłat. Przetestuj skuteczność systemu na własnym kapitale.</div>
-                        <ul class="pricing-list">
-                            <li><strong>Pierwszy miesiąc całkowicie GRATIS (0$)</strong></li>
-                            <li>Kolejne 3 miesiące z rabatem **-50%** (tylko 50$/mc)</li>
-                            <li>Standardowa cena 100$/mc wchodzi dopiero od 5. miesiąca</li>
-                            <li>Pełna automatyzacja na giełdzie Bitget przez klucze API</li>
-                        </ul>
-                        <button class="btn-card" onclick="openTermsModal()">Aktywuj promocję</button>
-                    </div>
+@app.post("/api/auth/logout")
+def logout(
+    request: Request,
+    response: Response,
+    user: SessionUser = Depends(require_mutation_session),
+):
+    with get_db_connection() as connection:
+        connection.execute(
+            "UPDATE sessions SET revoked_at = ? WHERE session_id = ?",
+            (_iso(_utc_now()), user.session_id),
+        )
+        _audit(
+            connection,
+            actor=user.telegram_id,
+            action="auth.logout",
+            resource_type="session",
+            resource_id=user.session_id,
+            request=request,
+        )
+        connection.commit()
+    response.delete_cookie(
+        SESSION_COOKIE_NAME,
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="none",
+    )
+    return {"status": "success"}
 
-                    <div class="pricing-card featured">
-                        <div class="badge-premium">🔥 LIMIT 10 MIEJSC 🔥</div>
-                        <h3>💎 PAKIET ROCZNY (PROMO)</h3>
-                        <div class="price"><span class="old-price">1200$</span> 800$ <span>/ rok</span></div>
-                        <div class="desc">Pełna roczna licencja "Pod Klucz" bez prowizji od zysków. Oszczędzasz najwięcej.</div>
-                        <ul class="pricing-list">
-                            <li>Dostęp do algorytmu na pełne 12 miesięcy</li>
-                            <li>Pełna konfiguracja techniczna na głównym serwerze Debiana</li>
-                            <li>Zintegrowane z Bitget (kapitał cały czas na Twoim koncie)</li>
-                            <li>Pełen nadzór i priorytetowe wsparcie 24/7</li>
-                        </ul>
-                        <button class="btn-card" onclick="openTermsModal()">Zarezerwuj roczny</button>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </div>
 
-    <!-- PAGE 2: USER DASHBOARD -->
-    <div id="dashboardPage" class="page-content">
-        <div class="container dashboard-container">
-            
-            <div class="db-header-panel">
-                <div class="user-info">
-                    <h2>Witaj, <span id="db-username" style="color:var(--accent-gold);">Zaloguj się przez Telegram</span></h2>
-                    <p>Zarządzaj swoimi licencjami i śledź status połączenia bota.</p>
-                </div>
-                <div class="header-actions">
-                    <div class="status-box">
-                        <span id="db-api-lamp" class="status-lamp"></span>
-                        <span id="db-api-status" class="status-text">Oczekuje na weryfikację</span>
-                    </div>
-                    <!-- Zegar odliczania w Panelu Inwestora -->
-                    <div class="status-box" style="background: rgba(243, 166, 59, 0.1); border-color: var(--accent-gold);">
-                        <span style="font-size: 13px; color: var(--text-muted);">Ważność licencji:</span>
-                        <span id="db-time-left" class="time-left">Brak danych</span>
-                    </div>
-                    <button class="btn-logout" id="btnLogout" style="display:none;" onclick="logoutUser()">Wyloguj</button>
-                </div>
-            </div>
+@app.get("/api/dashboard/me")
+def get_my_dashboard(user: SessionUser = Depends(require_session)):
+    return _dashboard_payload(user.telegram_id)
 
-            <div class="db-grid">
-                <!-- Lewa kolumna: Formularze i Plan -->
-                <div>
-                    <div class="db-card" style="border-color: var(--accent-gold);">
-                        <h3>Ustawienia Handlowe (Bitget API)</h3>
-                        <p style="font-size:13px; color:var(--text-muted); margin-bottom: 20px;">Wprowadź klucze API z Bitget oraz dostosuj parametry ryzyka. Skrypt asynchroniczny automatycznie pobierze ustawienia.</p>
-                        
-                        <div class="form-group">
-                            <label style="font-size:12px; color:var(--text-muted);">Klucz API (API Key)</label>
-                            <input type="text" id="api_key" class="api-input" placeholder="Wklej API Key">
-                        </div>
-                        <div class="form-group">
-                            <label style="font-size:12px; color:var(--text-muted);">Sekret API (API Secret)</label>
-                            <input type="password" id="api_secret" class="api-input" placeholder="Wklej API Secret">
-                        </div>
-                        <div class="form-group">
-                            <label style="font-size:12px; color:var(--text-muted);">Hasło API (Passphrase)</label>
-                            <input type="password" id="api_passphrase" class="api-input" placeholder="Wklej Passphrase">
-                        </div>
-                        
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:5px;">
-                            <div class="form-group">
-                                <label style="font-size:12px; color:var(--text-muted);">Margin (Kwota na pozycję)</label>
-                                <input type="number" id="trade_margin" class="api-input" placeholder="np. 50">
-                            </div>
-                            <div class="form-group">
-                                <label style="font-size:12px; color:var(--text-muted);">Dźwignia (Lewar)</label>
-                                <input type="number" id="trade_leverage" class="api-input" placeholder="np. 20">
-                            </div>
-                        </div>
 
-                        <button onclick="saveApiSettings()" style="width:100%; margin-top:10px; background:var(--accent-gold); color:#000; border:none; padding:12px; border-radius:6px; font-weight:bold; cursor:pointer; transition: 0.2s;">
-                            Zapisz Ustawienia
-                        </button>
-                        <div id="save_status" style="font-size:14px; margin-top:10px; text-align:center; font-weight:bold;"></div>
-                    </div>
+@app.get("/api/dashboard/{telegram_id}")
+def get_legacy_dashboard(
+    telegram_id: int,
+    user: SessionUser = Depends(require_session),
+):
+    if telegram_id != user.telegram_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nie możesz odczytać danych innego użytkownika.",
+        )
+    return _dashboard_payload(user.telegram_id)
 
-                    <div class="db-card">
-                        <h3>Twoja aktywna licencja</h3>
-                        <div class="info-row"><span class="info-label">Aktualny plan:</span><span id="db-plan" class="info-value" style="color:var(--accent-blue);">Brak danych</span></div>
-                        <div class="info-row"><span class="info-label">Status rozliczenia:</span><span class="info-value">Brak danych</span></div>
-                        <div class="info-row"><span class="info-label">Giełda docelowa:</span><span class="info-value">Bitget (API)</span></div>
-                    </div>
-                </div>
 
-                <!-- Prawa kolumna: Info statyczne -->
-                <div>
-                    <div class="db-card">
-                        <h3>Połączenie z giełdą</h3>
-                        <div class="info-row">
-                            <span class="info-label">Status kluczy:</span>
-                            <span class="info-value" id="db-api-status-text" style="display:flex; align-items:center; gap:6px;">
-                                <span id="db-api-small-lamp" class="status-lamp" style="animation:none; width:8px; height:8px;"></span> 
-                                <span id="db-api-status-word">Brak połączenia</span>
-                            </span>
-                        </div>
-                        <div class="info-row"><span class="info-label">Twoja dźwignia:</span><span class="info-value" id="db-display-lev">Brak danych</span></div>
-                        <div class="info-row"><span class="info-label">Kwota Margin:</span><span class="info-value" id="db-display-mar">Brak danych</span></div>
-                    </div>
+@app.post("/api/save_settings")
+def save_settings(
+    settings: UserSettings,
+    request: Request,
+    user: SessionUser = Depends(require_mutation_session),
+):
+    RATE_LIMITER.check(
+        f"settings:{user.telegram_id}",
+        limit=8,
+        window_seconds=60,
+    )
+    _require_active_license(user.telegram_id)
+    request.state.account_switch_lock = acquire_account_switch_lock(
+        SETTINGS.trades_path,
+        user.telegram_id,
+        exclusive=True,
+    )
+    try:
+        exchange = canonical_exchange_id(settings.exchange)
+    except ExchangeValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
-                    <div class="db-card">
-                        <h3>Zarabiaj przez polecanie (15%)</h3>
-                        <p style="font-size:13px; color:var(--text-muted); margin-bottom: 10px;">Skopiuj swój reflink i udostępnij go grupie. System sam naliczy nagrody z abonamentu.</p>
-                        
-                        <label style="font-size:12px; color:var(--text-muted);">Twój link polecający:</label>
-                        <div class="referral-box">
-                            <span class="referral-link" id="db-ref-link">Zaloguj się, aby pobrać link</span>
-                            <button class="btn-copy" onclick="copyRefLink()">Kopiuj</button>
-                        </div>
-                        <div class="affiliate-stats">
-                            <div class="stat-box"><div class="stat-num">0</div><div class="stat-label">Poleconych</div></div>
-                            <div class="stat-box"><div class="stat-num green">0$</div><div class="stat-label">Suma prowizji</div></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    with get_db_connection(readonly=True) as connection:
+        selected = _selected_account(connection, user.telegram_id)
+        selected_exchange = str(selected["exchange"]) if selected else None
+        current_connection = _selected_credential_config(
+            connection,
+            user.telegram_id,
+        )
+        rollout_status, rollout_config = _rollout_config(connection, exchange)
+    if _managed_state_exists(
+        user.telegram_id,
+        require_state_file=selected is not None,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Konto ma zarządzaną pozycję lub zlecenie. "
+                "Zmiana połączenia API jest teraz zablokowana."
+            ),
+        )
+    if current_connection is not None:
+        current_exchange, current_credentials = current_connection
+        try:
+            assert_no_open_exchange_state(
+                current_exchange,
+                current_credentials,
+            )
+        except ExchangeValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
 
-    <!-- PAGE 3: MOSTEK KAPITAŃSKI (Tylko dla Adminów) -->
-    <div id="adminPage" class="page-content">
-        <div class="container">
-            <div class="db-card" style="margin-top: 40px; border-color: var(--accent-red);">
-                <h2 style="color: #fff; margin-bottom: 20px; display: flex; justify-content: space-between;">
-                    <span>🏴‍☠️ Mostek Kapitański (Zarządzanie Załogą)</span>
-                    <button onclick="fetchAdminData()" style="background: var(--card-border); color: #fff; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer; font-size: 14px;">Odśwież dane</button>
-                </h2>
-                
-                <div style="overflow-x: auto;">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Telegram ID</th>
-                                <th>Przypisane Imię</th>
-                                <th>Data Dołączenia</th>
-                                <th>Ważność Abonamentu</th>
-                                <th>Bot ON/OFF</th>
-                                <th>Admin ON/OFF</th>
-                                <th>Akcje</th>
-                            </tr>
-                        </thead>
-                        <tbody id="admin-users-list">
-                            <!-- Dane będą wstrzykiwane przez JavaScript -->
-                            <tr><td colspan="7" style="text-align:center; color: var(--text-muted);">Ładowanie załogi...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
+    credential_payload = {
+        "api_key": settings.api_key,
+        "api_secret": settings.api_secret,
+        "api_passphrase": settings.api_passphrase,
+        "api_uid": settings.api_uid,
+        "subaccount": settings.subaccount,
+    }
+    bitunix_fee_policy = None
+    if exchange == "bitunix":
+        configured_policy = rollout_config.get("bitunix_fee_policy")
+        bitunix_fee_policy = (
+            str(configured_policy).strip()
+            if configured_policy
+            else SETTINGS.bitunix_fee_policy
+        )
+        if rollout_status == "live" and bitunix_fee_policy not in {
+            "deduct_positive",
+            "signed_value",
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Bitunix LIVE nie ma zatwierdzonej polityki naliczania "
+                    "opłat."
+                ),
+            )
+    smoke_input = {
+        **credential_payload,
+        "margin_mode": settings.margin_mode,
+        # Never accept a fee-policy override from an investor.
+        "bitunix_fee_policy": bitunix_fee_policy,
+    }
+    try:
+        smoke = run_read_only_smoke_test(
+            exchange,
+            smoke_input,
+            rollout_status=rollout_status,
+        )
+    except ExchangeValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
-    <footer>
-        <div class="container">
-            <p>&copy; 2026 Crypto Bot „Czarna Perła”. Oprogramowanie do analizy ilościowej.</p>
-            <p style="margin-top: 10px;"><a onclick="openTermsModal()">Regulamin Korzystania i Wyłączenie Odpowiedzialności</a></p>
-        </div>
-    </footer>
+    try:
+        cipher = get_credential_cipher_from_env()
+    except SecurityConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Szyfrowanie kluczy API nie jest skonfigurowane.",
+        ) from exc
 
-    <!-- Modale (Zwijane) -->
-    <div class="modal-overlay" id="termsModal">
-        <div class="modal-box">
-            <div class="modal-header">
-                <h2>Regulamin i Warunki Korzystania</h2>
-                <button class="close-modal" onclick="closeTermsModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p style="font-weight: bold; text-align: center; margin-bottom: 20px;">REGULAMIN KORZYSTANIA Z BOTA</p>
-                <h3>§ 1 Postanowienia ogólne</h3>
-                <p>1. Właścicielem skryptu jest Kapitan Mateusz. System ma charakter badawczy i analityczny.</p>
-                <p>2. Kryptowaluty wiążą się z ryzykiem. Algorytm w pełni wykonuje instrukcje API.</p>
-                <p style="margin-top: 15px; font-weight: bold;">Data wejścia w życie: 30.06.2026</p>
-            </div>
-            <div class="modal-footer">
-                <div class="accept-container">
-                    <input type="checkbox" id="acceptCheckbox" onchange="toggleTgButton()">
-                    <label for="acceptCheckbox">Akceptuję postanowienia regulaminu. Chcę przejść do Telegrama.</label>
-                </div>
-                <button class="btn-tg" id="tgButton" onclick="redirectToTelegram()">
-                    Przejdź do grupy zarządzającej
-                </button>
-            </div>
-        </div>
-    </div>
+    plaintext = json.dumps(
+        credential_payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    aad = credential_aad(user.telegram_id, exchange, cipher.key_id)
+    ciphertext, nonce, key_id = cipher.encrypt(plaintext, aad)
+    fingerprint = hashlib.sha256(ciphertext).hexdigest()
 
-    <script>
-        const TELEGRAM_LINK = "https://t.me/+QumQey-BSYNkYTlk";
-        let CURRENT_USER_ID = null;
-        let IS_ADMIN = false;
+    approved = smoke.api_connected
+    with get_db_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            if _managed_state_exists(
+                user.telegram_id,
+                require_state_file=selected is not None,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "W czasie weryfikacji pojawiła się zarządzana "
+                        "pozycja lub zlecenie. Zmiana została anulowana."
+                    ),
+                )
+            connection.execute(
+                """
+                UPDATE exchange_accounts
+                   SET is_selected = 0, is_enabled = 0,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE telegram_id = ?
+                """,
+                (user.telegram_id,),
+            )
+            connection.execute(
+                """
+                INSERT INTO exchange_accounts (
+                    telegram_id, exchange, is_selected, is_enabled,
+                    live_trading_enabled, margin_mode, verification_status,
+                    verification_message, verified_at, api_uid, subaccount,
+                    bitunix_fee_policy, updated_at
+                ) VALUES (?, ?, 1, ?, ?, ?, ?, NULL, ?, NULL, NULL, ?,
+                          CURRENT_TIMESTAMP)
+                ON CONFLICT(telegram_id, exchange) DO UPDATE SET
+                    is_selected = 1,
+                    is_enabled = excluded.is_enabled,
+                    live_trading_enabled = excluded.live_trading_enabled,
+                    margin_mode = excluded.margin_mode,
+                    verification_status = excluded.verification_status,
+                    verification_message = NULL,
+                    verified_at = excluded.verified_at,
+                    api_uid = NULL,
+                    subaccount = NULL,
+                    bitunix_fee_policy = excluded.bitunix_fee_policy,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    user.telegram_id,
+                    exchange,
+                    int(approved),
+                    int(approved),
+                    settings.margin_mode,
+                    smoke.verification_status,
+                    _iso(_utc_now()) if approved else None,
+                    bitunix_fee_policy,
+                ),
+            )
+            account = connection.execute(
+                "SELECT id FROM exchange_accounts "
+                "WHERE telegram_id = ? AND exchange = ?",
+                (user.telegram_id, exchange),
+            ).fetchone()
+            if not account:
+                raise RuntimeError("Nie utworzono konfiguracji giełdy.")
+            account_id = int(account["id"])
+            connection.execute(
+                """
+                INSERT INTO exchange_credentials (
+                    account_id, ciphertext, nonce, key_id, fingerprint,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT(account_id) DO UPDATE SET
+                    ciphertext = excluded.ciphertext,
+                    nonce = excluded.nonce,
+                    key_id = excluded.key_id,
+                    fingerprint = excluded.fingerprint,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    account_id,
+                    ciphertext,
+                    nonce,
+                    key_id,
+                    fingerprint,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO exchange_risk_settings (
+                    account_id, leverage, margin, max_risk, updated_at
+                ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(account_id) DO UPDATE SET
+                    leverage = excluded.leverage,
+                    margin = excluded.margin,
+                    max_risk = excluded.max_risk,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    account_id,
+                    settings.leverage,
+                    settings.margin,
+                    settings.max_risk,
+                ),
+            )
+            _audit(
+                connection,
+                actor=user.telegram_id,
+                target=user.telegram_id,
+                action="exchange.settings.saved",
+                resource_type="exchange_account",
+                resource_id=str(account_id),
+                metadata={
+                    "exchange": exchange,
+                    "verification_status": smoke.verification_status,
+                    "previous_exchange": selected_exchange,
+                },
+                request=request,
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
 
-        const API_BASE_URL = "https://czarnaperla.duckdns.org"; 
+    if smoke.verification_status == "verified":
+        message = (
+            f"{exchange.upper()}: klucze i tryb ONE-WAY potwierdzone. "
+            "Połączenie LIVE jest gotowe."
+        )
+    elif smoke.verification_status == "manual_beta":
+        message = (
+            "Bitunix: klucze odczytane poprawnie. Wymagana jest ręczna "
+            "walidacja fee-policy przed aktywacją LIVE."
+        )
+    else:
+        message = (
+            f"{exchange.upper()}: klucze odczytane poprawnie. "
+            "Wymagany jest kontrolowany canary przed aktywacją LIVE."
+        )
+    return {
+        "status": "success",
+        "message": message,
+        "verification_status": smoke.verification_status,
+    }
 
-        async function fetchDashboardData(telegramId, telegramName = "") {
-            CURRENT_USER_ID = telegramId;
-            try {
-                // Przekazujemy imię z Telegrama do serwera
-                const response = await fetch(`${API_BASE_URL}/api/dashboard/${telegramId}?name=${encodeURIComponent(telegramName)}`);
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    document.getElementById('db-username').innerText = data.custom_name || data.username;
-                    document.getElementById('db-plan').innerText = data.plan_name || "Podstawowy";
-                    document.getElementById('db-ref-link').innerText = `https://msliwa610-oss.github.io/czarnaperla-bot/?ref=${data.referral_code || 'brak'}`;
-                    
-                    document.getElementById('trade_margin').value = data.margin;
-                    document.getElementById('trade_leverage').value = data.leverage;
-                    document.getElementById('db-display-mar').innerText = data.margin + " USDT";
-                    document.getElementById('db-display-lev').innerText = data.leverage + "x";
 
-                    updateStatusLamps(data.api_connected);
-
-                    // Prawdziwe odliczanie czasu
-                    if (data.subscription_end_date) {
-                        calculateTimeLeft(data.subscription_end_date);
-                    } else {
-                        document.getElementById('db-time-left').innerHTML = "<span class='time-expired'>WYGASŁO! Kontakt: @Mateushpro</span>";
-                    }
-
-                    // Logika uprawnień Administratora
-                    if (data.is_admin === true) {
-                        IS_ADMIN = true;
-                        document.getElementById('btnNavAdmin').style.display = 'block';
-                    }
+@app.post("/api/admin/users")
+def get_all_users(
+    _: AdminRequest,
+    user: SessionUser = Depends(require_admin),
+):
+    RATE_LIMITER.check(f"admin:{user.telegram_id}", 60, 60)
+    with get_db_connection(readonly=True) as connection:
+        rows = connection.execute(
+            """
+            SELECT u.telegram_id, u.custom_name, u.join_date, u.sub_end,
+                   u.is_active, u.is_admin, a.exchange,
+                   a.verification_status
+              FROM users AS u
+              LEFT JOIN exchange_accounts AS a
+                ON a.telegram_id = u.telegram_id AND a.is_selected = 1
+             ORDER BY u.join_date DESC, u.telegram_id
+            """
+        ).fetchall()
+        users_payload = []
+        for row in rows:
+            license_state = _license_state(
+                connection,
+                int(row["telegram_id"]),
+            )
+            users_payload.append(
+                {
+                    "telegram_id": str(row["telegram_id"]),
+                    "custom_name": row["custom_name"] or "",
+                    "join_date": row["join_date"] or "Przed aktualizacją",
+                    "sub_end": (
+                        license_state.end_date
+                        or row["sub_end"]
+                        or "Brak danych"
+                    ),
+                    "license_active": license_state.active,
+                    "bot_active": bool(
+                        row["is_active"] and license_state.active
+                    ),
+                    "is_admin": bool(row["is_admin"]),
+                    "exchange": row["exchange"] or "bitget",
+                    "verification_status": (
+                        row["verification_status"] or "not_configured"
+                    ),
                 }
-            } catch (error) {
-                console.error("Błąd połączenia z serwerem API:", error);
-                document.getElementById('db-username').innerText = "Tryb Offline (Oczekuje na start serwera)";
-            }
+            )
+    return {
+        "status": "success",
+        "users": users_payload,
+    }
+
+
+@app.post("/api/admin/toggle_bot")
+def toggle_bot(
+    payload: ToggleBotRequest,
+    request: Request,
+    admin: SessionUser = Depends(require_admin),
+):
+    with get_db_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            target = connection.execute(
+                "SELECT telegram_id FROM users WHERE telegram_id = ?",
+                (payload.target_user,),
+            ).fetchone()
+            if not target:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Nie znaleziono użytkownika.",
+                )
+            if payload.active:
+                license_state = _license_state(
+                    connection,
+                    payload.target_user,
+                    require_user_enabled=False,
+                )
+                if not license_state.active:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Nie można włączyć konta z wygasłą licencją.",
+                    )
+                account = _selected_account(connection, payload.target_user)
+                if account and str(account["verification_status"]) not in {
+                    "verified",
+                    "canary_verified",
+                    "manual_verified",
+                    "legacy_migrated",
+                }:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Najpierw zatwierdź canary/manual tej giełdy.",
+                    )
+            connection.execute(
+                "UPDATE users SET is_active = ?, updated_at = ? "
+                "WHERE telegram_id = ?",
+                (
+                    int(payload.active),
+                    _iso(_utc_now()),
+                    payload.target_user,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE exchange_accounts
+                   SET is_enabled = CASE
+                       WHEN ? = 1
+                        AND live_trading_enabled = 1
+                        AND verification_status IN (
+                            'verified', 'canary_verified',
+                            'manual_verified', 'legacy_migrated'
+                        )
+                       THEN 1 ELSE 0 END,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE telegram_id = ? AND is_selected = 1
+                """,
+                (int(payload.active), payload.target_user),
+            )
+            _audit(
+                connection,
+                actor=admin.telegram_id,
+                target=payload.target_user,
+                action="admin.bot.toggled",
+                resource_type="user",
+                resource_id=str(payload.target_user),
+                metadata={"active": payload.active},
+                request=request,
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+    return {"status": "success"}
+
+
+@app.post("/api/admin/toggle_admin")
+def toggle_admin(
+    payload: ToggleAdminRequest,
+    request: Request,
+    admin: SessionUser = Depends(require_superadmin),
+):
+    if payload.target_user in SETTINGS.superadmin_ids and not payload.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Nie można odebrać roli skonfigurowanemu SUPERADMINOWI.",
+        )
+    if payload.target_user == admin.telegram_id and not payload.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Nie możesz odebrać uprawnień własnej aktywnej sesji.",
+        )
+    with get_db_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            target = connection.execute(
+                "SELECT telegram_id FROM users WHERE telegram_id = ?",
+                (payload.target_user,),
+            ).fetchone()
+            if not target:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Nie znaleziono użytkownika.",
+                )
+            connection.execute(
+                "UPDATE users SET is_admin = ?, updated_at = ? "
+                "WHERE telegram_id = ?",
+                (
+                    int(payload.is_admin),
+                    _iso(_utc_now()),
+                    payload.target_user,
+                ),
+            )
+            connection.execute(
+                "UPDATE sessions SET revoked_at = ? "
+                "WHERE telegram_id = ? AND session_id <> ? "
+                "AND revoked_at IS NULL",
+                (
+                    _iso(_utc_now()),
+                    payload.target_user,
+                    admin.session_id,
+                ),
+            )
+            _audit(
+                connection,
+                actor=admin.telegram_id,
+                target=payload.target_user,
+                action="admin.role.changed",
+                resource_type="user",
+                resource_id=str(payload.target_user),
+                metadata={"is_admin": payload.is_admin},
+                request=request,
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+    return {"status": "success"}
+
+
+@app.post("/api/admin/update_name")
+def update_name(
+    payload: UpdateNameRequest,
+    request: Request,
+    admin: SessionUser = Depends(require_admin),
+):
+    custom_name = payload.custom_name.strip()
+    if not custom_name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Nazwa nie może być pusta.",
+        )
+    with get_db_connection() as connection:
+        cursor = connection.execute(
+            "UPDATE users SET custom_name = ?, updated_at = ? "
+            "WHERE telegram_id = ?",
+            (custom_name, _iso(_utc_now()), payload.target_user),
+        )
+        if cursor.rowcount != 1:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nie znaleziono użytkownika.",
+            )
+        _audit(
+            connection,
+            actor=admin.telegram_id,
+            target=payload.target_user,
+            action="admin.name.updated",
+            resource_type="user",
+            resource_id=str(payload.target_user),
+            request=request,
+        )
+        connection.commit()
+    return {"status": "success"}
+
+
+@app.post("/api/admin/approve_exchange")
+def approve_exchange(
+    payload: ApproveExchangeRequest,
+    request: Request,
+    admin: SessionUser = Depends(require_superadmin),
+):
+    try:
+        exchange = canonical_exchange_id(payload.exchange)
+    except ExchangeValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    capability_status = str(EXCHANGE_CAPABILITIES[exchange]["status"])
+    if capability_status == "manual_beta":
+        if not payload.bitunix_fee_policy:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Bitunix wymaga zatwierdzonej polityki naliczania opłat.",
+            )
+        approved_status = "manual_verified"
+    elif capability_status == "canary_required":
+        approved_status = "canary_verified"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ta giełda nie wymaga ręcznego canary.",
+        )
+
+    evidence_hash = hashlib.sha256(
+        payload.canary_evidence.strip().encode("utf-8")
+    ).hexdigest()
+    with get_db_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            account = connection.execute(
+                """
+                SELECT a.id, a.verification_status, c.fingerprint
+                  FROM exchange_accounts AS a
+                  JOIN exchange_credentials AS c ON c.account_id = a.id
+                 WHERE a.telegram_id = ? AND a.exchange = ?
+                """,
+                (payload.target_user, exchange),
+            ).fetchone()
+            if not account:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Brak zapisanych i sprawdzonych kluczy tej giełdy.",
+                )
+            expected_source = (
+                "manual_beta" if exchange == "bitunix"
+                else "canary_required"
+            )
+            if str(account["verification_status"]) != expected_source:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Konto nie znajduje się w prawidłowym stanie "
+                        f"{expected_source}."
+                    ),
+                )
+            credential_fingerprint = str(account["fingerprint"] or "")
+            if len(credential_fingerprint) != 64:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Brak fingerprintu aktualnej wersji kluczy.",
+                )
+            canary = connection.execute(
+                """
+                INSERT INTO adapter_canary_records (
+                    exchange, account_id, adapter_release,
+                    credential_fingerprint, evidence_hash, recorded_by
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    exchange,
+                    account["id"],
+                    SETTINGS.adapter_release,
+                    credential_fingerprint,
+                    evidence_hash,
+                    admin.telegram_id,
+                ),
+            )
+            target_license = _license_state(
+                connection,
+                payload.target_user,
+            )
+            connection.execute(
+                """
+                UPDATE exchange_accounts
+                   SET verification_status = ?,
+                       live_trading_enabled = 1,
+                       is_enabled = CASE
+                           WHEN is_selected = 1 AND ? = 1 THEN 1 ELSE 0 END,
+                       bitunix_fee_policy = ?,
+                       verified_at = ?,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?
+                """,
+                (
+                    approved_status,
+                    int(target_license.active),
+                    (
+                        payload.bitunix_fee_policy
+                        if exchange == "bitunix"
+                        else None
+                    ),
+                    _iso(_utc_now()),
+                    account["id"],
+                ),
+            )
+            _audit(
+                connection,
+                actor=admin.telegram_id,
+                target=payload.target_user,
+                action="admin.exchange.approved",
+                resource_type="exchange_account",
+                resource_id=str(account["id"]),
+                metadata={
+                    "exchange": exchange,
+                    "verification_status": approved_status,
+                    "adapter_release": SETTINGS.adapter_release,
+                    "canary_record_id": int(canary.lastrowid),
+                },
+                request=request,
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+    return {
+        "status": "success",
+        "verification_status": approved_status,
+        "canary_record_id": int(canary.lastrowid),
+    }
+
+
+@app.post("/api/admin/approve_exchange_rollout")
+def approve_exchange_rollout(
+    payload: ApproveRolloutRequest,
+    request: Request,
+    admin: SessionUser = Depends(require_superadmin),
+):
+    """Release an adapter globally only after an operator completed canary.
+
+    This endpoint does not perform the canary itself.  It records the
+    administrator's explicit release and enables accounts whose read-only
+    credential smoke test had already passed.
+    """
+
+    try:
+        exchange = canonical_exchange_id(payload.exchange)
+    except ExchangeValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    current = _catalog_capabilities()[exchange]
+    current_status = str(current["status"])
+    if current_status == "live":
+        return {
+            "status": "success",
+            "exchange": exchange,
+            "rollout_status": "live",
+            "approved_accounts": 0,
         }
+    if current_status not in {"canary_required", "manual_beta"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ta giełda nie może zostać zwolniona do LIVE.",
+        )
+    if exchange == "bitunix" and not payload.bitunix_fee_policy:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Bitunix wymaga zatwierdzonej polityki naliczania opłat.",
+        )
 
-        // Ulepszone odliczanie z prawdziwą datą i namiarem na Kapitana
-        function calculateTimeLeft(endDateString) {
-            const endDate = new Date(endDateString).getTime();
-            const now = new Date().getTime();
-            const distance = endDate - now;
-
-            if (distance < 0 || endDateString.includes("2099")) {
-                document.getElementById('db-time-left').innerHTML = "<span class='time-expired'>WYGASŁO! Kontakt: @Mateushpro</span>";
-            } else {
-                const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-                document.getElementById('db-time-left').innerHTML = `Pozostało <span style="color:#fff">${days} dni</span> (do ${endDateString})`;
-            }
-        }
-
-        /* =======================================================
-           FUNKCJE PANELU ADMINISTRATORA (MOSTEK KAPITAŃSKI)
-        ======================================================= */
-
-        async function fetchAdminData() {
-            if (!IS_ADMIN) return;
-            const tbody = document.getElementById('admin-users-list');
-            tbody.innerHTML = "<tr><td colspan='7'>Pobieranie bazy danych z serwera...</td></tr>";
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ admin_id: CURRENT_USER_ID })
-                });
-                const data = await response.json();
-
-                if (data.status === 'success') {
-                    tbody.innerHTML = "";
-                    data.users.forEach(user => {
-                        const isExpired = new Date(user.sub_end) < new Date();
-                        const timeText = isExpired ? '<span class="time-expired">WYGASŁ (OFF)</span>' : user.sub_end;
-
-                        const row = `
-                            <tr>
-                                <td style="font-family: monospace;">${user.telegram_id}</td>
-                                <td>
-                                    <input type="text" id="name_${user.telegram_id}" class="admin-input" value="${user.custom_name || ''}">
-                                </td>
-                                <td>${user.join_date}</td>
-                                <td>${timeText}</td>
-                                <td>
-                                    <label class="switch">
-                                      <input type="checkbox" onchange="toggleBotStatus('${user.telegram_id}', this.checked)" ${user.bot_active ? 'checked' : ''}>
-                                      <span class="slider"></span>
-                                    </label>
-                                </td>
-                                <td>
-                                    <label class="switch">
-                                      <input type="checkbox" onchange="toggleAdminStatus('${user.telegram_id}', this.checked)" ${user.is_admin ? 'checked' : ''}>
-                                      <span class="slider admin-slider"></span>
-                                    </label>
-                                </td>
-                                <td>
-                                    <button onclick="updateUserName('${user.telegram_id}')" style="background: var(--accent-gold); color: #000; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px;">Zapisz Imię</button>
-                                </td>
-                            </tr>
-                        `;
-                        tbody.innerHTML += row;
-                    });
-                }
-            } catch (err) {
-                tbody.innerHTML = `<tr><td colspan='7' style="color:var(--accent-red)">Błąd połączenia z serwerem API.</td></tr>`;
-            }
-        }
-
-        async function toggleBotStatus(userId, isChecked) {
-            await fetch(`${API_BASE_URL}/api/admin/toggle_bot`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ admin_id: CURRENT_USER_ID, target_user: userId, active: isChecked })
-            });
-            alert(`Zmieniono status bota dla użytkownika: ${userId}`);
-        }
-
-        async function toggleAdminStatus(userId, isChecked) {
-            await fetch(`${API_BASE_URL}/api/admin/toggle_admin`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ admin_id: CURRENT_USER_ID, target_user: userId, is_admin: isChecked })
-            });
-            alert(`Zmieniono uprawnienia administratora dla: ${userId}`);
-        }
-
-        async function updateUserName(userId) {
-            const newName = document.getElementById(`name_${userId}`).value;
-            await fetch(`${API_BASE_URL}/api/admin/update_name`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ admin_id: CURRENT_USER_ID, target_user: userId, custom_name: newName })
-            });
-            alert(`Zapisano nowe imię: ${newName}`);
-        }
-
-        /* =======================================================
-           ZAPISYWANIE API I LOGOWANIE
-        ======================================================= */
-
-        async function saveApiSettings() {
-            if (!CURRENT_USER_ID) {
-                alert("Musisz się najpierw zalogować!");
-                return;
-            }
-
-            const key = document.getElementById('api_key').value;
-            const secret = document.getElementById('api_secret').value;
-            const phrase = document.getElementById('api_passphrase').value;
-            const lev = document.getElementById('trade_leverage').value;
-            const mar = document.getElementById('trade_margin').value;
-
-            const payload = {
-                telegram_id: CURRENT_USER_ID,
-                api_key: key,
-                api_secret: secret,
-                api_passphrase: phrase,
-                leverage: parseInt(lev) || 10,
-                margin: parseFloat(mar) || 50.0
-            };
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/save_settings`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
-                });
-                
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    const statusText = document.getElementById('save_status');
-                    statusText.innerText = "Zapisano poprawnie. Oczekuję na sygnały z giełdy.";
-                    statusText.style.color = "var(--accent-green)";
-                    fetchDashboardData(CURRENT_USER_ID);
-                }
-            } catch (error) {
-                console.error("Błąd zapisu API:", error);
-                document.getElementById('save_status').innerText = "Serwer odrzucił połączenie.";
-                document.getElementById('save_status').style.color = "var(--accent-red)";
-            }
-        }
-
-        function updateStatusLamps(isConnected) {
-            const bigLamp = document.getElementById('db-api-lamp');
-            const smallLamp = document.getElementById('db-api-small-lamp');
-            const bigStatusText = document.getElementById('db-api-status');
-            const smallStatusText = document.getElementById('db-api-status-word');
-
-            if (isConnected) {
-                bigLamp.style.backgroundColor = 'var(--accent-green)';
-                bigLamp.style.boxShadow = '0 0 10px var(--accent-green)';
-                bigLamp.style.animation = 'blink 2s infinite';
-                smallLamp.style.backgroundColor = 'var(--accent-green)';
-                
-                bigStatusText.innerText = 'BOT STATUS: AKTYWNY (API)';
-                smallStatusText.innerText = 'Zsynchronizowano';
-                smallStatusText.style.color = 'var(--accent-green)';
-            } else {
-                bigLamp.style.backgroundColor = 'var(--accent-red)';
-                bigLamp.style.boxShadow = '0 0 10px var(--accent-red)';
-                bigLamp.style.animation = 'none';
-                smallLamp.style.backgroundColor = 'var(--accent-red)';
-                
-                bigStatusText.innerText = 'BOT STATUS: BRAK API';
-                bigStatusText.style.color = 'var(--accent-red)';
-                smallStatusText.innerText = 'Brak kluczy';
-                smallStatusText.style.color = 'var(--accent-red)';
-            }
-        }
-
-        function onTelegramAuth(user) {
-            document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('dashboardPage').classList.add('active');
-            
-            document.getElementById('btnLogout').style.display = 'block';
-            document.getElementById('db-username').innerText = "Weryfikacja danych...";
-            
-            // Pobieramy prawdziwe imię i nazwisko logującego się inwestora
-            const tgName = user.first_name + (user.last_name ? " " + user.last_name : "");
-            fetchDashboardData(user.id, tgName);
-        }
-
-        function logoutUser() {
-            CURRENT_USER_ID = null;
-            IS_ADMIN = false;
-            window.location.reload();
-        }
-
-        function switchPage(pageName, btn) {
-            document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            if(pageName === 'landing') document.getElementById('landingPage').classList.add('active');
-            else if(pageName === 'dashboard') document.getElementById('dashboardPage').classList.add('active');
-            else if(pageName === 'admin') {
-                document.getElementById('adminPage').classList.add('active');
-                fetchAdminData();
-            }
-            btn.classList.add('active');
-        }
-
-        function openTermsModal() { document.getElementById('termsModal').classList.add('active'); document.body.style.overflow = 'hidden'; }
-        function closeTermsModal() { document.getElementById('termsModal').classList.remove('active'); document.body.style.overflow = 'auto'; }
-        function toggleTgButton() {
-            const checkbox = document.getElementById('acceptCheckbox');
-            const tgButton = document.getElementById('tgButton');
-            if(checkbox.checked) tgButton.classList.add('enabled');
-            else tgButton.classList.remove('enabled');
-        }
-        function redirectToTelegram() {
-            if(document.getElementById('acceptCheckbox').checked) {
-                window.open(TELEGRAM_LINK, '_blank');
-                closeTermsModal();
-            }
-        }
-        function copyRefLink() {
-            const linkText = document.getElementById('db-ref-link').innerText;
-            navigator.clipboard.writeText(linkText);
-            alert("Link skopiowany i gotowy do udostępnienia!");
-        }
-        document.getElementById('termsModal').addEventListener('click', function(e) {
-            if(e.target === this) closeTermsModal();
-        });
-    </script>
-</body>
-</html>
+    account_status = (
+        "manual_verified" if exchange == "bitunix" else "canary_verified"
+    )
+    catalog_config = (
+        {"bitunix_fee_policy": payload.bitunix_fee_policy}
+        if exchange == "bitunix"
+        else {}
+    )
+    with get_db_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            canary = connection.execute(
+                """
+                SELECT r.id, r.exchange, r.account_id, r.adapter_release,
+                       r.credential_fingerprint, r.created_at,
+                       a.verification_status, c.fingerprint
+                  FROM adapter_canary_records AS r
+                  JOIN exchange_accounts AS a ON a.id = r.account_id
+                  JOIN exchange_credentials AS c ON c.account_id = a.id
+                 WHERE r.id = ? AND r.exchange = ?
+                """,
+                (payload.canary_record_id, exchange),
+            ).fetchone()
+            if (
+                not canary
+                or str(canary["adapter_release"]) != SETTINGS.adapter_release
+                or str(canary["credential_fingerprint"])
+                != str(canary["fingerprint"])
+                or str(canary["verification_status"])
+                not in {"canary_verified", "manual_verified"}
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Brak aktualnego, zatwierdzonego rekordu canary dla "
+                        "tej wersji adaptera i kluczy."
+                    ),
+                )
+            canary_time = _parse_datetime(canary["created_at"])
+            if (
+                canary_time is None
+                or (_utc_now() - canary_time).total_seconds()
+                > 30 * 24 * 60 * 60
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Rekord canary jest starszy niż 30 dni.",
+                )
+            connection.execute(
+                """
+                UPDATE exchange_catalog
+                   SET status = 'live',
+                       enabled = 1,
+                       config_json = ?,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE exchange = ? AND exchange <> 'mexc'
+                """,
+                (
+                    json.dumps(
+                        catalog_config,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    exchange,
+                ),
+            )
+            updated = connection.execute(
+                """
+                UPDATE exchange_accounts
+                   SET verification_status = ?,
+                       live_trading_enabled = 1,
+                       is_enabled = 0,
+                       bitunix_fee_policy = CASE
+                           WHEN exchange = 'bitunix' THEN ?
+                           ELSE bitunix_fee_policy
+                       END,
+                       verified_at = ?,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE exchange = ?
+                   AND verification_status IN (
+                       'canary_required', 'manual_beta'
+                   )
+                   AND EXISTS (
+                       SELECT 1 FROM exchange_credentials
+                        WHERE exchange_credentials.account_id =
+                              exchange_accounts.id
+                   )
+                """,
+                (
+                    account_status,
+                    (
+                        payload.bitunix_fee_policy
+                        if exchange == "bitunix"
+                        else None
+                    ),
+                    _iso(_utc_now()),
+                    exchange,
+                ),
+            )
+            released_accounts = connection.execute(
+                """
+                SELECT id, telegram_id, is_selected
+                  FROM exchange_accounts
+                 WHERE exchange = ?
+                   AND verification_status = ?
+                """,
+                (exchange, account_status),
+            ).fetchall()
+            for released_account in released_accounts:
+                if (
+                    bool(released_account["is_selected"])
+                    and _license_state(
+                        connection,
+                        int(released_account["telegram_id"]),
+                    ).active
+                ):
+                    connection.execute(
+                        "UPDATE exchange_accounts SET is_enabled = 1 "
+                        "WHERE id = ?",
+                        (released_account["id"],),
+                    )
+            _audit(
+                connection,
+                actor=admin.telegram_id,
+                action="admin.exchange.rollout_released",
+                resource_type="exchange",
+                resource_id=exchange,
+                metadata={
+                    "previous_status": current_status,
+                    "rollout_status": "live",
+                    "approved_accounts": int(updated.rowcount),
+                    "adapter_release": SETTINGS.adapter_release,
+                    "canary_record_id": int(canary["id"]),
+                },
+                request=request,
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+    return {
+        "status": "success",
+        "exchange": exchange,
+        "rollout_status": "live",
+        "approved_accounts": int(updated.rowcount),
+    }
