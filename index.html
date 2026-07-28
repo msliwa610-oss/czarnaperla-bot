@@ -1171,7 +1171,9 @@
     }
 
     function apiHeaders(extra) {
-      return Object.assign({Accept:"application/json"}, extra || {});
+      const headers = Object.assign({Accept:"application/json"}, extra || {});
+      if (state.session) headers["X-Session-Token"] = state.session;
+      return headers;
     }
 
     function clearSensitiveFields() {
