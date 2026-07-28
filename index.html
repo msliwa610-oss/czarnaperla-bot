@@ -1,2511 +1,1557 @@
-"use client";
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Czarna Perła — automatyczny system tradingowy SMC i True CVD">
+  <title>Czarna Perła — Panel Multi-Giełdowy</title>
+  <style>
+    :root {
+      --bg: #07090d;
+      --panel: rgba(15, 20, 29, .88);
+      --panel2: rgba(10, 14, 21, .91);
+      --line: rgba(111, 126, 148, .30);
+      --line-soft: rgba(255,255,255,.08);
+      --text: #f4f6f8;
+      --muted: #aeb7c5;
+      --gold: #f3a63b;
+      --gold-bright: #ffbd57;
+      --green: #10d49a;
+      --blue: #35a9ee;
+      --amber: #f6ba4b;
+      --red: #ff6262;
+      --shadow: 0 24px 70px rgba(0,0,0,.40);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      line-height: 1.6;
+      background-color: #101923;
+      background-image:
+        radial-gradient(circle at 50% 12%, rgba(243,166,59,.05), transparent 36%),
+        linear-gradient(180deg, rgba(5,8,12,.38), rgba(5,8,12,.64)),
+        url("./4UEg7.jpg");
+      background-position: center top;
+      background-size: max(96vw, 149vh) auto;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      overflow-x: hidden;
+    }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    a { color: inherit; }
+    :focus-visible { outline: 3px solid rgba(243,166,59,.5); outline-offset: 2px; }
+    .container { width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    .hidden { display: none !important; }
 
-import {
-  FormEvent,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--line-soft);
+      background: linear-gradient(180deg, rgba(7,9,13,.82), rgba(7,9,13,.68));
+      backdrop-filter: blur(14px) saturate(125%);
+    }
+    .header-inner {
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .brand {
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 2px 0;
+      font-size: 27px;
+      font-weight: 900;
+      letter-spacing: .09em;
+      white-space: nowrap;
+    }
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(243,166,59,.40);
+      border-radius: 12px;
+      background: linear-gradient(145deg, rgba(243,166,59,.18), rgba(77,41,103,.48));
+      box-shadow: 0 8px 24px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.12);
+      font-size: 22px;
+      line-height: 1;
+    }
+    .brand-copy { line-height: 1; }
+    .brand strong { color: var(--gold); }
+    nav { display: flex; gap: 10px; }
+    .nav-btn {
+      min-height: 38px;
+      padding: 8px 16px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    .nav-btn:hover { color: white; background: rgba(255,255,255,.05); }
+    .nav-btn.active { color: var(--gold); border-color: rgba(243,166,59,.55); background: rgba(243,166,59,.09); }
+    .nav-btn.admin { color: var(--red); }
 
-type PageName = "landing" | "dashboard" | "admin";
-type ExchangeId =
-  | "bitget"
-  | "binanceusdm"
-  | "bybit"
-  | "okx"
-  | "gate"
-  | "bitunix"
-  | "mexc";
-type ExchangeStatus = "live" | "test" | "beta" | "blocked";
-type ExchangeCapabilityStatus =
-  | "live"
-  | "canary_required"
-  | "manual_beta"
-  | "live_blocked"
-  | string;
-type BitunixFeePolicy = "deduct_positive" | "signed_value";
+    .page { display: none; }
+    .page.active { display: block; }
+    .hero {
+      min-height: 535px;
+      padding: 92px 0 78px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      border-bottom: 1px solid var(--line-soft);
+      background:
+        radial-gradient(ellipse at 50% 48%, rgba(7,10,15,.60) 0%, rgba(7,10,15,.42) 48%, rgba(7,10,15,.14) 100%);
+    }
+    .badges { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
+    .badge {
+      padding: 8px 16px;
+      border: 1px solid var(--green);
+      border-radius: 999px;
+      background: rgba(7,27,24,.58);
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 750;
+      backdrop-filter: blur(8px);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .badge-gold {
+      border-color: rgba(243,166,59,.82);
+      background: rgba(45,29,8,.62);
+      color: #ffd28f;
+      box-shadow: 0 0 26px rgba(243,166,59,.12), inset 0 1px 0 rgba(255,255,255,.07);
+    }
+    .hero h1 {
+      width: 100%;
+      max-width: 1080px;
+      margin: 38px auto 20px;
+      padding: .08em .16em .20em;
+      overflow: visible;
+      font-size: clamp(38px, 4.1vw, 60px);
+      line-height: 1.2;
+      letter-spacing: -.025em;
+      background: linear-gradient(110deg, #fff 10%, #ffd59b 58%, var(--gold));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+      text-shadow: none;
+    }
+    .hero p {
+      max-width: 790px;
+      margin: 0 auto;
+      color: #d0d6df;
+      font-size: 18px;
+      line-height: 1.55;
+      text-shadow: 0 2px 4px rgba(0,0,0,.8);
+    }
+    .hero-actions { margin-top: 30px; display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
+    .hero-login {
+      min-height: 48px;
+      margin-top: 38px;
+      display: grid;
+      place-items: center;
+    }
+    .btn {
+      min-height: 46px;
+      padding: 0 19px;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .15s ease, background .15s ease;
+    }
+    .btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn:disabled { cursor: not-allowed; opacity: .45; }
+    .btn-gold { background: var(--gold); color: #171009; }
+    .btn-blue { background: var(--blue); color: #06151e; }
+    .btn-outline { border-color: #46505e; background: rgba(255,255,255,.05); color: white; }
+    .btn-red { border-color: rgba(255,98,98,.5); background: rgba(255,98,98,.08); color: var(--red); }
+    .btn-small { min-height: 35px; padding: 0 11px; font-size: 12px; }
 
-type TelegramUser = {
-  id: number;
-  first_name: string;
-  last_name?: string;
-  username?: string;
-  photo_url?: string;
-  auth_date: number;
-  hash: string;
-};
+    .section { padding: 76px 0; }
+    .section.alt {
+      border-top: 1px solid var(--line-soft);
+      border-bottom: 1px solid var(--line-soft);
+      background: transparent;
+      backdrop-filter: none;
+    }
+    .section-head { max-width: 780px; margin: 0 auto 42px; text-align: center; }
+    .eyebrow { color: var(--gold); font-size: 12px; font-weight: 850; letter-spacing: .18em; }
+    .section-head h2 { margin: 10px 0 12px; font-size: clamp(30px, 4vw, 46px); line-height: 1.1; letter-spacing: -.04em; }
+    .section-head p { margin: 0; color: var(--muted); }
+    .grid { display: grid; gap: 18px; }
+    .exchange-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .proof-grid, .pricing-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .feature-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px) saturate(115%);
+    }
+    .exchange-card { min-height: 315px; padding: 22px; display: flex; flex-direction: column; border-top-width: 3px; }
+    .exchange-card.live { border-top-color: var(--green); }
+    .exchange-card.test { border-top-color: var(--blue); }
+    .exchange-card.beta { border-top-color: var(--amber); }
+    .exchange-card.blocked { border-top-color: var(--red); }
+    .exchange-top { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+    .exchange-top h3 { margin: 0; font-size: 22px; }
+    .exchange-top small, .exchange-card p { color: var(--muted); }
+    .status {
+      flex: 0 0 auto;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .04em;
+      background: rgba(255,255,255,.06);
+    }
+    .exchange-meta { margin: 8px 0 18px; padding: 12px; border-radius: 9px; background: rgba(0,0,0,.22); color: #d6dbe2; font-size: 12px; }
+    .exchange-card .btn { width: 100%; margin-top: auto; }
+    .proof-card { padding: 28px; border-top: 4px solid var(--green); }
+    .proof-top { display: flex; justify-content: space-between; gap: 15px; color: var(--muted); font-size: 13px; }
+    .proof-top strong { color: white; font-size: 18px; }
+    .winrate { display: block; margin: 18px 0; text-align: center; color: var(--green); font-size: 46px; font-weight: 900; }
+    .proof-stats { display: flex; justify-content: space-around; padding: 14px; border-radius: 10px; background: rgba(0,0,0,.28); }
+    .feature-card { padding: 28px; }
+    .feature-card h3 { margin: 8px 0; }
+    .feature-card p { margin: 0; color: var(--muted); }
+    .pricing-section { position: relative; }
+    .pricing-section::before {
+      content: "";
+      position: absolute;
+      inset: 8% 18% 0;
+      z-index: -1;
+      border-radius: 50%;
+      background: rgba(243,166,59,.08);
+      filter: blur(90px);
+      pointer-events: none;
+    }
+    .pricing-grid { gap: 24px; align-items: stretch; }
+    .pricing-card {
+      position: relative;
+      min-height: 520px;
+      padding: 34px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-color: rgba(119,133,154,.36);
+      background:
+        linear-gradient(155deg, rgba(24,30,42,.94), rgba(12,16,23,.90));
+      transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+    }
+    .pricing-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(243,166,59,.48);
+      box-shadow: 0 28px 80px rgba(0,0,0,.48);
+    }
+    .pricing-card.featured {
+      border-color: rgba(243,166,59,.78);
+      background:
+        radial-gradient(circle at 90% 0, rgba(243,166,59,.18), transparent 30%),
+        linear-gradient(155deg, rgba(27,31,39,.96), rgba(15,18,24,.92));
+      box-shadow: 0 28px 80px rgba(0,0,0,.46), 0 0 42px rgba(243,166,59,.08);
+    }
+    .pricing-ribbon {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      padding: 6px 10px;
+      border: 1px solid rgba(243,166,59,.46);
+      border-radius: 999px;
+      background: rgba(243,166,59,.12);
+      color: #ffd18b;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .10em;
+      text-transform: uppercase;
+    }
+    .plan-icon {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 24px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 13px;
+      background: rgba(255,255,255,.05);
+      font-size: 23px;
+    }
+    .pricing-card h3 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+    .pricing-card > p { min-height: 52px; margin: 14px 0 0; color: var(--muted); }
+    .price-row { display: flex; align-items: flex-end; gap: 10px; margin: 22px 0 4px; }
+    .price { font-size: 54px; line-height: 1; font-weight: 950; color: var(--gold-bright); letter-spacing: -.045em; }
+    .price-note { padding-bottom: 5px; color: var(--muted); font-size: 13px; }
+    .old-price { margin-top: 4px; color: #778190; font-size: 14px; }
+    .old-price s { margin-right: 7px; }
+    .save-pill { color: var(--green); font-weight: 800; }
+    .pricing-card ul {
+      margin: 26px 0 30px;
+      padding: 22px 0 0;
+      border-top: 1px solid var(--line-soft);
+      list-style: none;
+      color: #dce2e9;
+    }
+    .pricing-card li { position: relative; margin: 12px 0; padding-left: 26px; }
+    .pricing-card li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--green);
+      font-weight: 900;
+    }
+    .pricing-card .btn { width: 100%; margin-top: auto; }
+    .warning { margin-top: 28px; padding: 15px; border: 1px solid rgba(246,186,75,.35); border-radius: 10px; background: rgba(246,186,75,.07); color: #e9d4a5; font-size: 13px; }
 
-type DashboardData = {
-  status: string;
-  username?: string;
-  custom_name?: string;
-  plan_name?: string;
-  referral_code?: string;
-  margin?: number;
-  leverage?: number;
-  max_risk?: number;
-  margin_mode?: "isolated" | "cross";
-  exchange?: ExchangeId;
-  api_connected?: boolean;
-  credentials_configured?: boolean;
-  subscription_end_date?: string;
-  is_admin?: boolean;
-  verification_status?: string;
-  multi_exchange?: boolean;
-  exchange_accounts?: ExchangeAccountData[];
-  accounts?: ExchangeAccountData[];
-};
+    .dashboard, .admin-page { padding: 42px 0 80px; }
+    .dashboard-head {
+      margin-bottom: 24px;
+      padding: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+    }
+    .dashboard-head h2 { margin: 0; }
+    .dashboard-head p { margin: 4px 0 0; color: var(--muted); }
+    .connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 13px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(0,0,0,.25);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+    .dot.ok { background: var(--green); box-shadow: 0 0 12px var(--green); }
+    .dot.err { background: var(--red); box-shadow: 0 0 12px var(--red); }
+    .dashboard-grid { display: grid; grid-template-columns: 1.8fr 1fr; gap: 22px; align-items: start; }
+    .panel { padding: 24px; margin-bottom: 22px; }
+    .panel h3 { margin: 0 0 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line-soft); }
+    .accounts-panel { margin-bottom: 22px; padding: 24px; }
+    .accounts-panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+    .accounts-panel-head h3 { margin: 0 0 4px; }
+    .accounts-panel-head p { margin: 0; color: var(--muted); font-size: 12px; }
+    .accounts-summary {
+      flex: 0 0 auto;
+      padding: 6px 11px;
+      border: 1px solid rgba(16,212,154,.35);
+      border-radius: 999px;
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 850;
+    }
+    .accounts-table-wrap { overflow-x: auto; }
+    .accounts-table { min-width: 820px; }
+    .accounts-table tbody tr:hover { background: rgba(255,255,255,.025); }
+    .muted-cell { color: var(--muted); font-size: 11px; }
+    .table-btn {
+      padding: 7px 11px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255,255,255,.04);
+      color: white;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .table-btn:hover { border-color: var(--gold); color: var(--gold); }
+    .login-box { padding: 28px; text-align: center; }
+    .login-box p { color: var(--muted); }
+    #telegram-widget { min-height: 48px; display: grid; place-items: center; }
+    .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px; }
+    .full { grid-column: 1 / -1; }
+    label { display: block; color: var(--muted); font-size: 12px; font-weight: 700; }
+    input, select {
+      width: 100%;
+      margin-top: 5px;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(0,0,0,.38);
+      color: white;
+    }
+    input:focus, select:focus { border-color: var(--gold); outline: none; }
+    .form-note { color: var(--muted); font-size: 12px; }
+    .save-status { min-height: 24px; margin-top: 12px; font-size: 13px; font-weight: 700; }
+    .save-status.ok { color: var(--green); }
+    .save-status.err { color: var(--red); }
+    .info-row { display: flex; justify-content: space-between; gap: 15px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 13px; }
+    .info-row span:first-child { color: var(--muted); }
+    .instructions ol { margin: 15px 0; padding-left: 22px; }
+    .instructions li { margin: 9px 0; color: #d6dbe2; }
+    .doc-link { color: var(--blue); }
+    .admin-shell {
+      padding: 0;
+      overflow: hidden;
+      border-color: rgba(255,79,93,.82);
+      background:
+        radial-gradient(circle at 0 0, rgba(255,78,93,.07), transparent 28%),
+        rgba(14,18,27,.92);
+      box-shadow: 0 30px 90px rgba(0,0,0,.45), 0 0 0 1px rgba(255,78,93,.03);
+    }
+    .admin-hero {
+      padding: 26px 28px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .admin-title-wrap { display: flex; align-items: center; gap: 14px; }
+    .admin-emblem {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border: 1px solid rgba(255,98,98,.32);
+      border-radius: 11px;
+      background: rgba(116,39,85,.36);
+      font-size: 21px;
+    }
+    .admin-hero h2 { margin: 0; font-size: clamp(21px, 2.5vw, 27px); line-height: 1.2; }
+    .admin-hero p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .admin-status-wrap { min-height: 36px; padding: 0 28px; }
+    .admin-table-wrap { overflow-x: auto; padding: 0 24px 18px; }
+    .admin-table { min-width: 980px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 15px 14px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: middle; }
+    th {
+      color: #8994a4;
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .admin-table tbody tr { transition: background .16s ease; }
+    .admin-table tbody tr:hover { background: rgba(255,255,255,.025); }
+    .admin-table tbody tr:last-child td { border-bottom: 0; }
+    .admin-id { color: #edf1f5; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .admin-name-input {
+      width: 150px;
+      min-width: 150px;
+      margin: 0;
+      padding: 9px 10px;
+      background: rgba(3,6,11,.64);
+    }
+    .account-meta { display: block; margin-top: 6px; color: #7f8998; font-size: 10px; line-height: 1.35; }
+    .account-meta strong { color: #aeb8c6; font-weight: 750; }
+    .license-cell { white-space: nowrap; }
+    .switch {
+      position: relative;
+      width: 46px;
+      height: 24px;
+      display: inline-block;
+      margin: 0;
+      color: inherit;
+      vertical-align: middle;
+    }
+    .switch input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .switch-track {
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 999px;
+      background: #2a303b;
+      cursor: pointer;
+      transition: background .18s ease, box-shadow .18s ease;
+    }
+    .switch-track::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #f7f9fb;
+      box-shadow: 0 2px 6px rgba(0,0,0,.35);
+      transition: transform .18s ease;
+    }
+    .switch input:checked + .switch-track { background: #08bd8e; }
+    .switch.admin-switch input:checked + .switch-track { background: var(--gold); }
+    .switch input:checked + .switch-track::after { transform: translateX(22px); }
+    .switch input:focus-visible + .switch-track { outline: 3px solid rgba(243,166,59,.45); outline-offset: 2px; }
+    .switch input:disabled + .switch-track { cursor: not-allowed; opacity: .45; }
+    .save-name { white-space: nowrap; }
 
-type ExchangeAccountData = {
-  account_id?: number | string;
-  exchange: ExchangeId;
-  is_selected?: boolean;
-  is_enabled?: boolean;
-  live_trading_enabled?: boolean;
-  credentials_configured?: boolean;
-  api_connected?: boolean;
-  verification_status?: string;
-  leverage?: number;
-  margin?: number;
-  max_risk?: number;
-  margin_mode?: "isolated" | "cross";
-};
+    footer { padding: 36px 0; border-top: 1px solid var(--line-soft); background: rgba(7,9,13,.38); backdrop-filter: blur(5px); color: var(--muted); text-align: center; font-size: 12px; }
+    dialog {
+      width: min(650px, calc(100% - 30px));
+      max-height: 80vh;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: #11151d;
+      color: white;
+      box-shadow: var(--shadow);
+    }
+    dialog::backdrop { background: rgba(0,0,0,.83); backdrop-filter: blur(6px); }
+    .modal-head, .modal-body, .modal-foot { padding: 20px 22px; }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
+    .modal-head h2 { margin: 0; font-size: 18px; }
+    .modal-body { color: #d1d7df; font-size: 13px; }
+    .modal-body h3 { color: var(--gold); }
+    .modal-foot { border-top: 1px solid var(--line); text-align: right; }
 
-type AdminUser = {
-  telegram_id: string;
-  custom_name?: string;
-  join_date?: string;
-  sub_end?: string;
-  bot_active?: boolean;
-  is_admin?: boolean;
-  exchange?: ExchangeId;
-  verification_status?: string;
-  exchange_accounts?: ExchangeAccountData[];
-  accounts?: ExchangeAccountData[];
-};
+    @media (max-width: 900px) {
+      .exchange-grid, .feature-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .dashboard-grid { grid-template-columns: 1fr; }
+      .pricing-card { min-height: 500px; padding: 28px; }
+    }
+    @media (max-width: 680px) {
+      body { background-attachment: scroll; }
+      .container { padding: 0 14px; }
+      header { position: relative; padding: 12px 0 10px; }
+      .header-inner { align-items: flex-start; flex-direction: column; gap: 10px; }
+      .brand { gap: 9px; font-size: 21px; }
+      .brand-mark { width: 34px; height: 34px; border-radius: 10px; font-size: 18px; }
+      nav { width: 100%; overflow-x: auto; }
+      .nav-btn { white-space: nowrap; padding: 0 10px; }
+      .hero { min-height: auto; padding: 54px 0 58px; }
+      .hero h1 { max-width: 100%; font-size: clamp(32px, 9.5vw, 42px); line-height: 1.08; }
+      .exchange-grid, .proof-grid, .feature-grid, .pricing-grid, .form-grid { grid-template-columns: 1fr; }
+      .full { grid-column: auto; }
+      .dashboard-head { align-items: flex-start; flex-direction: column; }
+      .exchange-top { flex-direction: column; }
+      .pricing-card { min-height: 0; padding: 25px; }
+      .pricing-ribbon { position: static; align-self: flex-start; margin-bottom: 18px; }
+      .price { font-size: 48px; }
+      .admin-page { padding-top: 22px; }
+      .admin-hero { padding: 20px; align-items: flex-start; flex-direction: column; }
+      .admin-status-wrap { padding: 0 20px; }
+      .admin-table-wrap { padding: 0 10px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container header-inner">
+      <button class="brand" data-page="landing" aria-label="Czarna Perła — strona główna">
+        <span class="brand-mark" aria-hidden="true">🏴‍☠️</span>
+        <span class="brand-copy">CZARNA <strong>PERŁA</strong></span>
+      </button>
+      <nav aria-label="Główna nawigacja">
+        <button class="nav-btn active" data-page="landing">Strona główna</button>
+        <button class="nav-btn" data-page="dashboard">Panel inwestora</button>
+        <button id="admin-nav" class="nav-btn admin hidden" data-page="admin">Mostek kapitański</button>
+      </nav>
+    </div>
+  </header>
 
-type ExchangeCapability = {
-  enabled: boolean;
-  status: ExchangeCapabilityStatus;
-};
+  <main id="landing" class="page active">
+    <section class="hero">
+      <div class="container">
+        <div class="badges">
+          <span class="badge badge-gold">🌐 Panel przygotowany na 7 giełd</span>
+          <span class="badge">WinRate &gt; 80% na rynku rzeczywistym</span>
+          <span class="badge">SMC + True CVD + ochrona kapitału</span>
+        </div>
+        <h1>Twój kapitał pod pełną kontrolą algorytmu</h1>
+        <p>Czarna Perła analizuje rynek wspólnie, ale każde konto wykonuje zlecenia przez bezpieczny adapter wybranej giełdy. Maksymalnie 10 pozycji na konto, kontrola trybu one-way/net i automatyczne zarządzanie TP oraz SL.</p>
+        <div id="telegram-widget-hero" class="hero-login" aria-label="Logowanie przez Telegram"></div>
+      </div>
+    </section>
 
-type CapabilitiesData = {
-  status?: string;
-  multi_exchange?: boolean;
-  telegram_session?: boolean;
-  exchanges?: Partial<Record<ExchangeId, ExchangeCapability>>;
-};
+    <section class="section alt">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">DOWODY SKUTECZNOŚCI</div>
+          <h2>Wyniki z realnych kont</h2>
+          <p>Historia nie gwarantuje przyszłych rezultatów, ale pokazuje rzeczywiste działanie systemu.</p>
+        </div>
+        <div class="grid proof-grid">
+          <article class="card proof-card">
+            <div class="proof-top"><strong>👤 Kolega_Damian</strong><span>Start: 01.06.2026</span></div>
+            <span class="winrate">84,48%</span>
+            <div class="proof-stats"><span>49 ✅ zyskownych</span><span>9 ❌ stratnych</span></div>
+          </article>
+          <article class="card proof-card">
+            <div class="proof-top"><strong>👤 Kolega_AREK</strong><span>Start: 19.06.2026</span></div>
+            <span class="winrate">93,10%</span>
+            <div class="proof-stats"><span>27 ✅ zyskownych</span><span>2 ❌ stratne</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
 
-type ExchangeConfig = {
-  id: ExchangeId;
-  name: string;
-  market: string;
-  status: ExchangeStatus;
-  statusLabel: string;
-  selectable: boolean;
-  passphrase: boolean;
-  description: string;
-  fields: string;
-  mode: string;
-  activation: string;
-  instructions: string[];
-  docsUrl?: string;
-};
+    <section id="exchanges" class="section">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">OBSŁUGIWANE GIEŁDY</div>
+          <h2>Siedem adapterów — uczciwe statusy gotowości</h2>
+          <p>Bitget działa LIVE. Nowe giełdy są uruchamiane dopiero po bezpiecznym teście konta. MEXC pozostaje zablokowany dla prawdziwych zleceń.</p>
+        </div>
+        <div id="exchange-cards" class="grid exchange-grid"></div>
+      </div>
+    </section>
 
-declare global {
-  interface Window {
-    onTelegramAuth?: (user: TelegramUser) => void;
-  }
-}
+    <section class="section alt">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">ARCHITEKTURA CZARNEJ PERŁY</div>
+          <h2>Szybkie wejście, realizacja i wyjście</h2>
+        </div>
+        <div class="grid feature-grid">
+          <article class="card feature-card"><div>🌊</div><h3>SMC + True CVD</h3><p>Trend HTF, FVG, knot, OTE, sweep i rzeczywisty napływ transakcji składają się na jeden scoring.</p></article>
+          <article class="card feature-card"><div>⚡</div><h3>Wejście hybrydowe</h3><p>Najlepszy sygnał może uruchomić część FAST, a pozostała część czeka na kontrolowany retest.</p></article>
+          <article class="card feature-card"><div>🛡️</div><h3>Zarządzanie ryzykiem</h3><p>TP1 zamyka 25%, SL przechodzi na +0,30%, TP2 zamyka 50%, a runner 25% prowadzi trailing 0,40%.</p></article>
+          <article class="card feature-card"><div>🧭</div><h3>Fail-closed</h3><p>Brak potwierdzenia trybu pozycji, dziennego PnL lub zlecenia ochronnego blokuje handel zamiast zgadywać.</p></article>
+        </div>
+      </div>
+    </section>
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_CP_API_BASE_URL?.replace(/\/+$/, "") ??
-  "/portal-api";
+    <section class="section pricing-section">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">DOSTĘP DO SYSTEMU</div>
+          <h2>Wybierz model współpracy</h2>
+          <p>Najpierw poznaj system na własnym koncie albo wybierz pełny rok z priorytetową konfiguracją.</p>
+        </div>
+        <div class="grid pricing-grid">
+          <article class="card pricing-card">
+            <span class="pricing-ribbon">30 dni na start</span>
+            <div class="plan-icon" aria-hidden="true">📱</div>
+            <h3>Pakiet testowy</h3>
+            <div class="price-row"><span class="price">0 $</span><span class="price-note">pierwszy miesiąc</span></div>
+            <p>Poznaj działanie Czarnej Perły bez opłaty startowej. Następnie 50 $ miesięcznie przez kolejne trzy miesiące.</p>
+            <ul>
+              <li>Jedna wybrana obsługiwana giełda</li>
+              <li>Pełne raporty i alerty Telegram</li>
+              <li>Konfiguracja ochrony kapitału</li>
+              <li>Kapitał przez cały czas pozostaje na Twoim koncie</li>
+            </ul>
+            <button class="btn btn-blue" data-terms>Aktywuj pakiet testowy</button>
+          </article>
+          <article class="card pricing-card featured">
+            <span class="pricing-ribbon">Najlepsza wartość</span>
+            <div class="plan-icon" aria-hidden="true">💎</div>
+            <h3>Pakiet roczny</h3>
+            <div class="price-row"><span class="price">800 $</span><span class="price-note">za 12 miesięcy</span></div>
+            <div class="old-price"><s>1200 $</s><span class="save-pill">Oszczędzasz 400 $</span></div>
+            <p>Pełna roczna licencja z priorytetowym uruchomieniem, kontrolą adaptera i wsparciem technicznym.</p>
+            <ul>
+              <li>Konfiguracja konta i wybranej giełdy</li>
+              <li>Test połączenia, uprawnień i zabezpieczeń</li>
+              <li>Priorytetowe wsparcie techniczne</li>
+              <li>Pomoc przy migracji między obsługiwanymi giełdami</li>
+            </ul>
+            <button class="btn btn-gold" data-terms>Zarezerwuj pakiet roczny</button>
+          </article>
+        </div>
+        <div class="warning">⚠️ Handel kontraktami i dźwignią wiąże się z wysokim ryzykiem utraty kapitału. Wyniki historyczne nie gwarantują wyników przyszłych.</div>
+      </div>
+    </section>
+  </main>
 
-const TELEGRAM_BOT =
-  process.env.NEXT_PUBLIC_CP_TELEGRAM_BOT ?? "czarna_perla_auth_bot";
+  <main id="dashboard" class="page dashboard">
+    <div class="container">
+      <section class="card dashboard-head">
+        <div><h2>Panel inwestora</h2><p id="welcome-text">Zaloguj się przez Telegram, aby zarządzać połączeniem.</p></div>
+        <div>
+          <span class="connection"><i id="connection-dot" class="dot"></i><span id="connection-text">Oczekuje na logowanie</span></span>
+          <button id="logout-btn" class="btn btn-red btn-small hidden">Wyloguj</button>
+        </div>
+      </section>
 
-const TELEGRAM_GROUP = "https://t.me/+QumQey-BSYNkYTlk";
+      <section id="login-panel" class="card login-box">
+        <h3>Bezpieczne logowanie Telegram</h3>
+        <p>Po zalogowaniu serwer weryfikuje podpis Telegram i tworzy chronioną sesję.</p>
+        <div id="telegram-widget"></div>
+      </section>
 
-const exchanges: ExchangeConfig[] = [
-  {
-    id: "bitget",
-    name: "Bitget",
-    market: "USDT Futures",
-    status: "live",
-    statusLabel: "LIVE",
-    selectable: true,
-    passphrase: true,
-    description:
-      "Natywna obsługa wejść, SL, TP, trailing stopu i dziennego PnL.",
-    fields: "API Key + API Secret + Passphrase",
-    mode: "One-way",
-    activation: "Automatyczna weryfikacja konta przed uruchomieniem.",
-    instructions: [
-      "Wejdź w zarządzanie API i utwórz nowy klucz przeznaczony wyłącznie dla Czarnej Perły.",
-      "Włącz odczyt konta oraz handel Futures. Nie włączaj wypłat ani transferów.",
-      "Ustaw białą listę IP serwera, zapisz własną Passphrase i przełącz USDT Futures na tryb One-way.",
-      "Wklej trzy dane do formularza i rozpocznij test minimalnym marginem.",
-    ],
-    docsUrl: "https://www.bitget.com/api-doc/common/signature",
-  },
-  {
-    id: "binanceusdm",
-    name: "Binance",
-    market: "USD-M Futures",
-    status: "test",
-    statusLabel: "LIVE PO TEŚCIE KONTA",
-    selectable: true,
-    passphrase: false,
-    description:
-      "Adapter LIVE jest gotowy; każde konto przechodzi odczytowy smoke test i minimalny canary.",
-    fields: "API Key + API Secret",
-    mode: "One-way",
-    activation: "Aktywacja po weryfikacji Futures, PnL i trybu pozycji.",
-    instructions: [
-      "W API Management utwórz oddzielny klucz dla bota.",
-      "Włącz odczyt oraz Enable Futures. Wypłaty i transfery pozostaw wyłączone.",
-      "Dodaj IP serwera do ograniczeń klucza i ustaw Position Mode na One-way.",
-      "Wklej API Key i API Secret; system wykona kontrolny odczyt przed aktywacją.",
-    ],
-    docsUrl:
-      "https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info",
-  },
-  {
-    id: "bybit",
-    name: "Bybit",
-    market: "Linear USDT",
-    status: "test",
-    statusLabel: "LIVE PO TEŚCIE KONTA",
-    selectable: true,
-    passphrase: false,
-    description:
-      "Obsługa kontraktów liniowych z weryfikacją trybu pozycji i dziennego PnL.",
-    fields: "API Key + API Secret",
-    mode: "One-way",
-    activation: "Aktywacja po autoryzowanym teście odczytowym.",
-    instructions: [
-      "Utwórz System-generated API Key w panelu API Management.",
-      "Nadaj odczyt i handel Contract/Derivatives. Nie przyznawaj uprawnienia Withdraw.",
-      "Ogranicz klucz adresem IP serwera i ustaw pozycje liniowe w trybie One-way.",
-      "Wklej API Key oraz API Secret i poczekaj na potwierdzenie testu konta.",
-    ],
-    docsUrl: "https://bybit-exchange.github.io/docs/v5/intro",
-  },
-  {
-    id: "okx",
-    name: "OKX",
-    market: "USDT Perpetual SWAP",
-    status: "test",
-    statusLabel: "LIVE PO TEŚCIE KONTA",
-    selectable: true,
-    passphrase: true,
-    description:
-      "Obsługa kontraktów SWAP; wymagane są trzy dane API i tryb pozycji Net.",
-    fields: "API Key + API Secret + Passphrase",
-    mode: "Net",
-    activation: "Aktywacja po potwierdzeniu rachunku SWAP i Net mode.",
-    instructions: [
-      "W sekcji API utwórz klucz z uprawnieniami Read oraz Trade.",
-      "Wypłaty pozostaw wyłączone, dodaj IP serwera i zapisz utworzoną Passphrase.",
-      "Dla USDT SWAP ustaw Position Mode na Net.",
-      "Wklej API Key, API Secret i Passphrase; aktywacja nastąpi po teście odczytowym.",
-    ],
-    docsUrl: "https://www.okx.com/docs-v5/en/",
-  },
-  {
-    id: "gate",
-    name: "Gate",
-    market: "USDT Perpetual",
-    status: "test",
-    statusLabel: "LIVE PO TEŚCIE KONTA",
-    selectable: true,
-    passphrase: false,
-    description:
-      "Obsługa USDT perpetual z natywnym rozliczaniem zamkniętych pozycji.",
-    fields: "API Key + API Secret",
-    mode: "Single / One-way",
-    activation: "Aktywacja po kontroli rachunku rozliczanego w USDT.",
-    instructions: [
-      "Utwórz osobny klucz APIv4 dla Czarnej Perły.",
-      "Nadaj Futures Read-Write, ale nie zezwalaj na wypłaty ani transfery.",
-      "Dodaj whitelistę IP, wybierz rozliczenie USDT i Single/One-way mode.",
-      "Wklej API Key i API Secret; system sprawdzi połączenie przed startem.",
-    ],
-    docsUrl: "https://www.gate.com/docs/developers/apiv4/en/",
-  },
-  {
-    id: "bitunix",
-    name: "Bitunix",
-    market: "USDT Futures",
-    status: "beta",
-    statusLabel: "BETA — AKTYWACJA RĘCZNA",
-    selectable: true,
-    passphrase: false,
-    description:
-      "Adapter jest gotowy, ale pierwsze konto wymaga potwierdzenia sposobu księgowania opłat.",
-    fields: "API Key + API Secret",
-    mode: "One-way",
-    activation:
-      "Administrator aktywuje konto po weryfikacji autentycznego zamkniętego zlecenia.",
-    instructions: [
-      "Utwórz klucz do USDT Futures z odczytem i handlem; wypłaty pozostaw wyłączone.",
-      "Dodaj adres IP serwera i ustaw konto w trybie One-way.",
-      "Zapisz klucze w panelu. Konto otrzyma status „oczekuje na walidację BETA”.",
-      "Pierwszy test wykonujemy minimalnym marginem i potwierdzamy prawidłowe księgowanie opłat.",
-    ],
-    docsUrl: "https://www.bitunix.com/api-docs/futures/common/introduction.html",
-  },
-  {
-    id: "mexc",
-    name: "MEXC",
-    market: "Futures / Shadow",
-    status: "blocked",
-    statusLabel: "LIVE ZABLOKOWANY",
-    selectable: false,
-    passphrase: false,
-    description:
-      "Dane rynkowe mogą być obserwowane, lecz prawdziwe zlecenia są wyłączone fail-closed.",
-    fields: "Nie wprowadzaj kluczy",
-    mode: "Shadow",
-    activation:
-      "Odblokowanie dopiero po pełnej weryfikacji endpointów zleceń i dziennego net PnL.",
-    instructions: [
-      "MEXC pozostaje dostępny wyłącznie jako informacja o planowanym rozszerzeniu.",
-      "Nie wprowadzaj kluczy API i nie próbuj uruchamiać handlu LIVE.",
-      "Shadow i analiza danych nie oznaczają zgody na składanie prawdziwych zleceń.",
-      "Panel udostępni połączenie dopiero po zakończeniu pełnej walidacji bezpieczeństwa.",
-    ],
-    docsUrl: "https://mexcdevelop.github.io/apidocs/contract_v1_en/",
-  },
-];
+      <section id="accounts-panel" class="card accounts-panel hidden">
+        <div class="accounts-panel-head">
+          <div>
+            <h3>Twoje połączenia giełdowe</h3>
+            <p>Każda giełda ma własne klucze, margin, dźwignię i niezależny przełącznik ON/OFF.</p>
+          </div>
+          <span id="accounts-summary" class="accounts-summary">0 ON / 0 skonfigurowanych</span>
+        </div>
+        <div class="accounts-table-wrap">
+          <table class="accounts-table">
+            <thead><tr><th>Giełda</th><th>Stan</th><th>Weryfikacja</th><th>Margin / lewar</th><th>Tryb</th><th>ON/OFF</th><th>Ustawienia</th></tr></thead>
+            <tbody id="exchange-accounts"></tbody>
+          </table>
+        </div>
+        <div id="accounts-status" class="save-status" role="status"></div>
+      </section>
 
-const exchangeMap = Object.fromEntries(
-  exchanges.map((exchange) => [exchange.id, exchange]),
-) as Record<ExchangeId, ExchangeConfig>;
+      <section id="dashboard-content" class="dashboard-grid hidden">
+        <div>
+          <form id="exchange-form" class="card panel">
+            <h3>Ustawienia handlowe</h3>
+            <div class="form-grid">
+              <label class="full">Giełda
+                <select id="exchange-select"></select>
+              </label>
+              <label>API Key
+                <input id="api-key" required autocomplete="off" placeholder="Wklej API Key">
+              </label>
+              <label>API Secret
+                <input id="api-secret" required type="password" autocomplete="new-password" placeholder="Wklej API Secret">
+              </label>
+              <label id="passphrase-wrap">Passphrase
+                <input id="api-passphrase" type="password" autocomplete="new-password" placeholder="Wklej Passphrase">
+              </label>
+              <label>Tryb margin
+                <select id="margin-mode"><option value="isolated">Isolated</option><option value="cross">Cross</option></select>
+              </label>
+              <label>Margin na pozycję (USDT)
+                <input id="margin" required type="number" min="0.1" step="0.1" value="4">
+              </label>
+              <label>Dźwignia
+                <input id="leverage" required type="number" min="1" max="100" step="1" value="20">
+              </label>
+              <label>Limit dziennego ryzyka (USDT)
+                <input id="max-risk" required type="number" min="0.1" step="0.1" value="20">
+              </label>
+              <div class="full form-note">Klucze muszą mieć wyłącznie odczyt oraz Futures/Trade. Uprawnienia Withdraw i Transfer pozostaw wyłączone.</div>
+              <button class="btn btn-gold full" type="submit">Zapisz i sprawdź połączenie</button>
+            </div>
+            <div id="save-status" class="save-status" role="status"></div>
+          </form>
+          <article id="instruction-card" class="card panel instructions">
+            <h3 id="instruction-title">Instrukcja podłączenia</h3>
+            <p id="instruction-lead" class="form-note"></p>
+            <ol id="instruction-list"></ol>
+            <a id="docs-link" class="doc-link" target="_blank" rel="noopener noreferrer">Oficjalna dokumentacja API ↗</a>
+          </article>
+        </div>
+        <aside>
+          <article class="card panel">
+            <h3>Twoja licencja</h3>
+            <div class="info-row"><span>Plan</span><strong id="plan-value">Brak danych</strong></div>
+            <div class="info-row"><span>Ważność</span><strong id="license-value">Brak danych</strong></div>
+            <div class="info-row"><span>Giełda</span><strong id="exchange-value">Brak danych</strong></div>
+            <div class="info-row"><span>Weryfikacja</span><strong id="verify-value">Brak danych</strong></div>
+          </article>
+          <article class="card panel">
+            <h3>Ochrona kapitału</h3>
+            <div class="info-row"><span>Maks. pozycji</span><strong>10</strong></div>
+            <div class="info-row"><span>TP1</span><strong>25%</strong></div>
+            <div class="info-row"><span>SL po TP1</span><strong>+0,30%</strong></div>
+            <div class="info-row"><span>TP2</span><strong>50%</strong></div>
+            <div class="info-row"><span>Runner</span><strong>25% / 0,40%</strong></div>
+          </article>
+        </aside>
+      </section>
+    </div>
+  </main>
 
-const statusClass: Record<ExchangeStatus, string> = {
-  live: "status-live",
-  test: "status-test",
-  beta: "status-beta",
-  blocked: "status-blocked",
-};
+  <main id="admin" class="page admin-page">
+    <div class="container">
+      <section class="card admin-shell">
+        <div class="admin-hero">
+          <div class="admin-title-wrap">
+            <span class="admin-emblem" aria-hidden="true">🏴‍☠️</span>
+            <div>
+              <h2>Mostek Kapitański <span style="color:#cdd3dc;font-weight:650">(Zarządzanie Załogą)</span></h2>
+              <p>Kontrola dostępu, licencji i aktywności kont użytkowników.</p>
+            </div>
+          </div>
+          <button id="refresh-admin" class="btn btn-outline btn-small">Odśwież dane</button>
+        </div>
+        <div class="admin-status-wrap"><div id="admin-status" class="save-status" role="status"></div></div>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>Telegram ID</th><th>Przypisane imię</th><th>Data dołączenia</th><th>Ważność abonamentu</th><th>Bot ON/OFF</th><th>Admin ON/OFF</th><th>Akcje</th></tr></thead>
+            <tbody id="admin-users"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
 
-function formatTimeLeft(endDateString?: string) {
-  if (!endDateString || endDateString === "Brak danych") {
-    return "Brak aktywnej licencji";
-  }
-  const endDate = new Date(endDateString);
-  if (Number.isNaN(endDate.getTime())) return "Nieprawidłowa data";
-  if (endDate.getFullYear() >= 2099) return "Licencja bezterminowa";
-  const distance = endDate.getTime() - Date.now();
-  if (distance <= 0) return "WYGASŁA — kontakt: @Mateushpro";
-  const days = Math.ceil(distance / 86_400_000);
-  return `${days} dni (do ${endDate.toLocaleDateString("pl-PL")})`;
-}
+  <footer><div class="container">© 2026 Czarna Perła • System analizy ilościowej • <button class="nav-btn" data-terms>Regulamin i ryzyko</button></div></footer>
 
-async function readJson(response: Response) {
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    throw new Error(`Serwer zwrócił nieprawidłową odpowiedź (${response.status}).`);
-  }
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data?.message || data?.detail || `Błąd HTTP ${response.status}`);
-  }
-  return data;
-}
+  <dialog id="terms-dialog">
+    <div class="modal-head"><h2>Regulamin i wyłączenie odpowiedzialności</h2><button id="close-terms" class="btn btn-outline btn-small">Zamknij</button></div>
+    <div class="modal-body">
+      <h3>Charakter systemu</h3><p>Czarna Perła jest oprogramowaniem analitycznym i wykonawczym. Nie stanowi indywidualnej porady inwestycyjnej ani gwarancji zysku.</p>
+      <h3>Ryzyko</h3><p>Kontrakty, kryptowaluty i dźwignia mogą prowadzić do szybkiej utraty części lub całości kapitału. Użytkownik sam ustala margin i akceptuje ryzyko.</p>
+      <h3>Klucze API</h3><p>Klucze powinny mieć wyłącznie uprawnienia Read i Futures/Trade. Nigdy nie wolno nadawać uprawnień do wypłat ani transferów.</p>
+    </div>
+    <div class="modal-foot"><button id="accept-terms" class="btn btn-gold">Rozumiem i akceptuję</button></div>
+  </dialog>
 
-function verificationMessage(
-  result: Record<string, unknown>,
-  exchange: ExchangeConfig,
-) {
-  if (typeof result.message === "string" && result.message.trim()) {
-    return result.message;
-  }
-  if (result.verification_status === "verified") {
-    return `${exchange.name}: klucze i tryb ${exchange.mode} zostały potwierdzone.`;
-  }
-  if (result.verification_status === "manual_beta") {
-    return `${exchange.name}: klucze są poprawne. Administrator musi zatwierdzić politykę opłat przed LIVE.`;
-  }
-  if (result.verification_status === "canary_required") {
-    return `${exchange.name}: klucze są poprawne. Wymagany jest kontrolowany canary przed LIVE.`;
-  }
-  return `${exchange.name}: ustawienia zostały zapisane.`;
-}
+  <script>
+    "use strict";
 
-function verificationStatusLabel(status?: string) {
-  const labels: Record<string, string> = {
-    verified: "Połączenie LIVE zweryfikowane",
-    legacy_migrated: "Połączenie LIVE — konfiguracja przeniesiona",
-    canary_required: "Klucze poprawne — wymagany canary",
-    canary_verified: "Canary zatwierdzony",
-    manual_beta: "Klucze poprawne — wymagana walidacja BETA",
-    manual_verified: "Walidacja BETA zatwierdzona",
-    live_blocked: "Handel LIVE zablokowany",
-    not_configured: "Nie skonfigurowano",
-  };
-  return status ? labels[status] ?? status.replaceAll("_", " ") : "Oczekuje";
-}
+    /*
+      Jeżeli API działa pod innym adresem, zmień tylko poniższą linię.
+      Bez końcowego ukośnika.
+    */
+    const API_BASE_URL = "https://czarnaperla.duckdns.org";
+    const TELEGRAM_BOT = "czarna_perla_auth_bot";
 
-function isExchangeId(value: unknown): value is ExchangeId {
-  return (
-    typeof value === "string" &&
-    Object.prototype.hasOwnProperty.call(exchangeMap, value)
-  );
-}
+    const EXCHANGES = [
+      {id:"bitget",name:"Bitget",market:"USDT Futures",status:"live",label:"LIVE",selectable:true,passphrase:true,mode:"One-way",fields:"API Key + API Secret + Passphrase",description:"Natywna obsługa wejść, SL, TP, trailing stopu i dziennego PnL.",docs:"https://www.bitget.com/api-doc/common/signature",steps:["Utwórz oddzielny klucz API dla Czarnej Perły.","Włącz odczyt konta i handel Futures; wyłącz wypłaty oraz transfery.","Dodaj IP serwera, zapisz Passphrase i ustaw USDT Futures na One-way.","Wklej trzy dane do formularza i rozpocznij test minimalnym marginem."]},
+      {id:"binanceusdm",name:"Binance",market:"USD-M Futures",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:false,mode:"One-way",fields:"API Key + API Secret",description:"Adapter gotowy; każde konto przechodzi smoke test i minimalny canary.",docs:"https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info",steps:["Utwórz oddzielny klucz w API Management.","Włącz Read i Enable Futures; wyłącz Withdraw oraz Transfer.","Dodaj IP serwera i ustaw Position Mode na One-way.","Wklej API Key i API Secret; system wykona kontrolny odczyt."]},
+      {id:"bybit",name:"Bybit",market:"Linear USDT",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:false,mode:"One-way",fields:"API Key + API Secret",description:"Kontrakty linear z kontrolą trybu pozycji i dziennego PnL.",docs:"https://bybit-exchange.github.io/docs/v5/intro",steps:["Utwórz System-generated API Key.","Nadaj Read oraz Contract/Derivatives Trade; wyłącz Withdraw.","Ogranicz klucz adresem IP serwera i ustaw One-way.","Wklej API Key i API Secret, a następnie poczekaj na test konta."]},
+      {id:"okx",name:"OKX",market:"USDT Perpetual SWAP",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:true,mode:"Net",fields:"API Key + API Secret + Passphrase",description:"Obsługa SWAP; wymagane są trzy dane API i tryb pozycji Net.",docs:"https://www.okx.com/docs-v5/en/",steps:["Utwórz klucz z uprawnieniami Read oraz Trade.","Wyłącz wypłaty, dodaj IP serwera i zapisz Passphrase.","Dla USDT SWAP ustaw Position Mode na Net.","Wklej API Key, API Secret i Passphrase."]},
+      {id:"gate",name:"Gate",market:"USDT Perpetual",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:false,mode:"Single / One-way",fields:"API Key + API Secret",description:"USDT perpetual z natywnym rozliczaniem zamkniętych pozycji.",docs:"https://www.gate.com/docs/developers/apiv4/en/",steps:["Utwórz osobny klucz APIv4.","Nadaj Futures Read-Write; wyłącz wypłaty i transfery.","Dodaj IP, wybierz rozliczenie USDT oraz Single/One-way.","Wklej API Key i API Secret."]},
+      {id:"bitunix",name:"Bitunix",market:"USDT Futures",status:"beta",label:"BETA — RĘCZNA AKTYWACJA",selectable:true,passphrase:false,mode:"One-way",fields:"API Key + API Secret",description:"Adapter gotowy; pierwsze konto wymaga kontroli księgowania opłat.",docs:"https://www.bitunix.com/api-docs/futures/common/introduction.html",steps:["Utwórz klucz Futures z odczytem i handlem; wyłącz wypłaty.","Dodaj IP serwera i ustaw One-way.","Zapisz klucze; konto otrzyma status oczekiwania BETA.","Pierwszy test wykonaj minimalnym marginem."]},
+      {id:"mexc",name:"MEXC",market:"Futures / Shadow",status:"blocked",label:"LIVE ZABLOKOWANY",selectable:false,passphrase:false,mode:"Shadow",fields:"Nie wprowadzaj kluczy",description:"Dane mogą być obserwowane, lecz prawdziwe zlecenia są wyłączone fail-closed.",docs:"https://mexcdevelop.github.io/apidocs/contract_v1_en/",steps:["MEXC pozostaje wyłącznie planowanym rozszerzeniem.","Nie wprowadzaj kluczy API i nie uruchamiaj handlu LIVE.","Shadow nie oznacza zgody na prawdziwe zlecenia.","Połączenie zostanie udostępnione po pełnej walidacji."]}
+    ];
 
-function normalizeExchangeAccounts(
-  dashboardData: DashboardData | null,
-): ExchangeAccountData[] {
-  if (!dashboardData) return [];
-  const source = Array.isArray(dashboardData.exchange_accounts)
-    ? dashboardData.exchange_accounts
-    : Array.isArray(dashboardData.accounts)
-      ? dashboardData.accounts
-      : null;
+    const state = {
+      page: "landing",
+      telegramUser: null,
+      dashboard: null,
+      csrf: "",
+      session: sessionStorage.getItem("cp_session") || "",
+      isAdmin: false,
+      isSuperAdmin: false,
+      multiExchange: false,
+      capabilities: {},
+      accounts: [],
+      togglingExchange: ""
+    };
 
-  if (source) {
-    const unique = new Map<ExchangeId, ExchangeAccountData>();
-    source.forEach((account) => {
-      if (!isExchangeId(account?.exchange)) return;
-      unique.set(account.exchange, account);
-    });
-    return Array.from(unique.values());
-  }
+    const byId = id => document.getElementById(id);
+    const exchangeById = id => EXCHANGES.find(item => item.id === id) || EXCHANGES[0];
 
-  if (!isExchangeId(dashboardData.exchange)) return [];
-  const hasLegacyConfiguration =
-    dashboardData.credentials_configured === true ||
-    dashboardData.api_connected === true ||
-    Boolean(
-      dashboardData.verification_status &&
-        dashboardData.verification_status !== "not_configured",
-    );
-  if (!hasLegacyConfiguration) return [];
-
-  return [
-    {
-      exchange: dashboardData.exchange,
-      is_selected: true,
-      is_enabled: Boolean(dashboardData.api_connected),
-      live_trading_enabled: Boolean(dashboardData.api_connected),
-      credentials_configured: Boolean(
-        dashboardData.credentials_configured ??
-          dashboardData.api_connected,
-      ),
-      api_connected: Boolean(dashboardData.api_connected),
-      verification_status:
-        dashboardData.verification_status ??
-        (dashboardData.api_connected ? "verified" : "not_configured"),
-      leverage: dashboardData.leverage,
-      margin: dashboardData.margin,
-      max_risk: dashboardData.max_risk,
-      margin_mode: dashboardData.margin_mode,
-    },
-  ];
-}
-
-function normalizeAdminExchangeAccounts(
-  user: AdminUser,
-): ExchangeAccountData[] {
-  const source = Array.isArray(user.exchange_accounts)
-    ? user.exchange_accounts
-    : Array.isArray(user.accounts)
-      ? user.accounts
-      : null;
-  if (source) {
-    return source.filter((account) => isExchangeId(account?.exchange));
-  }
-  if (!isExchangeId(user.exchange)) return [];
-  return [
-    {
-      exchange: user.exchange,
-      is_selected: true,
-      is_enabled: Boolean(user.bot_active),
-      live_trading_enabled: Boolean(user.bot_active),
-      credentials_configured:
-        user.verification_status !== "not_configured",
-      api_connected: Boolean(user.bot_active),
-      verification_status: user.verification_status ?? "not_configured",
-    },
-  ];
-}
-
-function accountStateLabel(account: ExchangeAccountData) {
-  if (!account.credentials_configured) return "Brak kluczy";
-  if (!account.is_enabled) return "Wyłączona";
-  if (account.api_connected) return "Aktywna LIVE";
-  if (!account.live_trading_enabled) return "Oczekuje na dopuszczenie LIVE";
-  return "Włączona — oczekuje na połączenie";
-}
-
-export default function Home() {
-  const [page, setPage] = useState<PageName>("landing");
-  const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(null);
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-  const [selectedExchange, setSelectedExchange] =
-    useState<ExchangeId>("bitget");
-  const [instructionExchange, setInstructionExchange] =
-    useState<ExchangeId>("bitget");
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [multiExchangeEnabled, setMultiExchangeEnabled] = useState(false);
-  const [exchangeCapabilities, setExchangeCapabilities] = useState<
-    Partial<Record<ExchangeId, ExchangeCapability>>
-  >({});
-  const [sessionVerified, setSessionVerified] = useState(false);
-  const [legacyMode, setLegacyMode] = useState(false);
-  const [csrfToken, setCsrfToken] = useState("");
-  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminActionMessage, setAdminActionMessage] = useState("");
-  const [rolloutFeePolicy, setRolloutFeePolicy] =
-    useState<BitunixFeePolicy>("deduct_positive");
-  const [connectionState, setConnectionState] = useState<
-    "idle" | "loading" | "success" | "error"
-  >("idle");
-  const [saveMessage, setSaveMessage] = useState("");
-  const [togglingExchange, setTogglingExchange] =
-    useState<ExchangeId | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showSecret, setShowSecret] = useState(false);
-  const [showPassphrase, setShowPassphrase] = useState(false);
-  const [termsOpen, setTermsOpen] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [apiSecret, setApiSecret] = useState("");
-  const [apiPassphrase, setApiPassphrase] = useState("");
-  const [apiUid, setApiUid] = useState("");
-  const [subaccount, setSubaccount] = useState("");
-  const [margin, setMargin] = useState("4");
-  const [leverage, setLeverage] = useState("20");
-  const [maxRisk, setMaxRisk] = useState("20");
-  const [marginMode, setMarginMode] = useState<"isolated" | "cross">("isolated");
-
-  const exchange = exchangeMap[selectedExchange];
-  const instruction = exchangeMap[instructionExchange];
-  const configuredAccounts = normalizeExchangeAccounts(dashboard);
-  const selectedAccount = configuredAccounts.find(
-    (account) => account.exchange === selectedExchange,
-  );
-  const enabledAccounts = configuredAccounts.filter(
-    (account) => account.is_enabled,
-  );
-  const connectedAccounts = configuredAccounts.filter(
-    (account) => account.api_connected,
-  );
-  const applyDashboardData = useCallback(
-    (data: DashboardData, secureSession: boolean) => {
-      if (data.status !== "success") {
-        throw new Error("Serwer nie potwierdził profilu.");
-      }
-      setSessionVerified(secureSession);
-      setLegacyMode(!secureSession);
-      setDashboard(data);
-      const accounts = normalizeExchangeAccounts(data);
-      const preferredAccount =
-        accounts.find((account) => account.is_selected) ??
-        accounts.find((account) => account.exchange === data.exchange) ??
-        accounts.find((account) => account.is_enabled) ??
-        accounts[0];
-      const preferredExchange =
-        preferredAccount?.exchange ??
-        (isExchangeId(data.exchange) ? data.exchange : undefined);
-      if (preferredExchange) {
-        setSelectedExchange(preferredExchange);
-        setInstructionExchange(preferredExchange);
-        setApiPassphrase("");
-        setShowPassphrase(false);
-      }
-      const preferredMargin = preferredAccount?.margin ?? data.margin;
-      const preferredLeverage =
-        preferredAccount?.leverage ?? data.leverage;
-      const preferredMaxRisk = preferredAccount?.max_risk ?? data.max_risk;
-      const preferredMarginMode =
-        preferredAccount?.margin_mode ?? data.margin_mode;
-      if (preferredMargin != null) setMargin(String(preferredMargin));
-      if (preferredLeverage != null) setLeverage(String(preferredLeverage));
-      if (preferredMaxRisk != null) setMaxRisk(String(preferredMaxRisk));
-      if (preferredMarginMode) setMarginMode(preferredMarginMode);
-      setIsAdmin(secureSession && data.is_admin === true);
-      setConnectionState("success");
-      if (!secureSession) {
-        setSaveMessage(
-          "Panel działa w trybie zgodności. Administrator i nowe giełdy pozostają zablokowane do czasu uruchomienia bezpiecznej sesji.",
-        );
-      }
-    },
-    [],
-  );
-
-  const fetchDashboardSession = useCallback(async () => {
-    const response = await fetch(`${API_BASE_URL}/api/dashboard/me`, {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-    const data = (await readJson(response)) as DashboardData;
-    applyDashboardData(data, true);
-    return data;
-  }, [applyDashboardData]);
-
-  const authenticateTelegram = useCallback(
-    async (user: TelegramUser) => {
-      setConnectionState("loading");
-      setSaveMessage("");
-      const name = `${user.first_name}${user.last_name ? ` ${user.last_name}` : ""}`;
-      try {
-        const authResponse = await fetch(`${API_BASE_URL}/api/auth/telegram`, {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(user),
+    function normalizeExchangeAccounts(data) {
+      if (!data) return [];
+      const source = Array.isArray(data.exchange_accounts)
+        ? data.exchange_accounts
+        : Array.isArray(data.accounts)
+          ? data.accounts
+          : null;
+      if (source) {
+        const unique = new Map();
+        source.forEach(account => {
+          if (!account || !EXCHANGES.some(item => item.id === account.exchange)) return;
+          unique.set(account.exchange, account);
         });
-
-        if ([404, 405].includes(authResponse.status)) {
-          const legacyResponse = await fetch(
-            `${API_BASE_URL}/api/dashboard/${encodeURIComponent(user.id)}?name=${encodeURIComponent(name)}`,
-            {
-              method: "GET",
-              credentials: "include",
-              headers: { Accept: "application/json" },
-            },
-          );
-          const legacyData = (await readJson(
-            legacyResponse,
-          )) as DashboardData;
-          applyDashboardData(legacyData, false);
-          return;
-        }
-
-        const authData = await readJson(authResponse);
-        setCsrfToken(String(authData?.csrf_token ?? ""));
-        await fetchDashboardSession();
-      } catch (error) {
-        setSessionVerified(false);
-        setIsAdmin(false);
-        setConnectionState("error");
-        setSaveMessage(
-          error instanceof Error
-            ? error.message
-            : "Nie udało się utworzyć bezpiecznej sesji.",
-        );
+        return Array.from(unique.values());
       }
-    },
-    [applyDashboardData, fetchDashboardSession],
-  );
+      const valid = EXCHANGES.some(item => item.id === data.exchange);
+      const configured = data.credentials_configured === true
+        || data.api_connected === true
+        || Boolean(data.verification_status && data.verification_status !== "not_configured");
+      if (!valid || !configured) return [];
+      return [{
+        exchange:data.exchange,
+        is_selected:true,
+        is_enabled:Boolean(data.api_connected),
+        live_trading_enabled:Boolean(data.api_connected),
+        credentials_configured:Boolean(data.credentials_configured == null ? data.api_connected : data.credentials_configured),
+        api_connected:Boolean(data.api_connected),
+        verification_status:data.verification_status || (data.api_connected ? "verified" : "not_configured"),
+        leverage:data.leverage,
+        margin:data.margin,
+        max_risk:data.max_risk,
+        margin_mode:data.margin_mode
+      }];
+    }
 
-  const fetchCapabilities = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/capabilities`, {
-        method: "GET",
-        credentials: "include",
-        headers: { Accept: "application/json" },
+    function accountStateLabel(account) {
+      if (!account.credentials_configured) return "Brak kluczy";
+      if (!account.is_enabled) return "Wyłączona";
+      if (account.api_connected) return "Aktywna LIVE";
+      if (!account.live_trading_enabled) return "Oczekuje na dopuszczenie LIVE";
+      return "Włączona — oczekuje na połączenie";
+    }
+
+    function apiHeaders(extra) {
+      const headers = Object.assign({Accept:"application/json"}, extra || {});
+      if (state.session) headers["X-Session-Token"] = state.session;
+      return headers;
+    }
+
+    function clearSensitiveFields() {
+      ["api-key","api-secret","api-passphrase"].forEach(id => {
+        const input = byId(id);
+        if (input) input.value = "";
       });
-      const data = (await readJson(response)) as CapabilitiesData;
-      setMultiExchangeEnabled(data.multi_exchange === true);
-      setExchangeCapabilities(data.exchanges ?? {});
-    } catch {
-      // Fail-closed: stary backend pozostawia dostępny tylko Bitget.
-      setMultiExchangeEnabled(false);
-      setExchangeCapabilities({});
-    }
-  }, []);
-
-  useEffect(() => {
-    window.onTelegramAuth = (user: TelegramUser) => {
-      setTelegramUser(user);
-      setPage("dashboard");
-      void authenticateTelegram(user);
-    };
-
-    const capabilityTimer = window.setTimeout(() => {
-      void fetchCapabilities();
-    }, 0);
-
-    return () => {
-      window.clearTimeout(capabilityTimer);
-      delete window.onTelegramAuth;
-    };
-  }, [authenticateTelegram, fetchCapabilities]);
-
-  useEffect(() => {
-    if (page !== "dashboard" || telegramUser) return;
-    const host = document.getElementById("telegram-login-widget");
-    if (!host || host.querySelector("script")) return;
-
-    const script = document.createElement("script");
-    script.async = true;
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.setAttribute("data-telegram-login", TELEGRAM_BOT);
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-radius", "8");
-    script.setAttribute("data-onauth", "onTelegramAuth(user)");
-    script.setAttribute("data-request-access", "write");
-    host.appendChild(script);
-  }, [page, telegramUser]);
-
-  async function saveSettings(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!telegramUser) {
-      setSaveMessage("Najpierw zaloguj się przez Telegram.");
-      setConnectionState("error");
-      return;
-    }
-    if (
-      !canSelectExchange(exchange) ||
-      effectiveStatus(exchange) === "blocked"
-    ) {
-      setSaveMessage("Handel LIVE na tej giełdzie jest zablokowany.");
-      setConnectionState("error");
-      return;
-    }
-    if (!apiKey.trim() || !apiSecret.trim()) {
-      setSaveMessage("Uzupełnij API Key i API Secret.");
-      setConnectionState("error");
-      return;
-    }
-    if (exchange.passphrase && !apiPassphrase.trim()) {
-      setSaveMessage(`${exchange.name} wymaga Passphrase.`);
-      setConnectionState("error");
-      return;
     }
 
-    const parsedMargin = Number(margin);
-    const parsedLeverage = Number(leverage);
-    const parsedRisk = Number(maxRisk);
-    if (
-      !Number.isFinite(parsedMargin) ||
-      parsedMargin < 1 ||
-      parsedMargin > 1000 ||
-      !Number.isInteger(parsedLeverage) ||
-      parsedLeverage < 1 ||
-      parsedLeverage > 100 ||
-      !Number.isFinite(parsedRisk) ||
-      parsedRisk < 1 ||
-      parsedRisk > 1000
-    ) {
-      setSaveMessage(
-        "Dozwolone zakresy: margin i ryzyko 1–1000 USDT, dźwignia 1–100x.",
-      );
-      setConnectionState("error");
-      return;
+    function clearSessionState() {
+      state.telegramUser = null;
+      state.dashboard = null;
+      state.csrf = "";
+      state.session = "";
+      state.isAdmin = false;
+      state.isSuperAdmin = false;
+      state.accounts = [];
+      state.togglingExchange = "";
+      sessionStorage.removeItem("cp_session");
+      byId("admin-nav").classList.add("hidden");
+      byId("accounts-panel").classList.add("hidden");
+      clearSensitiveFields();
     }
 
-    setConnectionState("loading");
-    setSaveMessage(`Weryfikuję połączenie z ${exchange.name}…`);
-
-    const payload = {
-      telegram_id: String(telegramUser.id),
-      exchange: selectedExchange,
-      api_key: apiKey.trim(),
-      api_secret: apiSecret.trim(),
-      api_passphrase: exchange.passphrase ? apiPassphrase.trim() : "",
-      api_uid: apiUid.trim(),
-      subaccount: subaccount.trim(),
-      margin_mode: marginMode,
-      leverage: parsedLeverage,
-      margin: parsedMargin,
-      max_risk: parsedRisk,
-    };
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/save_settings`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
-        },
-        body: JSON.stringify(payload),
-      });
-      const result = await readJson(response);
-      if (result.status !== "success") {
-        throw new Error(result.message || "Serwer nie potwierdził zapisu.");
-      }
-      const confirmedMessage = verificationMessage(result, exchange);
-      setApiKey("");
-      setApiSecret("");
-      setApiPassphrase("");
-      setApiUid("");
-      setSubaccount("");
-      // Od tej chwili odświeżamy profil wyłącznie przez ważną sesję.
-      // Podpis Telegram Login jest jednorazowy i po kilku minutach wygasa.
-      await fetchDashboardSession();
-      setSelectedExchange(selectedExchange);
-      setInstructionExchange(selectedExchange);
-      setMargin(String(parsedMargin));
-      setLeverage(String(parsedLeverage));
-      setMaxRisk(String(parsedRisk));
-      setMarginMode(marginMode);
-      setConnectionState("success");
-      setSaveMessage(
-        `${confirmedMessage} Pozostałe podłączone giełdy zachowały swoje ustawienia i stan ON/OFF.`,
-      );
-    } catch (error) {
-      setConnectionState("error");
-      setSaveMessage(
-        error instanceof Error
-          ? error.message
-          : "Serwer odrzucił konfigurację.",
-      );
+    function setText(id, value) {
+      const node = byId(id);
+      if (node) node.textContent = value == null ? "" : String(value);
     }
-  }
 
-  async function toggleExchangeAccount(
-    account: ExchangeAccountData,
-    enabled: boolean,
-  ) {
-    if (!sessionVerified || legacyMode) {
-      setConnectionState("error");
-      setSaveMessage(
-        "Niezależne włączanie giełd wymaga bezpiecznej sesji i aktualnego API panelu.",
-      );
-      return;
+    function showPage(name) {
+      if (name === "admin" && !state.isAdmin) return;
+      document.querySelectorAll(".page").forEach(page => page.classList.toggle("active", page.id === name));
+      document.querySelectorAll(".nav-btn[data-page]").forEach(btn => btn.classList.toggle("active", btn.dataset.page === name));
+      state.page = name;
+      if (name === "dashboard") ensureTelegramWidget();
+      if (name === "admin") loadAdminUsers();
+      window.scrollTo({top:0, behavior:"smooth"});
     }
-    setTogglingExchange(account.exchange);
-    setConnectionState("loading");
-    setSaveMessage(
-      `${enabled ? "Włączam" : "Wyłączam"} ${exchangeMap[account.exchange].name}…`,
-    );
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/exchange_accounts/${account.exchange}/toggle`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
-          },
-          body: JSON.stringify({ enabled }),
-        },
-      );
-      const result = await readJson(response);
-      await fetchDashboardSession();
-      setSelectedExchange(selectedExchange);
-      setInstructionExchange(selectedExchange);
-      if (selectedAccount) {
-        setMargin(String(selectedAccount.margin ?? 4));
-        setLeverage(String(selectedAccount.leverage ?? 20));
-        setMaxRisk(String(selectedAccount.max_risk ?? 20));
-        setMarginMode(selectedAccount.margin_mode ?? "isolated");
-      }
-      setConnectionState("success");
-      setSaveMessage(
-        typeof result.message === "string"
-          ? result.message
-          : `${exchangeMap[account.exchange].name} została ${
-              enabled ? "włączona" : "wyłączona"
-            }. Pozostałe giełdy działają bez zmian.`,
-      );
-    } catch (error) {
-      setConnectionState("error");
-      setSaveMessage(
-        error instanceof Error
-          ? error.message
-          : "Nie udało się zmienić stanu giełdy.",
-      );
-    } finally {
-      setTogglingExchange(null);
+
+    function statusLabel(item) {
+      const cap = state.capabilities[item.id];
+      if (!cap) return item.label;
+      if (cap.status === "live") return "LIVE";
+      if (cap.status === "canary_required") return "LIVE PO CANARY";
+      if (cap.status === "manual_beta") return "BETA — RĘCZNA AKTYWACJA";
+      if (cap.status === "live_blocked") return "LIVE ZABLOKOWANY";
+      return String(cap.status || item.label).replaceAll("_"," ").toUpperCase();
     }
-  }
 
-  async function fetchAdminData() {
-    if (!isAdmin || !telegramUser || !sessionVerified) return;
-    setAdminLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
-        },
-        body: JSON.stringify({
-          admin_id: String(telegramUser.id),
-        }),
-      });
-      const data = await readJson(response);
-      setAdminUsers(Array.isArray(data.users) ? data.users : []);
-    } catch (error) {
-      setAdminUsers([]);
-      setAdminActionMessage(
-        error instanceof Error
-          ? error.message
-          : "Nie udało się pobrać danych administratora.",
-      );
-    } finally {
-      setAdminLoading(false);
+    function canSelect(item) {
+      if (!item.selectable || item.id === "mexc") return false;
+      if (!state.multiExchange) return item.id === "bitget";
+      const cap = state.capabilities[item.id];
+      return Boolean(cap && cap.enabled && cap.status !== "live_blocked");
     }
-  }
 
-  async function adminMutation(
-    endpoint: string,
-    payload: Record<string, unknown>,
-  ) {
-    if (!telegramUser || !isAdmin || !sessionVerified) return undefined;
-    setAdminActionMessage("Zapisywanie zmiany…");
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
-        },
-        body: JSON.stringify({
-          ...payload,
-          admin_id: String(telegramUser.id),
-        }),
-      });
-      const result = await readJson(response);
-      setAdminActionMessage(
-        typeof result.message === "string"
-          ? result.message
-          : "Zmiana została zapisana.",
-      );
-      await fetchAdminData();
-      return result as Record<string, unknown>;
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Serwer odrzucił zmianę.";
-      setAdminActionMessage(message);
-      throw error;
-    }
-  }
-
-  async function approveGlobalRollout(
-    exchangeId: ExchangeId,
-    canaryRecordId: number,
-    feePolicy?: BitunixFeePolicy,
-  ) {
-    const target = exchangeMap[exchangeId];
-    const confirmed = window.confirm(
-      `Zwolnić ${target.name} globalnie do LIVE? Zrób to wyłącznie po zakończonym canary i sprawdzeniu rekordu ${canaryRecordId}.`,
-    );
-    if (!confirmed) return;
-    await adminMutation("/api/admin/approve_exchange_rollout", {
-      exchange: exchangeId,
-      canary_record_id: canaryRecordId,
-      ...(exchangeId === "bitunix"
-        ? { bitunix_fee_policy: feePolicy ?? rolloutFeePolicy }
-        : {}),
-    });
-    await fetchCapabilities();
-  }
-
-  function navigate(nextPage: PageName) {
-    if (nextPage === "admin" && !isAdmin) return;
-    setPage(nextPage);
-    if (nextPage === "admin") void fetchAdminData();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function chooseExchange(id: ExchangeId) {
-    const next = exchangeMap[id];
-    setInstructionExchange(id);
-    if (!canSelectExchange(next)) {
-      document
-        .getElementById("exchange-instructions")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    changeSelectedExchange(id);
-    setPage("dashboard");
-    window.setTimeout(() => {
-      document
-        .getElementById("exchange-form")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
-  }
-
-  function clearLocalSession() {
-    setTelegramUser(null);
-    setDashboard(null);
-    setIsAdmin(false);
-    setSessionVerified(false);
-    setLegacyMode(false);
-    setCsrfToken("");
-    setAdminUsers([]);
-    setApiKey("");
-    setApiSecret("");
-    setApiPassphrase("");
-    setSaveMessage("");
-    setTogglingExchange(null);
-    setConnectionState("idle");
-    setPage("landing");
-  }
-
-  async function logout() {
-    if (sessionVerified) {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            Accept: "application/json",
-            ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
-          },
+    function renderExchangeCards() {
+      const host = byId("exchange-cards");
+      host.replaceChildren();
+      EXCHANGES.forEach(item => {
+        const card = document.createElement("article");
+        card.className = "card exchange-card " + item.status;
+        const top = document.createElement("div");
+        top.className = "exchange-top";
+        const title = document.createElement("div");
+        const h = document.createElement("h3");
+        h.textContent = item.name;
+        const market = document.createElement("small");
+        market.textContent = item.market;
+        title.append(h, market);
+        const chip = document.createElement("span");
+        chip.className = "status";
+        chip.textContent = statusLabel(item);
+        top.append(title, chip);
+        const desc = document.createElement("p");
+        desc.textContent = item.description;
+        const meta = document.createElement("div");
+        meta.className = "exchange-meta";
+        meta.textContent = item.fields + " • tryb " + item.mode;
+        const button = document.createElement("button");
+        button.className = "btn btn-outline";
+        button.textContent = item.id === "mexc" ? "LIVE zablokowany — zobacz instrukcję" : "Podłącz w panelu inwestora";
+        button.addEventListener("click", () => {
+          showPage("dashboard");
+          byId("exchange-select").value = item.id;
+          updateSelectedExchange();
+          setTimeout(() => byId("instruction-card").scrollIntoView({behavior:"smooth"}), 50);
         });
-        await readJson(response);
-      } catch (error) {
-        setConnectionState("error");
-        setSaveMessage(
-          error instanceof Error
-            ? `Nie udało się zakończyć sesji: ${error.message}`
-            : "Nie udało się zakończyć sesji. Spróbuj ponownie.",
-        );
-        setPage("dashboard");
+        card.append(top, desc, meta, button);
+        host.append(card);
+      });
+    }
+
+    function renderExchangeSelect() {
+      const select = byId("exchange-select");
+      const current = select.value || "bitget";
+      select.replaceChildren();
+      EXCHANGES.forEach(item => {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = item.name + " — " + statusLabel(item);
+        option.disabled = !canSelect(item);
+        select.append(option);
+      });
+      select.value = EXCHANGES.some(x => x.id === current && canSelect(x)) ? current : "bitget";
+      updateSelectedExchange();
+    }
+
+    function updateSelectedExchange() {
+      const item = exchangeById(byId("exchange-select").value);
+      byId("passphrase-wrap").classList.toggle("hidden", !item.passphrase);
+      setText("instruction-title", "Instrukcja podłączenia: " + item.name);
+      setText("instruction-lead", item.description + " Wymagane dane: " + item.fields + ".");
+      const list = byId("instruction-list");
+      list.replaceChildren();
+      item.steps.forEach(step => {
+        const li = document.createElement("li");
+        li.textContent = step;
+        list.append(li);
+      });
+      byId("docs-link").href = item.docs;
+    }
+
+    function useAccountSettings(exchangeId) {
+      const account = state.accounts.find(item => item.exchange === exchangeId);
+      if (!account) return;
+      if (account.margin != null) byId("margin").value = account.margin;
+      if (account.leverage != null) byId("leverage").value = account.leverage;
+      if (account.max_risk != null) byId("max-risk").value = account.max_risk;
+      if (account.margin_mode) byId("margin-mode").value = account.margin_mode;
+    }
+
+    function selectExchangeForEditing(exchangeId) {
+      if (!EXCHANGES.some(item => item.id === exchangeId)) return;
+      byId("exchange-select").value = exchangeId;
+      clearSensitiveFields();
+      updateSelectedExchange();
+      useAccountSettings(exchangeId);
+      byId("exchange-form").scrollIntoView({behavior:"smooth", block:"start"});
+    }
+
+    function renderExchangeAccounts() {
+      const body = byId("exchange-accounts");
+      body.replaceChildren();
+      const enabled = state.accounts.filter(account => account.is_enabled).length;
+      const connected = state.accounts.filter(account => account.api_connected).length;
+      setText("accounts-summary", connected + " LIVE / " + enabled + " ON / " + state.accounts.length + " skonfigurowanych");
+      if (!state.accounts.length) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 7;
+        cell.textContent = "Nie zapisano jeszcze żadnej giełdy. Wybierz ją w formularzu poniżej.";
+        cell.style.color = "var(--muted)";
+        row.append(cell);
+        body.append(row);
         return;
       }
+      state.accounts.forEach(account => {
+        const item = exchangeById(account.exchange);
+        const row = document.createElement("tr");
+
+        const exchangeCell = document.createElement("td");
+        const name = document.createElement("strong");
+        name.textContent = item.name;
+        const market = document.createElement("span");
+        market.className = "muted-cell";
+        market.textContent = item.market;
+        exchangeCell.append(name, document.createElement("br"), market);
+
+        const stateCell = document.createElement("td");
+        stateCell.textContent = accountStateLabel(account);
+        const verifyCell = document.createElement("td");
+        verifyCell.textContent = verificationLabel(account.verification_status);
+        const paramsCell = document.createElement("td");
+        paramsCell.textContent = (account.margin == null ? "—" : account.margin) + " USDT / " + (account.leverage == null ? "—" : account.leverage) + "x";
+        const modeCell = document.createElement("td");
+        modeCell.textContent = account.margin_mode === "cross" ? "Cross" : "Isolated";
+
+        const toggleCell = document.createElement("td");
+        const toggleLabel = document.createElement("label");
+        toggleLabel.className = "switch";
+        const toggle = document.createElement("input");
+        toggle.type = "checkbox";
+        toggle.checked = Boolean(account.is_enabled);
+        toggle.disabled = !account.credentials_configured || state.togglingExchange === account.exchange;
+        toggle.setAttribute("aria-label", (toggle.checked ? "Wyłącz " : "Włącz ") + item.name);
+        const track = document.createElement("span");
+        track.className = "switch-track";
+        toggleLabel.append(toggle, track);
+        toggleCell.append(toggleLabel);
+        toggle.addEventListener("change", () => toggleExchangeAccount(account, toggle.checked));
+
+        const editCell = document.createElement("td");
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.className = "table-btn";
+        edit.textContent = "Edytuj osobno";
+        edit.addEventListener("click", () => selectExchangeForEditing(account.exchange));
+        editCell.append(edit);
+
+        row.append(exchangeCell, stateCell, verifyCell, paramsCell, modeCell, toggleCell, editCell);
+        body.append(row);
+      });
     }
-    clearLocalSession();
-  }
 
-  function capabilityFor(item: ExchangeConfig) {
-    return exchangeCapabilities[item.id];
-  }
-
-  function effectiveStatus(item: ExchangeConfig): ExchangeStatus {
-    const status = capabilityFor(item)?.status;
-    if (status === "live") return "live";
-    if (status === "canary_required") return "test";
-    if (status === "manual_beta") return "beta";
-    if (status === "live_blocked") return "blocked";
-    return item.status;
-  }
-
-  function effectiveStatusLabel(item: ExchangeConfig) {
-    const capability = capabilityFor(item);
-    if (!capability) return item.statusLabel;
-    if (!capability.enabled) {
-      return capability.status === "live_blocked"
-        ? "LIVE ZABLOKOWANY"
-        : "WYŁĄCZONA";
+    async function toggleExchangeAccount(account, enabled) {
+      if (!state.telegramUser || !state.csrf) {
+        setText("accounts-status", "Zaloguj się ponownie przez Telegram.");
+        return;
+      }
+      state.togglingExchange = account.exchange;
+      renderExchangeAccounts();
+      setText("accounts-status", (enabled ? "Włączam " : "Wyłączam ") + exchangeById(account.exchange).name + "…");
+      try {
+        const response = await fetch(API_BASE_URL + "/api/exchange_accounts/" + encodeURIComponent(account.exchange) + "/toggle", {
+          method:"POST",
+          credentials:"include",
+          headers:apiHeaders({"Content-Type":"application/json","X-CSRF-Token":state.csrf}),
+          body:JSON.stringify({enabled:Boolean(enabled)})
+        });
+        const result = await readJson(response);
+        await loadDashboard();
+        setText("accounts-status", result.message || (exchangeById(account.exchange).name + " została " + (enabled ? "włączona." : "wyłączona.")));
+      } catch (error) {
+        setText("accounts-status", error.message || "Nie udało się zmienić stanu giełdy.");
+      } finally {
+        state.togglingExchange = "";
+        renderExchangeAccounts();
+      }
     }
-    if (capability.status === "live") return "LIVE";
-    if (capability.status === "canary_required") return "LIVE PO CANARY";
-    if (capability.status === "manual_beta") {
-      return "BETA — AKTYWACJA RĘCZNA";
+
+    async function readJson(response) {
+      const type = response.headers.get("content-type") || "";
+      if (!type.includes("application/json")) throw new Error("Serwer zwrócił nieprawidłową odpowiedź (" + response.status + ").");
+      const data = await response.json();
+      if (!response.ok) {
+        const error = new Error(data.message || data.detail || "Błąd HTTP " + response.status);
+        error.status = response.status;
+        throw error;
+      }
+      return data;
     }
-    return String(capability.status).replaceAll("_", " ").toUpperCase();
-  }
 
-  function canSelectExchange(item: ExchangeConfig) {
-    if (!item.selectable || item.status === "blocked") return false;
-    if (!multiExchangeEnabled) return item.id === "bitget";
-    const capability = capabilityFor(item);
-    return Boolean(
-      capability?.enabled && capability.status !== "live_blocked",
-    );
-  }
+    async function loadCapabilities() {
+      try {
+        const response = await fetch(API_BASE_URL + "/api/capabilities", {credentials:"include", headers:{Accept:"application/json"}});
+        const data = await readJson(response);
+        state.multiExchange = data.multi_exchange === true;
+        state.capabilities = data.exchanges || {};
+      } catch (_) {
+        state.multiExchange = false;
+        state.capabilities = {};
+      }
+      renderExchangeCards();
+      renderExchangeSelect();
+    }
 
-  function changeSelectedExchange(id: ExchangeId) {
-    const account = configuredAccounts.find(
-      (configured) => configured.exchange === id,
-    );
-    setSelectedExchange(id);
-    setInstructionExchange(id);
-    setApiKey("");
-    setApiSecret("");
-    setApiPassphrase("");
-    setApiUid("");
-    setSubaccount("");
-    setShowPassphrase(false);
-    setShowSecret(false);
-    setMargin(String(account?.margin ?? 4));
-    setLeverage(String(account?.leverage ?? 20));
-    setMaxRisk(String(account?.max_risk ?? 20));
-    setMarginMode(account?.margin_mode ?? "isolated");
-    setSaveMessage("");
-  }
+    function ensureTelegramWidget() {
+      if (state.telegramUser) return;
+      ["telegram-widget-hero","telegram-widget"].forEach(id => {
+        const host = byId(id);
+        if (!host || host.querySelector("script, iframe")) return;
+        const script = document.createElement("script");
+        script.async = true;
+        script.src = "https://telegram.org/js/telegram-widget.js?22";
+        script.dataset.telegramLogin = TELEGRAM_BOT;
+        script.dataset.size = "large";
+        script.dataset.radius = "8";
+        script.dataset.onauth = "onTelegramAuth(user)";
+        script.dataset.requestAccess = "write";
+        host.append(script);
+      });
+    }
 
-  return (
-    <div className="site-shell">
-      <header className="site-header">
-        <div className="container header-inner">
-          <button
-            className="brand"
-            onClick={() => navigate("landing")}
-            aria-label="Czarna Perła — strona główna"
-          >
-            <span aria-hidden="true">🏴‍☠️</span>
-            <span>
-              CZARNA <strong>PERŁA</strong>
-            </span>
-          </button>
-          <nav className="nav-tabs" aria-label="Główna nawigacja">
-            <button
-              className={page === "landing" ? "nav-link active" : "nav-link"}
-              onClick={() => navigate("landing")}
-            >
-              Strona główna
-            </button>
-            <button
-              className={page === "dashboard" ? "nav-link active" : "nav-link"}
-              onClick={() => navigate("dashboard")}
-            >
-              Panel inwestora
-            </button>
-            {isAdmin && (
-              <button
-                className={page === "admin" ? "nav-link admin active" : "nav-link admin"}
-                onClick={() => navigate("admin")}
-              >
-                Mostek kapitański
-              </button>
-            )}
-          </nav>
-        </div>
-      </header>
+    window.onTelegramAuth = async function(user) {
+      clearSessionState();
+      state.telegramUser = user;
+      setConnection("loading", "Weryfikacja Telegram…");
+      try {
+        const response = await fetch(API_BASE_URL + "/api/auth/telegram", {
+          method:"POST",
+          credentials:"include",
+          headers:apiHeaders({"Content-Type":"application/json"}),
+          body:JSON.stringify(user)
+        });
+        const auth = await readJson(response);
+        state.session = String(auth.session_token || "");
+        if (state.session) sessionStorage.setItem("cp_session", state.session);
+        state.csrf = String(auth.csrf_token || "");
+        await loadDashboard();
+        showPage("dashboard");
+      } catch (error) {
+        clearSessionState();
+        ["telegram-widget-hero","telegram-widget"].forEach(id => byId(id).replaceChildren());
+        setConnection("error", error.message || "Nie udało się zalogować.");
+        setTimeout(ensureTelegramWidget, 100);
+      }
+    };
 
-      {page === "landing" && (
-        <main>
-          <section className="hero">
-            <div className="hero-glow" aria-hidden="true" />
-            <div className="container hero-grid">
-              <div className="hero-copy">
-                <div className="eyebrow">SMC • TRUE CVD • MULTI-EXCHANGE</div>
-                <h1>
-                  Jedna Czarna Perła.
-                  <span> Własna giełda każdego inwestora.</span>
-                </h1>
-                <p>
-                  System oddziela analizę rynku od egzekucji. Każde konto korzysta
-                  z adaptera swojej giełdy, a przed aktywacją przechodzi kontrolę
-                  Futures, trybu one-way/net, dziennego PnL i uprawnień API.
-                </p>
-                <div className="hero-actions">
-                  <button
-                    className="button primary"
-                    onClick={() =>
-                      document
-                        .getElementById("exchanges")
-                        ?.scrollIntoView({ behavior: "smooth" })
-                    }
-                  >
-                    Zobacz obsługiwane giełdy
-                  </button>
-                  <button
-                    className="button secondary"
-                    onClick={() => navigate("dashboard")}
-                  >
-                    Przejdź do panelu
-                  </button>
-                </div>
-                <div className="security-note">
-                  <span aria-hidden="true">🛡️</span>
-                  Klucze tylko Read + Futures/Trade. Uprawnienie do wypłat zawsze
-                  wyłączone.
-                </div>
-              </div>
-              <aside className="hero-console" aria-label="Stan systemu">
-                <div className="console-top">
-                  <span className="live-dot" />
-                  CZARNA PERŁA v13.8
-                </div>
-                <div className="console-line">
-                  <span>Bitget</span>
-                  <strong>PROD</strong>
-                </div>
-                <div className="console-line">
-                  <span>Binance / Bybit / OKX / Gate</span>
-                  <strong className="blue-text">CANARY</strong>
-                </div>
-                <div className="console-line">
-                  <span>Bitunix</span>
-                  <strong className="amber">BETA</strong>
-                </div>
-                <div className="console-line">
-                  <span>MEXC Futures</span>
-                  <strong className="red">LIVE BLOCK</strong>
-                </div>
-                <div className="console-line">
-                  <span>Maks. pozycji / konto</span>
-                  <strong>10</strong>
-                </div>
-                <div className="console-rule" />
-                <div className="risk-flow">
-                  <span>TP1 25%</span>
-                  <i>→</i>
-                  <span>SL +0,30%</span>
-                  <i>→</i>
-                  <span>TP2 50%</span>
-                </div>
-                <div className="runner-row">Runner 25% • trailing 0,40%</div>
-              </aside>
-            </div>
-          </section>
+    async function loadDashboard() {
+      const response = await fetch(API_BASE_URL + "/api/dashboard/me", {
+        credentials:"include",
+        headers:apiHeaders()
+      });
+      const data = await readJson(response);
+      state.dashboard = data;
+      state.telegramUser = state.telegramUser || {id:String(data.telegram_id)};
+      state.isAdmin = data.is_admin === true;
+      state.isSuperAdmin = data.is_superadmin === true;
+      state.accounts = normalizeExchangeAccounts(data);
+      byId("admin-nav").classList.toggle("hidden", !state.isAdmin);
+      byId("login-panel").classList.add("hidden");
+      byId("dashboard-content").classList.remove("hidden");
+      byId("accounts-panel").classList.remove("hidden");
+      byId("logout-btn").classList.remove("hidden");
+      setText("welcome-text", "Witaj, " + (data.custom_name || data.username || "Inwestor") + ".");
+      setText("plan-value", data.plan_name || "Brak aktywnego planu");
+      setText("license-value", formatTimeLeft(data.subscription_end_date));
+      const preferred = state.accounts.find(account => account.is_selected)
+        || state.accounts.find(account => account.exchange === data.exchange)
+        || state.accounts.find(account => account.is_enabled)
+        || state.accounts[0];
+      const preferredExchange = preferred ? preferred.exchange : data.exchange;
+      setText("exchange-value", preferredExchange ? exchangeById(preferredExchange).name : "Brak danych");
+      setText("verify-value", verificationLabel(preferred ? preferred.verification_status : data.verification_status));
+      if (preferredExchange && EXCHANGES.some(item => item.id === preferredExchange)) {
+        byId("exchange-select").value = preferredExchange;
+      }
+      if (preferred) useAccountSettings(preferred.exchange);
+      else {
+        if (data.margin != null) byId("margin").value = data.margin;
+        if (data.leverage != null) byId("leverage").value = data.leverage;
+        if (data.max_risk != null) byId("max-risk").value = data.max_risk;
+        if (data.margin_mode) byId("margin-mode").value = data.margin_mode;
+      }
+      renderExchangeAccounts();
+      updateSelectedExchange();
+      const connected = state.accounts.filter(account => account.api_connected).length;
+      const enabled = state.accounts.filter(account => account.is_enabled).length;
+      setConnection("success", state.accounts.length
+        ? connected + " LIVE / " + enabled + " ON / " + state.accounts.length + " skonfigurowanych"
+        : "Zalogowano — brak kluczy API");
+    }
 
-          <section id="exchanges" className="section exchange-section">
-            <div className="container">
-              <div className="section-heading">
-                <div className="eyebrow">OBSŁUGIWANE RYNKI</div>
-                <h2>Bitget PROD • 4 po teście • Bitunix BETA • MEXC blokada</h2>
-                <p>
-                  Status oznacza realny poziom gotowości adaptera. Nie nazywamy
-                  giełdy działającą, dopóki nie przejdzie wymaganych kontroli.
-                </p>
-              </div>
-              <div className="exchange-grid">
-                {exchanges.map((item) => (
-                  <article
-                    className={`exchange-card ${statusClass[effectiveStatus(item)]}`}
-                    key={item.id}
-                  >
-                    <div className="exchange-card-top">
-                      <div>
-                        <h3>{item.name}</h3>
-                        <p>{item.market}</p>
-                      </div>
-                      <span className="status-chip">
-                        <span className="status-symbol" aria-hidden="true" />
-                        {effectiveStatusLabel(item)}
-                      </span>
-                    </div>
-                    <p className="exchange-description">{item.description}</p>
-                    <dl className="mini-specs">
-                      <div>
-                        <dt>Dane</dt>
-                        <dd>{item.fields}</dd>
-                      </div>
-                      <div>
-                        <dt>Tryb</dt>
-                        <dd>{item.mode}</dd>
-                      </div>
-                    </dl>
-                    <button
-                      className="card-action"
-                      onClick={() => chooseExchange(item.id)}
-                    >
-                      {!canSelectExchange(item) && item.id !== "mexc"
-                        ? "Giełda wyłączona w konfiguracji serwera"
-                        : effectiveStatus(item) === "blocked"
-                        ? "Dlaczego LIVE jest zablokowany"
-                        : effectiveStatus(item) === "beta"
-                          ? "Podłącz i poproś o aktywację"
-                          : "Podłącz w Panelu Inwestora"}
-                    </button>
-                  </article>
-                ))}
-              </div>
-              <p className="exchange-legend">
-                LIVE oznacza dostępny adapter egzekucyjny. Binance, Bybit, OKX i
-                Gate są uruchamiane dopiero po autoryzowanym teście odczytowym i
-                minimalnym canary na konkretnym koncie. Bitunix wymaga dodatkowej
-                ręcznej walidacji.
-              </p>
-            </div>
-          </section>
+    async function restoreSession() {
+      if (!state.session) return false;
+      try {
+        const response = await fetch(API_BASE_URL + "/api/auth/session", {
+          method:"POST",
+          credentials:"include",
+          headers:apiHeaders()
+        });
+        const restored = await readJson(response);
+        state.csrf = String(restored.csrf_token || "");
+        await loadDashboard();
+        return true;
+      } catch (_) {
+        clearSessionState();
+        return false;
+      }
+    }
 
-          <section className="section proof-section">
-            <div className="container">
-              <div className="section-heading">
-                <div className="eyebrow">DANE Z RYNKU RZECZYWISTEGO</div>
-                <h2>Historia działania, nie obietnica wyniku</h2>
-                <p>
-                  Poniższe dane dotyczą historycznych kont Bitget i nie stanowią
-                  gwarancji przyszłych rezultatów.
-                </p>
-              </div>
-              <div className="proof-grid">
-                <article className="proof-card">
-                  <div className="proof-user">
-                    <span>👤 Kolega_Damian</span>
-                    <small>od 01.06.2026 • Bitget</small>
-                  </div>
-                  <strong className="win-rate">84,48%</strong>
-                  <div className="proof-stats">
-                    <span>
-                      <b>49</b> zyskownych
-                    </span>
-                    <span>
-                      <b>9</b> stratnych
-                    </span>
-                  </div>
-                </article>
-                <article className="proof-card">
-                  <div className="proof-user">
-                    <span>👤 Kolega_AREK</span>
-                    <small>od 19.06.2026 • Bitget</small>
-                  </div>
-                  <strong className="win-rate">93,10%</strong>
-                  <div className="proof-stats">
-                    <span>
-                      <b>27</b> zyskownych
-                    </span>
-                    <span>
-                      <b>2</b> stratne
-                    </span>
-                  </div>
-                </article>
-              </div>
-              <div className="risk-warning">
-                Handel kontraktami i dźwignią wiąże się z wysokim ryzykiem utraty
-                kapitału. Wyniki historyczne nie gwarantują wyników przyszłych.
-              </div>
-            </div>
-          </section>
+    function setConnection(kind, text) {
+      const dot = byId("connection-dot");
+      dot.className = "dot" + (kind === "success" ? " ok" : kind === "error" ? " err" : "");
+      setText("connection-text", text);
+    }
 
-          <section className="section">
-            <div className="container">
-              <div className="section-heading">
-                <div className="eyebrow">ARCHITEKTURA SYSTEMU</div>
-                <h2>Analiza wspólna. Egzekucja właściwa dla giełdy.</h2>
-              </div>
-              <div className="feature-grid">
-                <article className="feature-card">
-                  <span>🌊</span>
-                  <h3>SMC + True CVD</h3>
-                  <p>
-                    Trend wyższych interwałów, FVG, knot, OTE i rzeczywisty napływ
-                    transakcji składają się na jeden wynik jakości setupu.
-                  </p>
-                </article>
-                <article className="feature-card">
-                  <span>🧭</span>
-                  <h3>Adapter per giełda</h3>
-                  <p>
-                    Wejście, SL, TP, anulowanie i recovery idą wyłącznie przez
-                    zweryfikowany adapter konta — bez awaryjnego przejścia na
-                    prywatne API innej giełdy.
-                  </p>
-                </article>
-                <article className="feature-card">
-                  <span>🛡️</span>
-                  <h3>Fail-closed</h3>
-                  <p>
-                    Brak wymaganej metody, PnL lub potwierdzenia one-way/net
-                    blokuje handel. Bot nie zgaduje i nie składa częściowo
-                    zabezpieczonego zlecenia.
-                  </p>
-                </article>
-                <article className="feature-card">
-                  <span>🎯</span>
-                  <h3>Zarządzanie po TP1</h3>
-                  <p>
-                    TP1 zamyka 25%, SL przechodzi na +0,30%, TP2 zamyka 50%, a
-                    pozostałe 25% prowadzi trailing stop 0,40%.
-                  </p>
-                </article>
-              </div>
-            </div>
-          </section>
+    function setSave(text, ok) {
+      const box = byId("save-status");
+      box.textContent = text;
+      box.className = "save-status " + (ok ? "ok" : "err");
+    }
 
-          <section className="section pricing-section">
-            <div className="container">
-              <div className="section-heading">
-                <div className="eyebrow">DOSTĘP</div>
-                <h2>Wybierz model współpracy</h2>
-              </div>
-              <div className="pricing-grid">
-                <article className="pricing-card blue">
-                  <span className="pricing-badge">STARTOWA</span>
-                  <h3>Pakiet testowy</h3>
-                  <div className="price">0$ <small>pierwszy miesiąc</small></div>
-                  <p>
-                    Pełny dostęp przez 30 dni, później 50$/mies. przez kolejne
-                    trzy miesiące.
-                  </p>
-                  <ul>
-                    <li>Wiele obsługiwanych giełd na jednym profilu</li>
-                    <li>Pełna automatyzacja przez API</li>
-                    <li>Raporty i alerty Telegram</li>
-                    <li>Kapitał pozostaje na Twoim koncie</li>
-                  </ul>
-                  <button className="button blue" onClick={() => setTermsOpen(true)}>
-                    Aktywuj promocję
-                  </button>
-                </article>
-                <article className="pricing-card gold">
-                  <span className="pricing-badge">LIMIT 10 MIEJSC</span>
-                  <h3>Pakiet roczny</h3>
-                  <div className="price">
-                    800$ <small>/ rok</small>
-                  </div>
-                  <p>
-                    Roczna licencja bez prowizji od zysków i z priorytetową
-                    konfiguracją.
-                  </p>
-                  <ul>
-                    <li>12 miesięcy dostępu</li>
-                    <li>Konfiguracja konta i test połączenia</li>
-                    <li>Równoległa obsługa wielu giełd</li>
-                    <li>Priorytetowe wsparcie</li>
-                  </ul>
-                  <button className="button primary" onClick={() => setTermsOpen(true)}>
-                    Zarezerwuj roczny
-                  </button>
-                </article>
-              </div>
-            </div>
-          </section>
-        </main>
-      )}
+    function formatTimeLeft(value) {
+      if (!value) return "Brak danych";
+      const end = new Date(value);
+      if (Number.isNaN(end.getTime())) return String(value);
+      if (end.getFullYear() >= 2099) return "Bezterminowa";
+      const days = Math.ceil((end.getTime() - Date.now()) / 86400000);
+      return days > 0 ? days + " dni (do " + end.toLocaleDateString("pl-PL") + ")" : "Wygasła";
+    }
 
-      {page === "dashboard" && (
-        <main className="dashboard-page">
-          <div className="container">
-            <section className="dashboard-header">
-              <div>
-                <div className="eyebrow">PANEL INWESTORA</div>
-                <h1>
-                  {telegramUser
-                    ? `Witaj, ${dashboard?.custom_name || dashboard?.username || telegramUser.first_name}`
-                    : "Podłącz giełdę i ustaw handel"}
-                </h1>
-                <p>
-                  Podłącz kilka giełd do jednego profilu. Każda ma własne klucze,
-                  margin, dźwignię, limit ryzyka i niezależny przełącznik ON/OFF.
-                </p>
-              </div>
-              <div className="dashboard-actions">
-                <div className="connection-pill">
-                  <span
-                    className={`connection-dot ${
-                      connectedAccounts.length > 0 || dashboard?.api_connected
-                        ? "connected"
-                        : ""
-                    }`}
-                  />
-                  {configuredAccounts.length > 0
-                    ? `${connectedAccounts.length} LIVE / ${enabledAccounts.length} ON / ${configuredAccounts.length} skonfigurowanych`
-                    : "Brak skonfigurowanej giełdy"}
-                </div>
-                {telegramUser && (
-                  <button className="button danger-outline" onClick={logout}>
-                    Wyloguj
-                  </button>
-                )}
-              </div>
-            </section>
+    function verificationLabel(value) {
+      const labels = {verified:"LIVE zweryfikowane",canary_required:"Wymagany canary",canary_verified:"Canary zatwierdzony",manual_beta:"Walidacja BETA",manual_verified:"BETA zatwierdzona",live_blocked:"LIVE zablokowany",not_configured:"Nie skonfigurowano"};
+      return labels[value] || String(value || "Oczekuje").replaceAll("_"," ");
+    }
 
-            {!telegramUser && (
-              <section className="login-panel">
-                <div>
-                  <h2>Zaloguj się przez Telegram</h2>
-                  <p>
-                    Logowanie identyfikuje profil inwestora. Serwer musi
-                    zweryfikować podpis Telegram przed odczytem lub zmianą danych.
-                  </p>
-                </div>
-                <div id="telegram-login-widget" className="telegram-widget" />
-              </section>
-            )}
+    function adminDate(value, fallback) {
+      const text = String(value || "").trim();
+      if (!text) return fallback;
+      return text
+        .replace("T", " ")
+        .replace(/\.\d+(?:Z|[+-]\d{2}:?\d{2})?$/, "")
+        .replace(/Z$/, "");
+    }
 
-            {telegramUser && legacyMode && (
-              <div className="legacy-warning" role="status">
-                <strong>Wymagana aktualizacja API strony:</strong> bot v13.8 zna
-                wiele giełd, ale obecny serwer panelu nie potwierdził jeszcze
-                bezpiecznej sesji Telegram ani capability{" "}
-                <code>multi_exchange</code>. Dlatego nowe giełdy są chwilowo
-                zablokowane fail-closed; dotychczasowy Bitget pozostaje dostępny.
-              </div>
-            )}
+    byId("exchange-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!state.telegramUser || !state.csrf) {
+        setSave("Zaloguj się ponownie przez Telegram, aby otrzymać bezpieczny token zapisu.", false);
+        return;
+      }
+      const item = exchangeById(byId("exchange-select").value);
+      if (!canSelect(item)) {
+        setSave("Handel LIVE na tej giełdzie jest zablokowany.", false);
+        return;
+      }
+      const key = byId("api-key").value.trim();
+      const secret = byId("api-secret").value.trim();
+      const passphrase = byId("api-passphrase").value.trim();
+      if (!key || !secret || (item.passphrase && !passphrase)) {
+        setSave("Uzupełnij wszystkie wymagane dane API.", false);
+        return;
+      }
+      const leverage = Number(byId("leverage").value);
+      const margin = Number(byId("margin").value);
+      const maxRisk = Number(byId("max-risk").value);
+      if (
+        !Number.isInteger(leverage) || leverage < 1 || leverage > 100
+        || !Number.isFinite(margin) || margin < 1 || margin > 1000
+        || !Number.isFinite(maxRisk) || maxRisk < 1 || maxRisk > 1000
+      ) {
+        setSave("Dozwolone zakresy: margin i ryzyko 1–1000 USDT, dźwignia 1–100x.", false);
+        return;
+      }
+      const payload = {
+        telegram_id:String(state.telegramUser.id),
+        exchange:item.id,
+        api_key:key,
+        api_secret:secret,
+        api_passphrase:item.passphrase ? passphrase : "",
+        api_uid:"",
+        subaccount:"",
+        margin_mode:byId("margin-mode").value,
+        leverage:leverage,
+        margin:margin,
+        max_risk:maxRisk
+      };
+      setSave("Sprawdzam połączenie z " + item.name + "…", true);
+      try {
+        const response = await fetch(API_BASE_URL + "/api/save_settings", {
+          method:"POST",
+          credentials:"include",
+          headers:apiHeaders({"Content-Type":"application/json","X-CSRF-Token":state.csrf}),
+          body:JSON.stringify(payload)
+        });
+        const result = await readJson(response);
+        byId("api-key").value = "";
+        byId("api-secret").value = "";
+        byId("api-passphrase").value = "";
+        await loadDashboard();
+        byId("exchange-select").value = item.id;
+        updateSelectedExchange();
+        useAccountSettings(item.id);
+        setSave(result.message || item.name + ": ustawienia zapisane i przekazane do weryfikacji.", true);
+      } catch (error) {
+        setSave(error.message || "Serwer odrzucił ustawienia.", false);
+      }
+    });
 
-            <ol className="steps" aria-label="Etapy podłączenia giełdy">
-              <li className="active">
-                <span>1</span>Wybierz lub dodaj giełdę
-              </li>
-              <li>
-                <span>2</span>Utwórz bezpieczny klucz
-              </li>
-              <li>
-                <span>3</span>Zapisz i zweryfikuj
-              </li>
-            </ol>
+    async function logout() {
+      try {
+        if (state.csrf) {
+          const response = await fetch(API_BASE_URL + "/api/auth/logout", {
+            method:"POST",
+            credentials:"include",
+            headers:apiHeaders({"X-CSRF-Token":state.csrf})
+          });
+          await readJson(response);
+        }
+      } catch (error) {
+        setConnection("error", error.message || "Nie udało się wylogować. Spróbuj ponownie.");
+        return;
+      }
+      clearSessionState();
+      byId("login-panel").classList.remove("hidden");
+      byId("dashboard-content").classList.add("hidden");
+      byId("accounts-panel").classList.add("hidden");
+      byId("logout-btn").classList.add("hidden");
+      ["telegram-widget-hero","telegram-widget"].forEach(id => byId(id).replaceChildren());
+      setConnection("idle","Oczekuje na logowanie");
+      ensureTelegramWidget();
+      showPage("landing");
+    }
 
-            {telegramUser && (
-              <section className="panel-card">
-                <div className="panel-title-row">
-                  <div>
-                    <span className="card-kicker">TWOJE POŁĄCZENIA</span>
-                    <h2>Giełdy działające niezależnie</h2>
-                  </div>
-                  <span className="status-chip status-live">
-                    {enabledAccounts.length} ON / {configuredAccounts.length}{" "}
-                    skonfigurowanych
-                  </span>
-                </div>
-                <p className="rollout-warning">
-                  Włączenie, wyłączenie lub zapis ustawień jednej giełdy nie
-                  zmienia żadnej z pozostałych. Klucze API pozostają ukryte.
-                </p>
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Giełda</th>
-                        <th>Stan</th>
-                        <th>Weryfikacja</th>
-                        <th>Margin / dźwignia</th>
-                        <th>Tryb marży</th>
-                        <th>ON/OFF</th>
-                        <th>Ustawienia</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {configuredAccounts.length === 0 && (
-                        <tr>
-                          <td colSpan={7}>
-                            Nie zapisano jeszcze żadnej giełdy. Wybierz ją w
-                            formularzu poniżej.
-                          </td>
-                        </tr>
-                      )}
-                      {configuredAccounts.map((account) => {
-                        const item = exchangeMap[account.exchange];
-                        return (
-                          <tr key={String(account.account_id ?? account.exchange)}>
-                            <td>
-                              <strong>{item.name}</strong>
-                              <br />
-                              <span className="muted-cell">{item.market}</span>
-                            </td>
-                            <td>{accountStateLabel(account)}</td>
-                            <td>
-                              {verificationStatusLabel(
-                                account.verification_status,
-                              )}
-                            </td>
-                            <td>
-                              {account.margin ?? "—"} USDT /{" "}
-                              {account.leverage ?? "—"}x
-                            </td>
-                            <td>
-                              {account.margin_mode === "cross"
-                                ? "Cross"
-                                : "Isolated"}
-                            </td>
-                            <td>
-                              <label className="toggle">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(account.is_enabled)}
-                                  disabled={
-                                    !sessionVerified ||
-                                    legacyMode ||
-                                    !account.credentials_configured ||
-                                    togglingExchange === account.exchange
-                                  }
-                                  onChange={(event) =>
-                                    void toggleExchangeAccount(
-                                      account,
-                                      event.target.checked,
-                                    )
-                                  }
-                                />
-                                <span />
-                                <b className="sr-only">
-                                  {account.is_enabled ? "Wyłącz" : "Włącz"}{" "}
-                                  {item.name}
-                                </b>
-                              </label>
-                            </td>
-                            <td>
-                              <button
-                                type="button"
-                                className="table-button"
-                                onClick={() => {
-                                  changeSelectedExchange(account.exchange);
-                                  window.setTimeout(() => {
-                                    document
-                                      .getElementById("exchange-form")
-                                      ?.scrollIntoView({
-                                        behavior: "smooth",
-                                        block: "start",
-                                      });
-                                  }, 50);
-                                }}
-                              >
-                                Edytuj osobno
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                {legacyMode && (
-                  <div className="admin-action-message">
-                    Stary serwer pokazuje poprzednią giełdę tylko informacyjnie.
-                    Niezależne przełączniki uaktywnią się po aktualizacji API.
-                  </div>
-                )}
-              </section>
-            )}
+    async function adminRequest(path, payload) {
+      if (!state.isAdmin || !state.telegramUser || !state.csrf) throw new Error("Brak bezpiecznej sesji administratora.");
+      const response = await fetch(API_BASE_URL + path, {
+        method:"POST",
+        credentials:"include",
+        headers:apiHeaders({"Content-Type":"application/json","X-CSRF-Token":state.csrf}),
+        body:JSON.stringify(Object.assign({admin_id:String(state.telegramUser.id)}, payload || {}))
+      });
+      return readJson(response);
+    }
 
-            <div className="dashboard-grid">
-              <div>
-                <section id="exchange-form" className="panel-card form-card">
-                  <div className="panel-title-row">
-                    <div>
-                      <span className="card-kicker">
-                        KONFIGURACJA ODDZIELNEGO KONTA
-                      </span>
-                      <h2>
-                        {selectedAccount ? "Edytuj" : "Podłącz"}{" "}
-                        {exchange.name}
-                      </h2>
-                    </div>
-                    <span
-                      className={`status-chip ${statusClass[effectiveStatus(exchange)]}`}
-                    >
-                      <span className="status-symbol" />
-                      {effectiveStatusLabel(exchange)}
-                    </span>
-                  </div>
+    async function loadAdminUsers() {
+      if (!state.isAdmin) return;
+      setText("admin-status","Pobieranie użytkowników…");
+      try {
+        const data = await adminRequest("/api/admin/users",{});
+        renderAdminUsers(Array.isArray(data.users) ? data.users : []);
+        setText("admin-status","");
+      } catch (error) {
+        setText("admin-status",error.message || "Błąd pobierania użytkowników.");
+      }
+    }
 
-                  <form onSubmit={saveSettings} noValidate>
-                    <div className="form-group">
-                      <label htmlFor="exchange">Konfigurowana giełda</label>
-                      <select
-                        id="exchange"
-                        value={selectedExchange}
-                        onChange={(event) =>
-                          changeSelectedExchange(
-                            event.target.value as ExchangeId,
-                          )
-                        }
-                      >
-                        {exchanges.map((item) => (
-                          <option
-                            value={item.id}
-                            key={item.id}
-                            disabled={!canSelectExchange(item)}
-                          >
-                            {item.name} — {effectiveStatusLabel(item)}
-                            {!canSelectExchange(item) && item.id !== "mexc"
-                              ? " / wyłączona przez serwer"
-                              : ""}
-                          </option>
-                        ))}
-                      </select>
-                      <small>
-                        {exchange.market} • wymagany tryb {exchange.mode}. Każda
-                        giełda zapisuje własny margin, dźwignię i stan ON/OFF.
-                      </small>
-                    </div>
+    function renderAdminUsers(users) {
+      const body = byId("admin-users");
+      body.replaceChildren();
+      if (!users.length) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 7;
+        cell.textContent = "Brak użytkowników do wyświetlenia.";
+        cell.style.textAlign = "center";
+        cell.style.color = "var(--muted)";
+        row.append(cell);
+        body.append(row);
+        return;
+      }
+      users.forEach(user => {
+        const row = document.createElement("tr");
+        const id = String(user.telegram_id);
+        const idCell = document.createElement("td");
+        idCell.className = "admin-id";
+        idCell.textContent = id;
 
-                    <div
-                      className={`exchange-alert ${statusClass[effectiveStatus(exchange)]}`}
-                    >
-                      <strong>{exchange.name}: </strong>
-                      {selectedAccount
-                        ? `${verificationStatusLabel(
-                            selectedAccount.verification_status,
-                          )}. ${accountStateLabel(selectedAccount)}.`
-                        : exchange.activation}
-                    </div>
+        const nameCell = document.createElement("td");
+        const nameInput = document.createElement("input");
+        nameInput.className = "admin-name-input";
+        nameInput.value = user.custom_name || "";
+        nameInput.setAttribute("aria-label", "Przypisane imię dla konta " + id);
+        const accountMeta = document.createElement("span");
+        accountMeta.className = "account-meta";
+        const adminAccounts = Array.isArray(user.exchange_accounts)
+          ? user.exchange_accounts
+          : Array.isArray(user.accounts)
+            ? user.accounts
+            : [];
+        if (adminAccounts.length) {
+          accountMeta.textContent = adminAccounts.map(account => {
+            const known = exchangeById(account.exchange);
+            return known.name + " — " + accountStateLabel(account);
+          }).join(" • ");
+        } else {
+          const knownExchange = EXCHANGES.find(item => item.id === user.exchange);
+          const exchangeName = knownExchange ? knownExchange.name : (user.exchange ? String(user.exchange) : "Giełda nieustawiona");
+          accountMeta.textContent = exchangeName + " • " + verificationLabel(user.verification_status);
+        }
+        nameCell.append(nameInput, accountMeta);
 
-                    <div className="form-group">
-                      <label htmlFor="api-key">API Key</label>
-                      <input
-                        id="api-key"
-                        value={apiKey}
-                        onChange={(event) => setApiKey(event.target.value)}
-                        autoComplete="off"
-                        spellCheck={false}
-                        placeholder={
-                          selectedAccount
-                            ? `Wklej nowy API Key tylko dla ${exchange.name}`
-                            : "Wklej API Key"
-                        }
-                        required
-                        disabled={!canSelectExchange(exchange)}
-                      />
-                    </div>
+        const joinCell = document.createElement("td");
+        joinCell.textContent = adminDate(user.join_date, "Przed aktualizacją");
 
-                    <div className="form-group">
-                      <label htmlFor="api-secret">API Secret</label>
-                      <div className="password-field">
-                        <input
-                          id="api-secret"
-                          type={showSecret ? "text" : "password"}
-                          value={apiSecret}
-                          onChange={(event) => setApiSecret(event.target.value)}
-                          autoComplete="new-password"
-                          spellCheck={false}
-                          placeholder="Wklej API Secret"
-                          required
-                          disabled={!canSelectExchange(exchange)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowSecret((value) => !value)}
-                          aria-label={
-                            showSecret ? "Ukryj API Secret" : "Pokaż API Secret"
-                          }
-                        >
-                          {showSecret ? "Ukryj" : "Pokaż"}
-                        </button>
-                      </div>
-                    </div>
+        const licenseCell = document.createElement("td");
+        licenseCell.className = "license-cell";
+        licenseCell.textContent = adminDate(user.sub_end, "Brak danych");
 
-                    {exchange.passphrase && (
-                      <div className="form-group">
-                        <label htmlFor="api-passphrase">Passphrase</label>
-                        <div className="password-field">
-                          <input
-                            id="api-passphrase"
-                            type={showPassphrase ? "text" : "password"}
-                            value={apiPassphrase}
-                            onChange={(event) =>
-                              setApiPassphrase(event.target.value)
-                            }
-                            autoComplete="new-password"
-                            spellCheck={false}
-                            placeholder={`Passphrase z ${exchange.name}`}
-                            required
-                            disabled={!canSelectExchange(exchange)}
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setShowPassphrase((value) => !value)
-                            }
-                            aria-label={
-                              showPassphrase
-                                ? "Ukryj Passphrase"
-                                : "Pokaż Passphrase"
-                            }
-                          >
-                            {showPassphrase ? "Ukryj" : "Pokaż"}
-                          </button>
-                        </div>
-                      </div>
-                    )}
+        const botCell = document.createElement("td");
+        const originalName = user.custom_name || "";
+        const originalBot = Boolean(user.bot_active);
+        const originalAdmin = Boolean(user.is_admin);
+        const botLabel = document.createElement("label");
+        botLabel.className = "switch";
+        const botToggle = document.createElement("input");
+        botToggle.type = "checkbox";
+        botToggle.checked = originalBot;
+        botToggle.setAttribute("aria-label", "Bot ON/OFF dla konta " + id);
+        const botTrack = document.createElement("span");
+        botTrack.className = "switch-track";
+        botLabel.append(botToggle, botTrack);
+        botCell.append(botLabel);
 
-                    <div className="two-columns">
-                      <div className="form-group">
-                        <label htmlFor="trade-margin">Margin / pozycję (USDT)</label>
-                        <input
-                          id="trade-margin"
-                          type="number"
-                          min="1"
-                          max="1000"
-                          step="0.01"
-                          value={margin}
-                          onChange={(event) => setMargin(event.target.value)}
-                          required
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label htmlFor="trade-leverage">Dźwignia</label>
-                        <input
-                          id="trade-leverage"
-                          type="number"
-                          min="1"
-                          max="100"
-                          step="1"
-                          value={leverage}
-                          onChange={(event) => setLeverage(event.target.value)}
-                          required
-                        />
-                        <small>
-                          Zakres panelu: 1–100x. Giełda może mieć niższy limit
-                          dla wybranego kontraktu.
-                        </small>
-                      </div>
-                      <div className="form-group">
-                        <label htmlFor="max-risk">
-                          Maksymalne ryzyko na transakcję (USDT)
-                        </label>
-                        <input
-                          id="max-risk"
-                          type="number"
-                          min="1"
-                          max="1000"
-                          step="0.01"
-                          value={maxRisk}
-                          onChange={(event) => setMaxRisk(event.target.value)}
-                          required
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label htmlFor="margin-mode">Tryb marży</label>
-                        <select
-                          id="margin-mode"
-                          value={marginMode}
-                          onChange={(event) =>
-                            setMarginMode(
-                              event.target.value as "isolated" | "cross",
-                            )
-                          }
-                        >
-                          <option value="isolated">Isolated (zalecany)</option>
-                          <option value="cross">Cross</option>
-                        </select>
-                      </div>
-                    </div>
+        const adminCell = document.createElement("td");
+        const adminLabel = document.createElement("label");
+        adminLabel.className = "switch admin-switch";
+        const adminToggle = document.createElement("input");
+        adminToggle.type = "checkbox";
+        adminToggle.checked = originalAdmin;
+        adminToggle.disabled = !state.isSuperAdmin;
+        adminToggle.setAttribute("aria-label", "Admin ON/OFF dla konta " + id);
+        adminToggle.title = state.isSuperAdmin ? "" : "Zmiana roli wymaga uprawnień superadministratora";
+        const adminTrack = document.createElement("span");
+        adminTrack.className = "switch-track";
+        adminLabel.append(adminToggle, adminTrack);
+        adminCell.append(adminLabel);
 
-                    <button
-                      type="button"
-                      className="advanced-toggle"
-                      onClick={() => setShowAdvanced((value) => !value)}
-                      aria-expanded={showAdvanced}
-                    >
-                      {showAdvanced ? "−" : "+"} Ustawienia zaawansowane
-                    </button>
-                    {showAdvanced && (
-                      <div className="two-columns advanced-fields">
-                        <div className="form-group">
-                          <label htmlFor="api-uid">UID API (opcjonalnie)</label>
-                          <input
-                            id="api-uid"
-                            value={apiUid}
-                            onChange={(event) => setApiUid(event.target.value)}
-                            autoComplete="off"
-                            spellCheck={false}
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label htmlFor="subaccount">
-                            Subaccount (opcjonalnie)
-                          </label>
-                          <input
-                            id="subaccount"
-                            value={subaccount}
-                            onChange={(event) => setSubaccount(event.target.value)}
-                            autoComplete="off"
-                            spellCheck={false}
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="form-safety">
-                      <span>✓ Brak uprawnień Withdrawal</span>
-                      <span>✓ Whitelist IP</span>
-                      <span>✓ One-way / Net</span>
-                    </div>
-
-                    <div className="exchange-alert status-live">
-                      Zapis dotyczy wyłącznie konta {exchange.name}. Nie wyłącza,
-                      nie nadpisuje ani nie przełącza żadnej innej giełdy.
-                    </div>
-
-                    <button
-                      className="button primary submit-button"
-                      type="submit"
-                      disabled={
-                        !telegramUser ||
-                        !canSelectExchange(exchange) ||
-                        connectionState === "loading"
-                      }
-                    >
-                      {connectionState === "loading"
-                        ? "Weryfikuję połączenie…"
-                        : telegramUser
-                          ? `${
-                              selectedAccount ? "Zaktualizuj" : "Dodaj"
-                            } i sprawdź ${exchange.name}`
-                          : "Zaloguj się, aby zapisać"}
-                    </button>
-                    <div
-                      className={`save-message ${connectionState}`}
-                      role="status"
-                      aria-live="polite"
-                    >
-                      {saveMessage}
-                    </div>
-                  </form>
-                </section>
-              </div>
-
-              <aside>
-                <section className="panel-card account-card">
-                  <span className="card-kicker">TWÓJ PROFIL</span>
-                  <h2>Status konta</h2>
-                  <dl className="account-list">
-                    <div>
-                      <dt>Plan</dt>
-                      <dd>{dashboard?.plan_name ?? "Brak danych"}</dd>
-                    </div>
-                    <div>
-                      <dt>Skonfigurowane giełdy</dt>
-                      <dd>{configuredAccounts.length}</dd>
-                    </div>
-                    <div>
-                      <dt>Włączone / połączone LIVE</dt>
-                      <dd>
-                        {enabledAccounts.length} / {connectedAccounts.length}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Edytujesz teraz</dt>
-                      <dd>{exchange.name}</dd>
-                    </div>
-                    <div>
-                      <dt>Status wybranej giełdy</dt>
-                      <dd>
-                        {selectedAccount
-                          ? verificationStatusLabel(
-                              selectedAccount.verification_status,
-                            )
-                          : "Nowa konfiguracja"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Margin / dźwignia formularza</dt>
-                      <dd>
-                        {margin} USDT / {leverage}x
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Ważność licencji</dt>
-                      <dd>{formatTimeLeft(dashboard?.subscription_end_date)}</dd>
-                    </div>
-                  </dl>
-                </section>
-
-                <section className="panel-card safety-card">
-                  <span className="card-kicker">ZANIM ZAPISZESZ</span>
-                  <h2>5 zasad bezpieczeństwa</h2>
-                  <ol>
-                    <li>Osobny klucz tylko dla Czarnej Perły.</li>
-                    <li>Wyłącznie Read + Futures/Trade.</li>
-                    <li>Withdrawal i transfery zawsze OFF.</li>
-                    <li>Whitelist adresu IP serwera.</li>
-                    <li>Pierwszy test minimalnym marginem.</li>
-                  </ol>
-                </section>
-
-                <section className="panel-card referral-card">
-                  <span className="card-kicker">PROGRAM POLECEŃ</span>
-                  <h2>Twój link</h2>
-                  <div className="referral-value">
-                    {dashboard?.referral_code
-                      ? `https://msliwa610-oss.github.io/czarnaperla-bot/?ref=${dashboard.referral_code}`
-                      : "Dostępny po zalogowaniu"}
-                  </div>
-                  <button
-                    className="button secondary compact"
-                    type="button"
-                    disabled={!dashboard?.referral_code}
-                    onClick={async () => {
-                      if (!dashboard?.referral_code) return;
-                      await navigator.clipboard.writeText(
-                        `https://msliwa610-oss.github.io/czarnaperla-bot/?ref=${dashboard.referral_code}`,
-                      );
-                      setSaveMessage("Link polecający skopiowany.");
-                    }}
-                  >
-                    Kopiuj link
-                  </button>
-                </section>
-              </aside>
-            </div>
-
-            <section id="exchange-instructions" className="instructions-section">
-              <div className="section-heading left">
-                <div className="eyebrow">INSTRUKCJA KROK PO KROKU</div>
-                <h2>Jak podłączyć każdą giełdę</h2>
-                <p>
-                  Wybierz giełdę. Pokażemy tylko pola i kroki, których naprawdę
-                  wymaga.
-                </p>
-              </div>
-              <div className="instruction-tabs" role="tablist">
-                {exchanges.map((item) => (
-                  <button
-                    role="tab"
-                    aria-selected={instructionExchange === item.id}
-                    className={
-                      instructionExchange === item.id ? "active" : undefined
-                    }
-                    key={item.id}
-                    onClick={() => setInstructionExchange(item.id)}
-                  >
-                    {item.name}
-                  </button>
-                ))}
-              </div>
-              <article
-                className={`instruction-card ${statusClass[effectiveStatus(instruction)]}`}
-              >
-                <div className="instruction-head">
-                  <div>
-                    <span className="status-chip">
-                      <span className="status-symbol" />
-                      {effectiveStatusLabel(instruction)}
-                    </span>
-                    <h3>
-                      {instruction.name} • {instruction.market}
-                    </h3>
-                  </div>
-                  <div className="instruction-meta">
-                    <span>{instruction.fields}</span>
-                    <span>Tryb: {instruction.mode}</span>
-                  </div>
-                </div>
-                <ol>
-                  {instruction.instructions.map((step, index) => (
-                    <li key={step}>
-                      <span>{index + 1}</span>
-                      <p>{step}</p>
-                    </li>
-                  ))}
-                </ol>
-                <div className="instruction-footer">
-                  <p>
-                    <strong>Ważne:</strong> nigdy nie przyznawaj kluczowi
-                    uprawnienia do wypłat.
-                  </p>
-                  {instruction.docsUrl && (
-                    <a
-                      href={instruction.docsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Oficjalna dokumentacja {instruction.name} ↗
-                    </a>
-                  )}
-                </div>
-              </article>
-            </section>
-          </div>
-        </main>
-      )}
-
-      {page === "admin" && isAdmin && (
-        <main className="admin-page">
-          <div className="container">
-            <section className="dashboard-header">
-              <div>
-                <div className="eyebrow red-eyebrow">MOSTEK KAPITAŃSKI</div>
-                <h1>Zarządzanie załogą</h1>
-                <p>
-                  Każde konto giełdowe użytkownika ma osobny status, przełącznik
-                  i zatwierdzenie LIVE. Klucze API nigdy nie są wyświetlane.
-                </p>
-              </div>
-              <button className="button secondary" onClick={fetchAdminData}>
-                Odśwież dane
-              </button>
-            </section>
-            <section className="panel-card rollout-card">
-              <div className="panel-title-row">
-                <div>
-                  <span className="card-kicker">GLOBALNY ROLLOUT</span>
-                  <h2>Zwolnienie adaptera do LIVE</h2>
-                </div>
-              </div>
-              <p className="rollout-warning">
-                Ten przycisk nie wykonuje testu. Użyj go dopiero po realnym
-                canary, sprawdzeniu zleceń ochronnych i dziennego PnL.
-              </p>
-              <div className="rollout-grid">
-                {exchanges
-                  .filter(
-                    (item) => item.id !== "bitget" && item.id !== "mexc",
-                  )
-                  .map((item) => (
-                    <RolloutControl
-                      key={item.id}
-                      exchange={item}
-                      capability={exchangeCapabilities[item.id]}
-                      defaultFeePolicy={rolloutFeePolicy}
-                      onFeePolicyChange={setRolloutFeePolicy}
-                      onApprove={approveGlobalRollout}
-                    />
-                  ))}
-              </div>
-              {adminActionMessage && (
-                <div className="admin-action-message" role="status">
-                  {adminActionMessage}
-                </div>
-              )}
-            </section>
-            <section className="panel-card admin-card">
-              <div className="table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Telegram ID</th>
-                      <th>Imię</th>
-                      <th>Licencja</th>
-                      <th>Bot</th>
-                      <th>Admin</th>
-                      <th>Giełda</th>
-                      <th>Weryfikacja</th>
-                      <th>Giełda ON/OFF</th>
-                      <th>Aktywacja LIVE</th>
-                      <th>Akcja</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {adminLoading && (
-                      <tr>
-                        <td colSpan={10}>Pobieranie danych…</td>
-                      </tr>
-                    )}
-                    {!adminLoading && adminUsers.length === 0 && (
-                      <tr>
-                        <td colSpan={10}>
-                          Brak danych lub brak połączenia z API.
-                        </td>
-                      </tr>
-                    )}
-                    {adminUsers.map((user) => (
-                      <AdminRows
-                        key={String(user.telegram_id)}
-                        user={user}
-                        onMutation={adminMutation}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        </main>
-      )}
-
-      <footer className="site-footer">
-        <div className="container footer-grid">
-          <div>
-            <div className="brand footer-brand">
-              <span>🏴‍☠️</span>
-              <span>
-                CZARNA <strong>PERŁA</strong>
-              </span>
-            </div>
-            <p>Oprogramowanie do automatyzacji i analizy ilościowej.</p>
-          </div>
-          <div className="footer-links">
-            <button onClick={() => setTermsOpen(true)}>
-              Regulamin i ryzyko
-            </button>
-            <button onClick={() => navigate("dashboard")}>Panel inwestora</button>
-          </div>
-        </div>
-        <div className="container legal-line">
-          © 2026 Czarna Perła. Kryptowaluty i kontrakty z dźwignią wiążą
-          się z ryzykiem utraty kapitału.
-        </div>
-      </footer>
-
-      {termsOpen && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setTermsOpen(false);
-          }}
-        >
-          <section
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="terms-title"
-          >
-            <div className="modal-header">
-              <h2 id="terms-title">Regulamin i warunki korzystania</h2>
-              <button
-                aria-label="Zamknij regulamin"
-                onClick={() => setTermsOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <h3>Charakter systemu</h3>
-              <p>
-                Czarna Perła jest oprogramowaniem do automatyzacji decyzji
-                zgodnych z ustaloną strategią. Nie stanowi porady inwestycyjnej
-                ani gwarancji wyniku.
-              </p>
-              <h3>Ryzyko</h3>
-              <p>
-                Handel kryptowalutami, kontraktami i dźwignią może prowadzić do
-                częściowej lub całkowitej utraty kapitału. Użytkownik sam ustala
-                margin, dźwignię i maksymalne ryzyko jednej transakcji.
-              </p>
-              <h3>Bezpieczeństwo API</h3>
-              <p>
-                Klucz powinien mieć jedynie odczyt oraz handel Futures. Wypłaty i
-                transfery muszą pozostać wyłączone, a dostęp powinien być
-                ograniczony adresem IP serwera.
-              </p>
-              <h3>Status giełd</h3>
-              <p>
-                MEXC LIVE jest zablokowany. Bitunix wymaga ręcznej walidacji
-                BETA. Pozostałe nowe giełdy są aktywowane dopiero po teście
-                konkretnego konta.
-              </p>
-            </div>
-            <div className="modal-footer">
-              <label className="terms-check">
-                <input
-                  type="checkbox"
-                  checked={termsAccepted}
-                  onChange={(event) => setTermsAccepted(event.target.checked)}
-                />
-                <span>Akceptuję regulamin i rozumiem ryzyko.</span>
-              </label>
-              <button
-                className="button blue"
-                disabled={!termsAccepted}
-                onClick={() => {
-                  window.open(TELEGRAM_GROUP, "_blank", "noopener,noreferrer");
-                  setTermsOpen(false);
-                }}
-              >
-                Przejdź do Telegrama
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AdminRows({
-  user,
-  onMutation,
-}: {
-  user: AdminUser;
-  onMutation: (
-    endpoint: string,
-    payload: Record<string, unknown>,
-  ) => Promise<Record<string, unknown> | undefined>;
-}) {
-  const [name, setName] = useState(user.custom_name ?? "");
-  const [canaryEvidence, setCanaryEvidence] = useState<
-    Partial<Record<ExchangeId, string>>
-  >({});
-  const [feePolicies, setFeePolicies] = useState<
-    Partial<Record<ExchangeId, BitunixFeePolicy>>
-  >({});
-  const accounts = normalizeAdminExchangeAccounts(user);
-  const rows: Array<ExchangeAccountData | null> =
-    accounts.length > 0 ? accounts : [null];
-  const rowSpan = rows.length;
-  const hasMultiAccountPayload =
-    Array.isArray(user.exchange_accounts) || Array.isArray(user.accounts);
-
-  return (
-    <>
-      {rows.map((account, index) => {
-        const exchangeId = account?.exchange;
-        const exchangeName = exchangeId
-          ? exchangeMap[exchangeId].name
-          : "Brak konfiguracji";
-        const verificationStatus =
-          account?.verification_status ?? "not_configured";
-        const approvalRequired =
-          Boolean(exchangeId) &&
-          ["canary_required", "manual_beta"].includes(verificationStatus);
-        const evidence = exchangeId
-          ? canaryEvidence[exchangeId] ?? ""
-          : "";
-        const feePolicy = exchangeId
-          ? feePolicies[exchangeId] ?? "deduct_positive"
-          : "deduct_positive";
-
-        return (
-          <tr
-            key={`${user.telegram_id}-${String(
-              account?.account_id ?? exchangeId ?? "none",
-            )}`}
-          >
-            {index === 0 && (
-              <>
-                <td className="mono" rowSpan={rowSpan}>
-                  {String(user.telegram_id)}
-                </td>
-                <td rowSpan={rowSpan}>
-                  <input
-                    className="table-input"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    aria-label={`Imię użytkownika ${user.telegram_id}`}
-                  />
-                </td>
-                <td rowSpan={rowSpan}>{user.sub_end ?? "Brak danych"}</td>
-                <td rowSpan={rowSpan}>
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(user.bot_active)}
-                      onChange={(event) =>
-                        void onMutation("/api/admin/toggle_bot", {
-                          target_user: String(user.telegram_id),
-                          active: event.target.checked,
-                        }).catch(() => undefined)
-                      }
-                    />
-                    <span />
-                    <b className="sr-only">Bot aktywny</b>
-                  </label>
-                </td>
-                <td rowSpan={rowSpan}>
-                  <label className="toggle admin-toggle">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(user.is_admin)}
-                      onChange={(event) =>
-                        void onMutation("/api/admin/toggle_admin", {
-                          target_user: String(user.telegram_id),
-                          is_admin: event.target.checked,
-                        }).catch(() => undefined)
-                      }
-                    />
-                    <span />
-                    <b className="sr-only">
-                      Uprawnienia administratora
-                    </b>
-                  </label>
-                </td>
-              </>
-            )}
-            <td>
-              <strong>{exchangeName}</strong>
-              {account && (
-                <>
-                  <br />
-                  <span className="muted-cell">
-                    {accountStateLabel(account)}
-                  </span>
-                </>
-              )}
-            </td>
-            <td>{verificationStatusLabel(verificationStatus)}</td>
-            <td>
-              {account && exchangeId ? (
-                <label
-                  className="toggle"
-                  title={
-                    hasMultiAccountPayload
-                      ? `Niezależny przełącznik ${exchangeName}`
-                      : "Aktualizacja API wymagana dla niezależnego przełącznika"
-                  }
-                >
-                  <input
-                    type="checkbox"
-                    checked={Boolean(account.is_enabled)}
-                    disabled={
-                      !hasMultiAccountPayload ||
-                      !account.credentials_configured
-                    }
-                    onChange={(event) =>
-                      void onMutation("/api/admin/toggle_exchange", {
-                        target_user: String(user.telegram_id),
-                        exchange: exchangeId,
-                        active: event.target.checked,
-                      }).catch(() => undefined)
-                    }
-                  />
-                  <span />
-                  <b className="sr-only">
-                    {account.is_enabled ? "Wyłącz" : "Włącz"} {exchangeName}
-                  </b>
-                </label>
-              ) : (
-                <span className="muted-cell">—</span>
-              )}
-            </td>
-            <td>
-              {approvalRequired && exchangeId ? (
-                <div className="approval-controls">
-                  <input
-                    className="table-input evidence-input"
-                    value={evidence}
-                    minLength={8}
-                    maxLength={512}
-                    placeholder="Dowód canary / numer logu"
-                    aria-label={`Dowód canary ${exchangeName} dla ${user.telegram_id}`}
-                    onChange={(event) =>
-                      setCanaryEvidence((current) => ({
-                        ...current,
-                        [exchangeId]: event.target.value,
-                      }))
-                    }
-                  />
-                  {exchangeId === "bitunix" && (
-                    <select
-                      className="table-input"
-                      value={feePolicy}
-                      aria-label={`Polityka opłat Bitunix dla ${user.telegram_id}`}
-                      onChange={(event) =>
-                        setFeePolicies((current) => ({
-                          ...current,
-                          [exchangeId]: event.target
-                            .value as BitunixFeePolicy,
-                        }))
-                      }
-                    >
-                      <option value="deduct_positive">
-                        Opłata dodatnia — odejmij
-                      </option>
-                      <option value="signed_value">
-                        Opłata ze znakiem
-                      </option>
-                    </select>
-                  )}
-                  <button
-                    className="table-button approve-button"
-                    disabled={evidence.trim().length < 8}
-                    onClick={() => {
-                      const confirmed = window.confirm(
-                        `Potwierdzasz zakończony test ${exchangeName} dla konta ${user.telegram_id}?`,
-                      );
-                      if (!confirmed) return;
-                      void onMutation("/api/admin/approve_exchange", {
-                        target_user: String(user.telegram_id),
-                        exchange: exchangeId,
-                        canary_evidence: evidence.trim(),
-                        ...(exchangeId === "bitunix"
-                          ? { bitunix_fee_policy: feePolicy }
-                          : {}),
-                      }).catch(() => undefined);
-                    }}
-                  >
-                    Zatwierdź {exchangeName}
-                  </button>
-                </div>
-              ) : (
-                <span className="muted-cell">
-                  {[
-                    "canary_verified",
-                    "manual_verified",
-                    "verified",
-                    "legacy_migrated",
-                  ].includes(verificationStatus)
-                    ? "Zatwierdzone"
-                    : "—"}
-                </span>
-              )}
-            </td>
-            {index === 0 && (
-              <td rowSpan={rowSpan}>
-                <button
-                  className="table-button"
-                  onClick={() =>
-                    void onMutation("/api/admin/update_name", {
-                      target_user: String(user.telegram_id),
-                      custom_name: name,
-                    }).catch(() => undefined)
-                  }
-                >
-                  Zapisz imię
-                </button>
-              </td>
-            )}
-          </tr>
-        );
-      })}
-    </>
-  );
-}
-
-function RolloutControl({
-  exchange,
-  capability,
-  defaultFeePolicy,
-  onFeePolicyChange,
-  onApprove,
-}: {
-  exchange: ExchangeConfig;
-  capability?: ExchangeCapability;
-  defaultFeePolicy: BitunixFeePolicy;
-  onFeePolicyChange: (value: BitunixFeePolicy) => void;
-  onApprove: (
-    exchangeId: ExchangeId,
-    canaryRecordId: number,
-    feePolicy?: BitunixFeePolicy,
-  ) => Promise<void>;
-}) {
-  const [canaryRecordId, setCanaryRecordId] = useState("");
-  const canRelease =
-    capability?.enabled === true &&
-    ["canary_required", "manual_beta"].includes(capability.status);
-  const parsedRecordId = Number.parseInt(canaryRecordId, 10);
-  const statusLabel =
-    capability?.status === "live"
-      ? "LIVE"
-      : capability?.status === "canary_required"
-        ? "WYMAGA CANARY"
-        : capability?.status === "manual_beta"
-          ? "WYMAGA WALIDACJI BETA"
-          : capability?.status === "live_blocked"
-            ? "ZABLOKOWANA"
-            : capability?.enabled === false
-              ? "WYŁĄCZONA"
-              : "BRAK DANYCH";
-
-  return (
-    <article className="rollout-item">
-      <div>
-        <strong>{exchange.name}</strong>
-        <span>{statusLabel}</span>
-      </div>
-      {canRelease ? (
-        <>
-          <label>
-            ID rekordu zakończonego canary
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={canaryRecordId}
-              onChange={(event) => setCanaryRecordId(event.target.value)}
-              placeholder="np. 42"
-            />
-          </label>
-          {exchange.id === "bitunix" && (
-            <label>
-              Potwierdzona polityka opłat
-              <select
-                value={defaultFeePolicy}
-                onChange={(event) =>
-                  onFeePolicyChange(
-                    event.target.value as BitunixFeePolicy,
-                  )
-                }
-              >
-                <option value="deduct_positive">
-                  Dodatnią opłatę odejmuj od PnL
-                </option>
-                <option value="signed_value">
-                  Wartość opłaty ma poprawny znak
-                </option>
-              </select>
-            </label>
-          )}
-          <button
-            className="table-button rollout-button"
-            disabled={!Number.isInteger(parsedRecordId) || parsedRecordId <= 0}
-            onClick={() =>
-              void onApprove(
-                exchange.id,
-                parsedRecordId,
-                exchange.id === "bitunix" ? defaultFeePolicy : undefined,
-              ).catch(() => undefined)
+        const actionCell = document.createElement("td");
+        const save = document.createElement("button");
+        save.className = "btn btn-gold btn-small save-name";
+        save.textContent = "Zapisz imię";
+        save.addEventListener("click", async () => {
+          save.disabled = true;
+          const previousLabel = save.textContent;
+          save.textContent = "Zapisuję…";
+          try {
+            let changed = 0;
+            const nextName = nameInput.value.trim();
+            if (nextName && nextName !== originalName) {
+              await adminRequest("/api/admin/update_name",{target_user:id,custom_name:nextName});
+              changed += 1;
             }
-          >
-            Zwolnij globalnie do LIVE
-          </button>
-        </>
-      ) : (
-        <p>
-          {capability?.status === "live"
-            ? "Adapter został już zwolniony."
-            : "Aktywacja globalna nie jest obecnie dostępna."}
-        </p>
-      )}
-    </article>
-  );
-}
+            if (botToggle.checked !== originalBot) {
+              await adminRequest("/api/admin/toggle_bot",{target_user:id,active:botToggle.checked});
+              changed += 1;
+            }
+            if (state.isSuperAdmin && adminToggle.checked !== originalAdmin) {
+              await adminRequest("/api/admin/toggle_admin",{target_user:id,is_admin:adminToggle.checked});
+              changed += 1;
+            }
+            setText("admin-status",changed ? "Zapisano zmiany dla " + id + "." : "Brak nowych zmian dla " + id + ".");
+            if (changed) await loadAdminUsers();
+          } catch (error) {
+            setText("admin-status",error.message || "Błąd zapisu.");
+          } finally {
+            save.disabled = false;
+            save.textContent = previousLabel;
+          }
+        });
+        actionCell.append(save);
+        row.append(idCell,nameCell,joinCell,licenseCell,botCell,adminCell,actionCell);
+        body.append(row);
+      });
+    }
+
+    document.addEventListener("click", event => {
+      const pageButton = event.target.closest("[data-page]");
+      if (pageButton) showPage(pageButton.dataset.page);
+      const scrollButton = event.target.closest("[data-scroll]");
+      if (scrollButton) byId(scrollButton.dataset.scroll).scrollIntoView({behavior:"smooth"});
+      if (event.target.closest("[data-terms]")) byId("terms-dialog").showModal();
+    });
+    byId("exchange-select").addEventListener("change", () => {
+      clearSensitiveFields();
+      updateSelectedExchange();
+      useAccountSettings(byId("exchange-select").value);
+    });
+    byId("logout-btn").addEventListener("click", logout);
+    byId("refresh-admin").addEventListener("click", loadAdminUsers);
+    byId("close-terms").addEventListener("click", () => byId("terms-dialog").close());
+    byId("accept-terms").addEventListener("click", () => byId("terms-dialog").close());
+
+    async function bootstrap() {
+      renderExchangeCards();
+      renderExchangeSelect();
+      await loadCapabilities();
+      const restored = await restoreSession();
+      if (!restored) ensureTelegramWidget();
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>
