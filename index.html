@@ -389,6 +389,41 @@
     .login-box { padding: 28px; text-align: center; }
     .login-box p { color: var(--muted); }
     #telegram-widget { min-height: 48px; display: grid; place-items: center; }
+    .steps {
+      margin: 0 0 22px;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(3,minmax(0,1fr));
+      list-style: none;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(13,17,25,.88);
+    }
+    .steps li {
+      min-height: 68px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      border-right: 1px solid var(--line-soft);
+    }
+    .steps li:last-child { border-right: 0; }
+    .steps li.active { color: #fff; background: rgba(243,166,59,.08); }
+    .steps li span {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      color: var(--gold);
+      background: rgba(0,0,0,.32);
+    }
     .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px; }
     .full { grid-column: 1 / -1; }
     label { display: block; color: var(--muted); font-size: 12px; font-weight: 700; }
@@ -402,15 +437,134 @@
       color: white;
     }
     input:focus, select:focus { border-color: var(--gold); outline: none; }
+    .password-field { position: relative; display: block; margin-top: 5px; }
+    .password-field input { margin-top: 0; padding-right: 70px; }
+    .password-field button {
+      position: absolute;
+      top: 50%;
+      right: 8px;
+      transform: translateY(-50%);
+      padding: 5px 7px;
+      border: 0;
+      background: transparent;
+      color: var(--gold);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 850;
+    }
+    .advanced-toggle {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px dashed var(--line);
+      border-radius: 7px;
+      background: rgba(255,255,255,.025);
+      color: #dce2ea;
+      cursor: pointer;
+      font-weight: 800;
+      text-align: left;
+    }
+    .advanced-fields {
+      padding: 14px;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      background: rgba(0,0,0,.18);
+    }
+    .form-safety {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .form-safety span {
+      padding: 6px 9px;
+      border: 1px solid rgba(16,212,154,.28);
+      border-radius: 999px;
+      color: var(--green);
+      background: rgba(16,212,154,.06);
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .exchange-alert {
+      padding: 12px 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,.025);
+      color: #d7dde5;
+      font-size: 12px;
+      line-height: 1.55;
+    }
     .form-note { color: var(--muted); font-size: 12px; }
     .save-status { min-height: 24px; margin-top: 12px; font-size: 13px; font-weight: 700; }
     .save-status.ok { color: var(--green); }
     .save-status.err { color: var(--red); }
     .info-row { display: flex; justify-content: space-between; gap: 15px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 13px; }
     .info-row span:first-child { color: var(--muted); }
+    .profile-kicker {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .12em;
+    }
+    .safety-list { margin: 0; padding-left: 22px; color: #d6dbe2; font-size: 13px; }
+    .safety-list li { margin: 9px 0; }
+    .referral-value {
+      margin: 12px 0;
+      padding: 11px;
+      overflow-wrap: anywhere;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(0,0,0,.3);
+      color: var(--gold);
+      font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    .referral-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 14px 0;
+    }
+    .referral-stat {
+      padding: 12px 10px;
+      border: 1px solid var(--line-soft);
+      border-radius: 9px;
+      background: rgba(0,0,0,.20);
+      text-align: center;
+    }
+    .referral-stat strong {
+      display: block;
+      color: var(--green);
+      font-size: 20px;
+      line-height: 1.2;
+    }
+    .referral-stat span {
+      color: var(--muted);
+      font-size: 11px;
+    }
     .instructions ol { margin: 15px 0; padding-left: 22px; }
     .instructions li { margin: 9px 0; color: #d6dbe2; }
     .doc-link { color: var(--blue); }
+    .instruction-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-bottom: 16px;
+    }
+    .instruction-tabs button {
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(0,0,0,.22);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .instruction-tabs button.active {
+      border-color: var(--gold);
+      color: var(--gold);
+      background: rgba(243,166,59,.07);
+    }
     .admin-shell {
       padding: 0;
       overflow: hidden;
@@ -444,7 +598,63 @@
     .admin-hero p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
     .admin-status-wrap { min-height: 36px; padding: 0 28px; }
     .admin-table-wrap { overflow-x: auto; padding: 0 24px 18px; }
-    .admin-table { min-width: 980px; }
+    .admin-table { min-width: 1460px; }
+    .rollout-card {
+      margin-bottom: 22px;
+      padding: 24px;
+      border-color: rgba(243,166,59,.38);
+    }
+    .rollout-card h3 { margin: 0 0 5px; }
+    .rollout-warning {
+      margin: 0 0 18px;
+      padding: 11px 13px;
+      border: 1px solid rgba(246,186,75,.25);
+      border-radius: 8px;
+      background: rgba(246,186,75,.055);
+      color: #d9c59c;
+      font-size: 12px;
+    }
+    .rollout-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit,minmax(235px,1fr));
+      gap: 12px;
+    }
+    .rollout-item {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: rgba(0,0,0,.22);
+    }
+    .rollout-item-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 11px;
+    }
+    .rollout-item-head span {
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 900;
+      text-align: right;
+    }
+    .rollout-item label { margin-top: 9px; }
+    .rollout-item input, .rollout-item select { margin-top: 4px; padding: 8px 9px; font-size: 11px; }
+    .rollout-item .table-btn { width: 100%; margin-top: 11px; }
+    .rollout-item p { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
+    .approval-controls {
+      min-width: 230px;
+      display: grid;
+      gap: 7px;
+    }
+    .approval-controls input, .approval-controls select {
+      min-width: 215px;
+      margin: 0;
+      padding: 8px;
+      font-size: 11px;
+    }
+    .approval-controls .table-btn { white-space: normal; }
+    .admin-exchange-name { white-space: nowrap; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 15px 14px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: middle; }
     th {
@@ -551,6 +761,9 @@
       .hero h1 { max-width: 100%; font-size: clamp(32px, 9.5vw, 42px); line-height: 1.08; }
       .exchange-grid, .proof-grid, .feature-grid, .pricing-grid, .form-grid { grid-template-columns: 1fr; }
       .full { grid-column: auto; }
+      .steps { grid-template-columns: 1fr; }
+      .steps li { min-height: 54px; border-right: 0; border-bottom: 1px solid var(--line-soft); }
+      .steps li:last-child { border-bottom: 0; }
       .dashboard-head { align-items: flex-start; flex-direction: column; }
       .exchange-top { flex-direction: column; }
       .pricing-card { min-height: 0; padding: 25px; }
@@ -699,6 +912,12 @@
         <div id="telegram-widget"></div>
       </section>
 
+      <ol id="connection-steps" class="steps hidden" aria-label="Etapy podłączenia giełdy">
+        <li class="active"><span>1</span>Wybierz lub dodaj giełdę</li>
+        <li><span>2</span>Utwórz bezpieczny klucz</li>
+        <li><span>3</span>Zapisz i zweryfikuj</li>
+      </ol>
+
       <section id="accounts-panel" class="card accounts-panel hidden">
         <div class="accounts-panel-head">
           <div>
@@ -709,7 +928,7 @@
         </div>
         <div class="accounts-table-wrap">
           <table class="accounts-table">
-            <thead><tr><th>Giełda</th><th>Stan</th><th>Weryfikacja</th><th>Margin / lewar</th><th>Tryb</th><th>ON/OFF</th><th>Ustawienia</th></tr></thead>
+            <thead><tr><th>Giełda</th><th>Stan</th><th>Weryfikacja</th><th>Margin / lewar / ryzyko</th><th>Tryb</th><th>ON/OFF</th><th>Ustawienia</th></tr></thead>
             <tbody id="exchange-accounts"></tbody>
           </table>
         </div>
@@ -728,23 +947,42 @@
                 <input id="api-key" required autocomplete="off" placeholder="Wklej API Key">
               </label>
               <label>API Secret
-                <input id="api-secret" required type="password" autocomplete="new-password" placeholder="Wklej API Secret">
+                <span class="password-field">
+                  <input id="api-secret" required type="password" autocomplete="new-password" placeholder="Wklej API Secret">
+                  <button type="button" data-toggle-secret="api-secret" aria-label="Pokaż API Secret">Pokaż</button>
+                </span>
               </label>
               <label id="passphrase-wrap">Passphrase
-                <input id="api-passphrase" type="password" autocomplete="new-password" placeholder="Wklej Passphrase">
+                <span class="password-field">
+                  <input id="api-passphrase" type="password" autocomplete="new-password" placeholder="Wklej Passphrase">
+                  <button type="button" data-toggle-secret="api-passphrase" aria-label="Pokaż Passphrase">Pokaż</button>
+                </span>
               </label>
               <label>Tryb margin
                 <select id="margin-mode"><option value="isolated">Isolated</option><option value="cross">Cross</option></select>
               </label>
               <label>Margin na pozycję (USDT)
-                <input id="margin" required type="number" min="0.1" step="0.1" value="4">
+                <input id="margin" required type="number" min="1" max="1000" step="0.1" value="4">
               </label>
               <label>Dźwignia
                 <input id="leverage" required type="number" min="1" max="100" step="1" value="20">
               </label>
               <label>Limit dziennego ryzyka (USDT)
-                <input id="max-risk" required type="number" min="0.1" step="0.1" value="20">
+                <input id="max-risk" required type="number" min="1" max="1000" step="0.1" value="20">
               </label>
+              <button id="advanced-toggle" class="advanced-toggle full" type="button" aria-expanded="false">+ Ustawienia zaawansowane</button>
+              <div id="advanced-fields" class="advanced-fields form-grid full hidden">
+                <label>UID API (opcjonalnie)
+                  <input id="api-uid" autocomplete="off" placeholder="Tylko jeśli wymaga go giełda">
+                </label>
+                <label>Subaccount (opcjonalnie)
+                  <input id="subaccount" autocomplete="off" placeholder="Nazwa subkonta">
+                </label>
+              </div>
+              <div class="form-safety full">
+                <span>✓ Brak Withdrawal</span><span>✓ Whitelist IP</span><span>✓ One-way / Net</span>
+              </div>
+              <div id="exchange-isolation-note" class="exchange-alert full">Zapis dotyczy wyłącznie wybranej giełdy i nie zmienia żadnego innego połączenia.</div>
               <div class="full form-note">Klucze muszą mieć wyłącznie odczyt oraz Futures/Trade. Uprawnienia Withdraw i Transfer pozostaw wyłączone.</div>
               <button class="btn btn-gold full" type="submit">Zapisz i sprawdź połączenie</button>
             </div>
@@ -752,6 +990,7 @@
           </form>
           <article id="instruction-card" class="card panel instructions">
             <h3 id="instruction-title">Instrukcja podłączenia</h3>
+            <div id="instruction-tabs" class="instruction-tabs" role="tablist" aria-label="Instrukcje giełd"></div>
             <p id="instruction-lead" class="form-note"></p>
             <ol id="instruction-list"></ol>
             <a id="docs-link" class="doc-link" target="_blank" rel="noopener noreferrer">Oficjalna dokumentacja API ↗</a>
@@ -759,11 +998,38 @@
         </div>
         <aside>
           <article class="card panel">
-            <h3>Twoja licencja</h3>
+            <span class="profile-kicker">TWÓJ PROFIL</span>
+            <h3>Status konta</h3>
             <div class="info-row"><span>Plan</span><strong id="plan-value">Brak danych</strong></div>
-            <div class="info-row"><span>Ważność</span><strong id="license-value">Brak danych</strong></div>
-            <div class="info-row"><span>Giełda</span><strong id="exchange-value">Brak danych</strong></div>
-            <div class="info-row"><span>Weryfikacja</span><strong id="verify-value">Brak danych</strong></div>
+            <div class="info-row"><span>Skonfigurowane giełdy</span><strong id="profile-configured">0</strong></div>
+            <div class="info-row"><span>Włączone / LIVE</span><strong id="profile-live">0 / 0</strong></div>
+            <div class="info-row"><span>Edytujesz teraz</span><strong id="exchange-value">Brak danych</strong></div>
+            <div class="info-row"><span>Status wybranej</span><strong id="verify-value">Brak danych</strong></div>
+            <div class="info-row"><span>Margin / dźwignia</span><strong id="profile-params">4 USDT / 20x</strong></div>
+            <div class="info-row"><span>Limit ryzyka</span><strong id="profile-risk">20 USDT</strong></div>
+            <div class="info-row"><span>Status rozliczenia</span><strong id="billing-status">Brak danych</strong></div>
+            <div class="info-row"><span>Ważność licencji</span><strong id="license-value">Brak danych</strong></div>
+          </article>
+          <article class="card panel">
+            <span class="profile-kicker">ZANIM ZAPISZESZ</span>
+            <h3>5 zasad bezpieczeństwa</h3>
+            <ol class="safety-list">
+              <li>Osobny klucz tylko dla Czarnej Perły.</li>
+              <li>Wyłącznie Read + Futures/Trade.</li>
+              <li>Withdrawal i transfery zawsze OFF.</li>
+              <li>Whitelist adresu IP serwera.</li>
+              <li>Pierwszy test minimalnym marginem.</li>
+            </ol>
+          </article>
+          <article class="card panel">
+            <span class="profile-kicker">PROGRAM POLECEŃ</span>
+            <h3>Twój link</h3>
+            <div id="referral-value" class="referral-value">Dostępny po zalogowaniu</div>
+            <div class="referral-stats">
+              <div class="referral-stat"><strong id="referral-count">0</strong><span>Poleconych</span></div>
+              <div class="referral-stat"><strong id="referral-commission">0,00 USDT</strong><span>Suma prowizji</span></div>
+            </div>
+            <button id="copy-referral" class="btn btn-outline btn-small" type="button" disabled>Kopiuj link</button>
           </article>
           <article class="card panel">
             <h3>Ochrona kapitału</h3>
@@ -780,6 +1046,13 @@
 
   <main id="admin" class="page admin-page">
     <div class="container">
+      <section id="rollout-card" class="card rollout-card">
+        <span class="profile-kicker">GLOBALNY ROLLOUT</span>
+        <h3>Zwolnienie adaptera do LIVE</h3>
+        <p class="rollout-warning">Ten przycisk nie wykonuje testu. Użyj go wyłącznie po realnym canary, sprawdzeniu zleceń ochronnych i dziennego PnL.</p>
+        <div id="rollout-grid" class="rollout-grid"></div>
+        <div id="rollout-status" class="save-status" role="status"></div>
+      </section>
       <section class="card admin-shell">
         <div class="admin-hero">
           <div class="admin-title-wrap">
@@ -794,7 +1067,7 @@
         <div class="admin-status-wrap"><div id="admin-status" class="save-status" role="status"></div></div>
         <div class="admin-table-wrap">
           <table class="admin-table">
-            <thead><tr><th>Telegram ID</th><th>Przypisane imię</th><th>Data dołączenia</th><th>Ważność abonamentu</th><th>Bot ON/OFF</th><th>Admin ON/OFF</th><th>Akcje</th></tr></thead>
+            <thead><tr><th>Telegram ID</th><th>Przypisane imię</th><th>Licencja</th><th>Bot</th><th>Admin</th><th>Giełda</th><th>Weryfikacja</th><th>Giełda ON/OFF</th><th>Aktywacja LIVE</th><th>Akcja</th></tr></thead>
             <tbody id="admin-users"></tbody>
           </table>
         </div>
@@ -845,7 +1118,8 @@
       multiExchange: false,
       capabilities: {},
       accounts: [],
-      togglingExchange: ""
+      togglingExchange: "",
+      instructionExchange: "bitget"
     };
 
     const byId = id => document.getElementById(id);
@@ -864,15 +1138,17 @@
           if (!account || !EXCHANGES.some(item => item.id === account.exchange)) return;
           unique.set(account.exchange, account);
         });
-        return Array.from(unique.values());
+        if (unique.size) return Array.from(unique.values());
       }
-      const valid = EXCHANGES.some(item => item.id === data.exchange);
+      const fallbackExchange = EXCHANGES.some(item => item.id === data.exchange)
+        ? data.exchange
+        : "bitget";
       const configured = data.credentials_configured === true
         || data.api_connected === true
         || Boolean(data.verification_status && data.verification_status !== "not_configured");
-      if (!valid || !configured) return [];
+      if (!configured) return [];
       return [{
-        exchange:data.exchange,
+        exchange:fallbackExchange,
         is_selected:true,
         is_enabled:Boolean(data.api_connected),
         live_trading_enabled:Boolean(data.api_connected),
@@ -895,13 +1171,11 @@
     }
 
     function apiHeaders(extra) {
-      const headers = Object.assign({Accept:"application/json"}, extra || {});
-      if (state.session) headers["X-Session-Token"] = state.session;
-      return headers;
+      return Object.assign({Accept:"application/json"}, extra || {});
     }
 
     function clearSensitiveFields() {
-      ["api-key","api-secret","api-passphrase"].forEach(id => {
+      ["api-key","api-secret","api-passphrase","api-uid","subaccount"].forEach(id => {
         const input = byId(id);
         if (input) input.value = "";
       });
@@ -919,6 +1193,7 @@
       sessionStorage.removeItem("cp_session");
       byId("admin-nav").classList.add("hidden");
       byId("accounts-panel").classList.add("hidden");
+      byId("connection-steps").classList.add("hidden");
       clearSensitiveFields();
     }
 
@@ -933,7 +1208,10 @@
       document.querySelectorAll(".nav-btn[data-page]").forEach(btn => btn.classList.toggle("active", btn.dataset.page === name));
       state.page = name;
       if (name === "dashboard") ensureTelegramWidget();
-      if (name === "admin") loadAdminUsers();
+      if (name === "admin") {
+        renderRolloutControls();
+        loadAdminUsers();
+      }
       window.scrollTo({top:0, behavior:"smooth"});
     }
 
@@ -1004,11 +1282,31 @@
       });
       select.value = EXCHANGES.some(x => x.id === current && canSelect(x)) ? current : "bitget";
       updateSelectedExchange();
+      renderInstructionTabs();
     }
 
-    function updateSelectedExchange() {
-      const item = exchangeById(byId("exchange-select").value);
-      byId("passphrase-wrap").classList.toggle("hidden", !item.passphrase);
+    function renderInstructionTabs() {
+      const host = byId("instruction-tabs");
+      if (!host) return;
+      host.replaceChildren();
+      EXCHANGES.forEach(item => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", String(state.instructionExchange === item.id));
+        button.classList.toggle("active", state.instructionExchange === item.id);
+        button.textContent = item.name;
+        button.addEventListener("click", () => {
+          state.instructionExchange = item.id;
+          renderInstructionTabs();
+          renderInstructionContent(item.id);
+        });
+        host.append(button);
+      });
+    }
+
+    function renderInstructionContent(exchangeId) {
+      const item = exchangeById(exchangeId);
       setText("instruction-title", "Instrukcja podłączenia: " + item.name);
       setText("instruction-lead", item.description + " Wymagane dane: " + item.fields + ".");
       const list = byId("instruction-list");
@@ -1019,6 +1317,32 @@
         list.append(li);
       });
       byId("docs-link").href = item.docs;
+    }
+
+    function refreshProfileSummary() {
+      const selectedId = byId("exchange-select").value || "bitget";
+      const item = exchangeById(selectedId);
+      const selectedAccount = state.accounts.find(account => account.exchange === selectedId);
+      const enabled = state.accounts.filter(account => account.is_enabled).length;
+      const connected = state.accounts.filter(account => account.api_connected).length;
+      setText("profile-configured", state.accounts.length);
+      setText("profile-live", enabled + " / " + connected);
+      setText("exchange-value", item.name);
+      setText("verify-value", selectedAccount
+        ? verificationLabel(selectedAccount.verification_status)
+        : "Nowa konfiguracja");
+      setText("profile-params", (byId("margin").value || "—") + " USDT / " + (byId("leverage").value || "—") + "x");
+      setText("profile-risk", (byId("max-risk").value || "—") + " USDT");
+      setText("exchange-isolation-note", "Zapis dotyczy wyłącznie konta " + item.name + ". Nie wyłącza, nie nadpisuje ani nie przełącza żadnej innej giełdy.");
+    }
+
+    function updateSelectedExchange() {
+      const item = exchangeById(byId("exchange-select").value);
+      byId("passphrase-wrap").classList.toggle("hidden", !item.passphrase);
+      state.instructionExchange = item.id;
+      renderInstructionTabs();
+      renderInstructionContent(item.id);
+      refreshProfileSummary();
     }
 
     function useAccountSettings(exchangeId) {
@@ -1036,6 +1360,7 @@
       clearSensitiveFields();
       updateSelectedExchange();
       useAccountSettings(exchangeId);
+      refreshProfileSummary();
       byId("exchange-form").scrollIntoView({behavior:"smooth", block:"start"});
     }
 
@@ -1045,6 +1370,7 @@
       const enabled = state.accounts.filter(account => account.is_enabled).length;
       const connected = state.accounts.filter(account => account.api_connected).length;
       setText("accounts-summary", connected + " LIVE / " + enabled + " ON / " + state.accounts.length + " skonfigurowanych");
+      refreshProfileSummary();
       if (!state.accounts.length) {
         const row = document.createElement("tr");
         const cell = document.createElement("td");
@@ -1072,7 +1398,9 @@
         const verifyCell = document.createElement("td");
         verifyCell.textContent = verificationLabel(account.verification_status);
         const paramsCell = document.createElement("td");
-        paramsCell.textContent = (account.margin == null ? "—" : account.margin) + " USDT / " + (account.leverage == null ? "—" : account.leverage) + "x";
+        paramsCell.textContent = (account.margin == null ? "—" : account.margin) + " USDT / "
+          + (account.leverage == null ? "—" : account.leverage) + "x / ryzyko "
+          + (account.max_risk == null ? "—" : account.max_risk) + " USDT";
         const modeCell = document.createElement("td");
         modeCell.textContent = account.margin_mode === "cross" ? "Cross" : "Isolated";
 
@@ -1153,6 +1481,7 @@
       }
       renderExchangeCards();
       renderExchangeSelect();
+      renderRolloutControls();
     }
 
     function ensureTelegramWidget() {
@@ -1205,16 +1534,18 @@
       const data = await readJson(response);
       state.dashboard = data;
       state.telegramUser = state.telegramUser || {id:String(data.telegram_id)};
-      state.isAdmin = data.is_admin === true;
       state.isSuperAdmin = data.is_superadmin === true;
+      state.isAdmin = data.is_admin === true || state.isSuperAdmin;
       state.accounts = normalizeExchangeAccounts(data);
       byId("admin-nav").classList.toggle("hidden", !state.isAdmin);
       byId("login-panel").classList.add("hidden");
       byId("dashboard-content").classList.remove("hidden");
       byId("accounts-panel").classList.remove("hidden");
+      byId("connection-steps").classList.remove("hidden");
       byId("logout-btn").classList.remove("hidden");
       setText("welcome-text", "Witaj, " + (data.custom_name || data.username || "Inwestor") + ".");
       setText("plan-value", data.plan_name || "Brak aktywnego planu");
+      setText("billing-status", data.license_active === true ? "Aktywny" : "Nieaktywny");
       setText("license-value", formatTimeLeft(data.subscription_end_date));
       const preferred = state.accounts.find(account => account.is_selected)
         || state.accounts.find(account => account.exchange === data.exchange)
@@ -1223,6 +1554,24 @@
       const preferredExchange = preferred ? preferred.exchange : data.exchange;
       setText("exchange-value", preferredExchange ? exchangeById(preferredExchange).name : "Brak danych");
       setText("verify-value", verificationLabel(preferred ? preferred.verification_status : data.verification_status));
+      const referralUrl = data.referral_code
+        ? "https://msliwa610-oss.github.io/czarnaperla-bot/?ref=" + data.referral_code
+        : "";
+      setText("referral-value", referralUrl || "Dostępny po zalogowaniu");
+      setText(
+        "referral-count",
+        Number.isFinite(Number(data.referral_count))
+          ? Math.max(0, Number(data.referral_count))
+          : 0
+      );
+      const referralCommission = Number(data.referral_commission);
+      setText(
+        "referral-commission",
+        (Number.isFinite(referralCommission) ? Math.max(0, referralCommission) : 0)
+          .toLocaleString("pl-PL", {minimumFractionDigits:2, maximumFractionDigits:2})
+          + " USDT"
+      );
+      byId("copy-referral").disabled = !referralUrl;
       if (preferredExchange && EXCHANGES.some(item => item.id === preferredExchange)) {
         byId("exchange-select").value = preferredExchange;
       }
@@ -1235,6 +1584,7 @@
       }
       renderExchangeAccounts();
       updateSelectedExchange();
+      refreshProfileSummary();
       const connected = state.accounts.filter(account => account.api_connected).length;
       const enabled = state.accounts.filter(account => account.is_enabled).length;
       setConnection("success", state.accounts.length
@@ -1243,7 +1593,6 @@
     }
 
     async function restoreSession() {
-      if (!state.session) return false;
       try {
         const response = await fetch(API_BASE_URL + "/api/auth/session", {
           method:"POST",
@@ -1282,7 +1631,7 @@
     }
 
     function verificationLabel(value) {
-      const labels = {verified:"LIVE zweryfikowane",canary_required:"Wymagany canary",canary_verified:"Canary zatwierdzony",manual_beta:"Walidacja BETA",manual_verified:"BETA zatwierdzona",live_blocked:"LIVE zablokowany",not_configured:"Nie skonfigurowano"};
+      const labels = {verified:"LIVE zweryfikowane",canary_required:"Wymagany canary",canary_verified:"Canary zatwierdzony",manual_beta:"Walidacja BETA",manual_verified:"BETA zatwierdzona",legacy_migrated:"Bitget przeniesiony",live_blocked:"LIVE zablokowany",not_configured:"Nie skonfigurowano"};
       return labels[value] || String(value || "Oczekuje").replaceAll("_"," ");
     }
 
@@ -1330,8 +1679,8 @@
         api_key:key,
         api_secret:secret,
         api_passphrase:item.passphrase ? passphrase : "",
-        api_uid:"",
-        subaccount:"",
+        api_uid:byId("api-uid").value.trim(),
+        subaccount:byId("subaccount").value.trim(),
         margin_mode:byId("margin-mode").value,
         leverage:leverage,
         margin:margin,
@@ -1346,9 +1695,7 @@
           body:JSON.stringify(payload)
         });
         const result = await readJson(response);
-        byId("api-key").value = "";
-        byId("api-secret").value = "";
-        byId("api-passphrase").value = "";
+        clearSensitiveFields();
         await loadDashboard();
         byId("exchange-select").value = item.id;
         updateSelectedExchange();
@@ -1395,6 +1742,138 @@
       return readJson(response);
     }
 
+    function rolloutStatusLabel(capability) {
+      if (!capability) return "BRAK DANYCH";
+      if (capability.status === "live") return "LIVE";
+      if (capability.status === "canary_required") return "WYMAGA CANARY";
+      if (capability.status === "manual_beta") return "WYMAGA WALIDACJI BETA";
+      if (capability.status === "live_blocked") return "ZABLOKOWANA";
+      if (capability.enabled === false) return "WYŁĄCZONA";
+      return String(capability.status || "BRAK DANYCH").replaceAll("_", " ").toUpperCase();
+    }
+
+    function renderRolloutControls() {
+      const host = byId("rollout-grid");
+      if (!host) return;
+      host.replaceChildren();
+      EXCHANGES.filter(item => item.id !== "bitget" && item.id !== "mexc").forEach(item => {
+        const capability = state.capabilities[item.id];
+        const canRelease = Boolean(
+          capability
+          && capability.enabled === true
+          && ["canary_required", "manual_beta"].includes(capability.status)
+        );
+        const card = document.createElement("article");
+        card.className = "rollout-item";
+        const head = document.createElement("div");
+        head.className = "rollout-item-head";
+        const name = document.createElement("strong");
+        name.textContent = item.name;
+        const status = document.createElement("span");
+        status.textContent = rolloutStatusLabel(capability);
+        head.append(name, status);
+        card.append(head);
+
+        if (!canRelease) {
+          const note = document.createElement("p");
+          note.textContent = capability && capability.status === "live"
+            ? "Adapter został już zwolniony."
+            : "Aktywacja globalna nie jest obecnie dostępna.";
+          card.append(note);
+          host.append(card);
+          return;
+        }
+
+        const recordLabel = document.createElement("label");
+        recordLabel.textContent = "ID rekordu zakończonego canary";
+        const recordInput = document.createElement("input");
+        recordInput.type = "number";
+        recordInput.min = "1";
+        recordInput.step = "1";
+        recordInput.placeholder = "np. 42";
+        recordLabel.append(recordInput);
+        card.append(recordLabel);
+
+        let feeSelect = null;
+        if (item.id === "bitunix") {
+          const feeLabel = document.createElement("label");
+          feeLabel.textContent = "Potwierdzona polityka opłat";
+          feeSelect = document.createElement("select");
+          [["deduct_positive","Dodatnią opłatę odejmuj od PnL"],["signed_value","Wartość opłaty ma poprawny znak"]].forEach(([value,label]) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+            feeSelect.append(option);
+          });
+          feeLabel.append(feeSelect);
+          card.append(feeLabel);
+        }
+
+        const approve = document.createElement("button");
+        approve.type = "button";
+        approve.className = "table-btn";
+        approve.textContent = "Zwolnij globalnie do LIVE";
+        approve.addEventListener("click", async () => {
+          const recordId = Number.parseInt(recordInput.value, 10);
+          if (!Number.isInteger(recordId) || recordId <= 0) {
+            setText("rollout-status", "Podaj poprawne ID zakończonego rekordu canary.");
+            return;
+          }
+          if (!window.confirm("Zwolnić " + item.name + " globalnie do LIVE po sprawdzeniu rekordu " + recordId + "?")) return;
+          approve.disabled = true;
+          try {
+            const payload = {exchange:item.id,canary_record_id:recordId};
+            if (feeSelect) payload.bitunix_fee_policy = feeSelect.value;
+            const result = await adminRequest("/api/admin/approve_exchange_rollout", payload);
+            setText("rollout-status", result.message || item.name + " została zwolniona globalnie do LIVE.");
+            await loadCapabilities();
+            await loadAdminUsers();
+          } catch (error) {
+            setText("rollout-status", error.message || "Nie udało się zwolnić adaptera.");
+          } finally {
+            approve.disabled = false;
+          }
+        });
+        card.append(approve);
+        host.append(card);
+      });
+    }
+
+    function normalizeAdminExchangeAccounts(user) {
+      if (!user) return [];
+      const source = Array.isArray(user.exchange_accounts)
+        ? user.exchange_accounts
+        : Array.isArray(user.accounts)
+          ? user.accounts
+          : null;
+      if (source) {
+        const unique = new Map();
+        source.forEach(account => {
+          if (!account || !EXCHANGES.some(item => item.id === account.exchange)) return;
+          unique.set(account.exchange, account);
+        });
+        if (unique.size) return Array.from(unique.values());
+      }
+      const configured = user.credentials_configured === true
+        || user.api_connected === true
+        || Boolean(user.verification_status && user.verification_status !== "not_configured");
+      if (!configured) return [];
+      const exchange = EXCHANGES.some(item => item.id === user.exchange) ? user.exchange : "bitget";
+      return [{
+        exchange:exchange,
+        is_enabled:Boolean(user.bot_active),
+        live_trading_enabled:Boolean(user.api_connected || user.bot_active),
+        credentials_configured:true,
+        api_connected:Boolean(user.api_connected || user.bot_active),
+        verification_status:user.verification_status || "legacy_migrated",
+        leverage:user.leverage,
+        margin:user.margin,
+        max_risk:user.max_risk,
+        margin_mode:user.margin_mode,
+        legacy_fallback:true
+      }];
+    }
+
     async function loadAdminUsers() {
       if (!state.isAdmin) return;
       setText("admin-status","Pobieranie użytkowników…");
@@ -1413,7 +1892,7 @@
       if (!users.length) {
         const row = document.createElement("tr");
         const cell = document.createElement("td");
-        cell.colSpan = 7;
+        cell.colSpan = 10;
         cell.textContent = "Brak użytkowników do wyświetlenia.";
         cell.style.textAlign = "center";
         cell.style.color = "var(--muted)";
@@ -1422,107 +1901,241 @@
         return;
       }
       users.forEach(user => {
-        const row = document.createElement("tr");
         const id = String(user.telegram_id);
-        const idCell = document.createElement("td");
-        idCell.className = "admin-id";
-        idCell.textContent = id;
-
-        const nameCell = document.createElement("td");
+        const accounts = normalizeAdminExchangeAccounts(user);
+        const rows = accounts.length ? accounts : [null];
+        const hasAuthoritativeAccounts = (
+          Array.isArray(user.exchange_accounts) && user.exchange_accounts.length > 0
+        ) || (
+          Array.isArray(user.accounts) && user.accounts.length > 0
+        );
         const nameInput = document.createElement("input");
         nameInput.className = "admin-name-input";
         nameInput.value = user.custom_name || "";
         nameInput.setAttribute("aria-label", "Przypisane imię dla konta " + id);
-        const accountMeta = document.createElement("span");
-        accountMeta.className = "account-meta";
-        const adminAccounts = Array.isArray(user.exchange_accounts)
-          ? user.exchange_accounts
-          : Array.isArray(user.accounts)
-            ? user.accounts
-            : [];
-        if (adminAccounts.length) {
-          accountMeta.textContent = adminAccounts.map(account => {
-            const known = exchangeById(account.exchange);
-            return known.name + " — " + accountStateLabel(account);
-          }).join(" • ");
-        } else {
-          const knownExchange = EXCHANGES.find(item => item.id === user.exchange);
-          const exchangeName = knownExchange ? knownExchange.name : (user.exchange ? String(user.exchange) : "Giełda nieustawiona");
-          accountMeta.textContent = exchangeName + " • " + verificationLabel(user.verification_status);
-        }
-        nameCell.append(nameInput, accountMeta);
+        rows.forEach((account, index) => {
+          const row = document.createElement("tr");
+          if (index === 0) {
+            const idCell = document.createElement("td");
+            idCell.className = "admin-id";
+            idCell.rowSpan = rows.length;
+            idCell.textContent = id;
 
-        const joinCell = document.createElement("td");
-        joinCell.textContent = adminDate(user.join_date, "Przed aktualizacją");
+            const nameCell = document.createElement("td");
+            nameCell.rowSpan = rows.length;
+            nameCell.append(nameInput);
 
-        const licenseCell = document.createElement("td");
-        licenseCell.className = "license-cell";
-        licenseCell.textContent = adminDate(user.sub_end, "Brak danych");
+            const licenseCell = document.createElement("td");
+            licenseCell.className = "license-cell";
+            licenseCell.rowSpan = rows.length;
+            licenseCell.textContent = adminDate(user.sub_end, "Brak danych");
+            const joined = document.createElement("span");
+            joined.className = "account-meta";
+            joined.textContent = "Dołączenie: " + adminDate(user.join_date, "Przed aktualizacją");
+            licenseCell.append(joined);
 
-        const botCell = document.createElement("td");
-        const originalName = user.custom_name || "";
-        const originalBot = Boolean(user.bot_active);
-        const originalAdmin = Boolean(user.is_admin);
-        const botLabel = document.createElement("label");
-        botLabel.className = "switch";
-        const botToggle = document.createElement("input");
-        botToggle.type = "checkbox";
-        botToggle.checked = originalBot;
-        botToggle.setAttribute("aria-label", "Bot ON/OFF dla konta " + id);
-        const botTrack = document.createElement("span");
-        botTrack.className = "switch-track";
-        botLabel.append(botToggle, botTrack);
-        botCell.append(botLabel);
+            const botCell = document.createElement("td");
+            botCell.rowSpan = rows.length;
+            const botLabel = document.createElement("label");
+            botLabel.className = "switch";
+            const botToggle = document.createElement("input");
+            botToggle.type = "checkbox";
+            botToggle.checked = Boolean(user.bot_active);
+            botToggle.setAttribute("aria-label", "Bot ON/OFF dla konta " + id);
+            const botTrack = document.createElement("span");
+            botTrack.className = "switch-track";
+            botLabel.append(botToggle, botTrack);
+            botCell.append(botLabel);
+            botToggle.addEventListener("change", async () => {
+              botToggle.disabled = true;
+              try {
+                await adminRequest("/api/admin/toggle_bot",{target_user:id,active:botToggle.checked});
+                setText("admin-status","Zmieniono status bota dla " + id + ".");
+                await loadAdminUsers();
+              } catch (error) {
+                botToggle.checked = !botToggle.checked;
+                setText("admin-status",error.message || "Nie udało się zmienić statusu bota.");
+              } finally {
+                botToggle.disabled = false;
+              }
+            });
 
-        const adminCell = document.createElement("td");
-        const adminLabel = document.createElement("label");
-        adminLabel.className = "switch admin-switch";
-        const adminToggle = document.createElement("input");
-        adminToggle.type = "checkbox";
-        adminToggle.checked = originalAdmin;
-        adminToggle.disabled = !state.isSuperAdmin;
-        adminToggle.setAttribute("aria-label", "Admin ON/OFF dla konta " + id);
-        adminToggle.title = state.isSuperAdmin ? "" : "Zmiana roli wymaga uprawnień superadministratora";
-        const adminTrack = document.createElement("span");
-        adminTrack.className = "switch-track";
-        adminLabel.append(adminToggle, adminTrack);
-        adminCell.append(adminLabel);
+            const adminCell = document.createElement("td");
+            adminCell.rowSpan = rows.length;
+            const adminLabel = document.createElement("label");
+            adminLabel.className = "switch admin-switch";
+            const adminToggle = document.createElement("input");
+            adminToggle.type = "checkbox";
+            adminToggle.checked = Boolean(user.is_admin || user.is_superadmin);
+            adminToggle.disabled = !state.isSuperAdmin || Boolean(user.is_superadmin);
+            adminToggle.setAttribute("aria-label", "Admin ON/OFF dla konta " + id);
+            adminToggle.title = user.is_superadmin
+              ? "Roli superadministratora nie można wyłączyć w tym panelu"
+              : state.isSuperAdmin ? "" : "Zmiana roli wymaga superadministratora";
+            const adminTrack = document.createElement("span");
+            adminTrack.className = "switch-track";
+            adminLabel.append(adminToggle, adminTrack);
+            adminCell.append(adminLabel);
+            adminToggle.addEventListener("change", async () => {
+              adminToggle.disabled = true;
+              try {
+                await adminRequest("/api/admin/toggle_admin",{target_user:id,is_admin:adminToggle.checked});
+                setText("admin-status","Zmieniono uprawnienia administratora dla " + id + ".");
+                await loadAdminUsers();
+              } catch (error) {
+                adminToggle.checked = !adminToggle.checked;
+                setText("admin-status",error.message || "Nie udało się zmienić uprawnień.");
+              } finally {
+                adminToggle.disabled = !state.isSuperAdmin || Boolean(user.is_superadmin);
+              }
+            });
 
-        const actionCell = document.createElement("td");
-        const save = document.createElement("button");
-        save.className = "btn btn-gold btn-small save-name";
-        save.textContent = "Zapisz imię";
-        save.addEventListener("click", async () => {
-          save.disabled = true;
-          const previousLabel = save.textContent;
-          save.textContent = "Zapisuję…";
-          try {
-            let changed = 0;
-            const nextName = nameInput.value.trim();
-            if (nextName && nextName !== originalName) {
-              await adminRequest("/api/admin/update_name",{target_user:id,custom_name:nextName});
-              changed += 1;
-            }
-            if (botToggle.checked !== originalBot) {
-              await adminRequest("/api/admin/toggle_bot",{target_user:id,active:botToggle.checked});
-              changed += 1;
-            }
-            if (state.isSuperAdmin && adminToggle.checked !== originalAdmin) {
-              await adminRequest("/api/admin/toggle_admin",{target_user:id,is_admin:adminToggle.checked});
-              changed += 1;
-            }
-            setText("admin-status",changed ? "Zapisano zmiany dla " + id + "." : "Brak nowych zmian dla " + id + ".");
-            if (changed) await loadAdminUsers();
-          } catch (error) {
-            setText("admin-status",error.message || "Błąd zapisu.");
-          } finally {
-            save.disabled = false;
-            save.textContent = previousLabel;
+            row.append(idCell,nameCell,licenseCell,botCell,adminCell);
           }
+
+          const exchangeCell = document.createElement("td");
+          if (account) {
+            const exchangeItem = exchangeById(account.exchange);
+            const strong = document.createElement("strong");
+            strong.className = "admin-exchange-name";
+            strong.textContent = exchangeItem.name;
+            const meta = document.createElement("span");
+            meta.className = "account-meta";
+            meta.textContent = accountStateLabel(account);
+            exchangeCell.append(strong, meta);
+          } else {
+            exchangeCell.textContent = "Brak konfiguracji";
+            exchangeCell.style.color = "var(--muted)";
+          }
+
+          const verificationCell = document.createElement("td");
+          const verificationStatus = account ? account.verification_status : "not_configured";
+          verificationCell.textContent = verificationLabel(verificationStatus);
+
+          const exchangeToggleCell = document.createElement("td");
+          if (account) {
+            const exchangeLabel = document.createElement("label");
+            exchangeLabel.className = "switch";
+            const exchangeToggle = document.createElement("input");
+            exchangeToggle.type = "checkbox";
+            exchangeToggle.checked = Boolean(account.is_enabled);
+            exchangeToggle.disabled = !hasAuthoritativeAccounts || !account.credentials_configured;
+            exchangeToggle.title = hasAuthoritativeAccounts
+              ? "Niezależny przełącznik " + exchangeById(account.exchange).name
+              : "Legacy Bitget pokazany informacyjnie; migracja API utworzy niezależne konto";
+            const exchangeTrack = document.createElement("span");
+            exchangeTrack.className = "switch-track";
+            exchangeLabel.append(exchangeToggle, exchangeTrack);
+            exchangeToggleCell.append(exchangeLabel);
+            exchangeToggle.addEventListener("change", async () => {
+              exchangeToggle.disabled = true;
+              try {
+                await adminRequest("/api/admin/toggle_exchange",{
+                  target_user:id,
+                  exchange:account.exchange,
+                  active:exchangeToggle.checked
+                });
+                setText("admin-status","Zmieniono " + exchangeById(account.exchange).name + " dla " + id + ".");
+                await loadAdminUsers();
+              } catch (error) {
+                exchangeToggle.checked = !exchangeToggle.checked;
+                setText("admin-status",error.message || "Nie udało się zmienić giełdy.");
+              } finally {
+                exchangeToggle.disabled = !hasAuthoritativeAccounts || !account.credentials_configured;
+              }
+            });
+          } else {
+            exchangeToggleCell.textContent = "—";
+          }
+
+          const approvalCell = document.createElement("td");
+          const approvalRequired = account && ["canary_required","manual_beta"].includes(verificationStatus);
+          if (approvalRequired) {
+            const controls = document.createElement("div");
+            controls.className = "approval-controls";
+            const evidence = document.createElement("input");
+            evidence.placeholder = "Dowód canary / numer logu";
+            evidence.minLength = 8;
+            evidence.maxLength = 512;
+            evidence.setAttribute("aria-label", "Dowód canary " + account.exchange + " dla " + id);
+            controls.append(evidence);
+            let feePolicy = null;
+            if (account.exchange === "bitunix") {
+              feePolicy = document.createElement("select");
+              [["deduct_positive","Opłata dodatnia — odejmij"],["signed_value","Opłata ze znakiem"]].forEach(([value,label]) => {
+                const option = document.createElement("option");
+                option.value = value;
+                option.textContent = label;
+                feePolicy.append(option);
+              });
+              controls.append(feePolicy);
+            }
+            const approve = document.createElement("button");
+            approve.type = "button";
+            approve.className = "table-btn";
+            approve.textContent = "Zatwierdź " + exchangeById(account.exchange).name;
+            approve.disabled = true;
+            evidence.addEventListener("input", () => {
+              approve.disabled = evidence.value.trim().length < 8;
+            });
+            approve.addEventListener("click", async () => {
+              if (!window.confirm("Potwierdzasz zakończony test " + exchangeById(account.exchange).name + " dla konta " + id + "?")) return;
+              approve.disabled = true;
+              try {
+                const payload = {
+                  target_user:id,
+                  exchange:account.exchange,
+                  canary_evidence:evidence.value.trim()
+                };
+                if (feePolicy) payload.bitunix_fee_policy = feePolicy.value;
+                await adminRequest("/api/admin/approve_exchange",payload);
+                setText("admin-status","Zatwierdzono " + exchangeById(account.exchange).name + " dla " + id + ".");
+                await loadAdminUsers();
+              } catch (error) {
+                setText("admin-status",error.message || "Nie udało się zatwierdzić konta.");
+              } finally {
+                approve.disabled = evidence.value.trim().length < 8;
+              }
+            });
+            controls.append(approve);
+            approvalCell.append(controls);
+          } else {
+            approvalCell.textContent = ["canary_verified","manual_verified","verified","legacy_migrated"].includes(verificationStatus)
+              ? "Zatwierdzone"
+              : "—";
+            approvalCell.style.color = "var(--muted)";
+          }
+
+          if (index === 0) {
+            const actionCell = document.createElement("td");
+            actionCell.rowSpan = rows.length;
+            const save = document.createElement("button");
+            save.className = "btn btn-gold btn-small save-name";
+            save.textContent = "Zapisz imię";
+            save.addEventListener("click", async () => {
+              const nextName = nameInput.value.trim();
+              if (!nextName) {
+                setText("admin-status","Imię nie może być puste.");
+                return;
+              }
+              save.disabled = true;
+              try {
+                await adminRequest("/api/admin/update_name",{target_user:id,custom_name:nextName});
+                setText("admin-status","Zapisano imię dla " + id + ".");
+                await loadAdminUsers();
+              } catch (error) {
+                setText("admin-status",error.message || "Błąd zapisu imienia.");
+              } finally {
+                save.disabled = false;
+              }
+            });
+            actionCell.append(save);
+            row.append(exchangeCell,verificationCell,exchangeToggleCell,approvalCell,actionCell);
+          } else {
+            row.append(exchangeCell,verificationCell,exchangeToggleCell,approvalCell);
+          }
+          body.append(row);
         });
-        actionCell.append(save);
-        row.append(idCell,nameCell,joinCell,licenseCell,botCell,adminCell,actionCell);
-        body.append(row);
       });
     }
 
@@ -1537,6 +2150,36 @@
       clearSensitiveFields();
       updateSelectedExchange();
       useAccountSettings(byId("exchange-select").value);
+      refreshProfileSummary();
+    });
+    ["margin","leverage","max-risk"].forEach(id => {
+      byId(id).addEventListener("input", refreshProfileSummary);
+    });
+    document.querySelectorAll("[data-toggle-secret]").forEach(button => {
+      button.addEventListener("click", () => {
+        const input = byId(button.dataset.toggleSecret);
+        const show = input.type === "password";
+        input.type = show ? "text" : "password";
+        button.textContent = show ? "Ukryj" : "Pokaż";
+        button.setAttribute("aria-label", (show ? "Ukryj " : "Pokaż ") + (input.id === "api-secret" ? "API Secret" : "Passphrase"));
+      });
+    });
+    byId("advanced-toggle").addEventListener("click", () => {
+      const fields = byId("advanced-fields");
+      const expanded = fields.classList.contains("hidden");
+      fields.classList.toggle("hidden", !expanded);
+      byId("advanced-toggle").setAttribute("aria-expanded", String(expanded));
+      byId("advanced-toggle").textContent = (expanded ? "−" : "+") + " Ustawienia zaawansowane";
+    });
+    byId("copy-referral").addEventListener("click", async () => {
+      const value = byId("referral-value").textContent.trim();
+      if (!value.startsWith("https://")) return;
+      try {
+        await navigator.clipboard.writeText(value);
+        setSave("Link polecający skopiowany.", true);
+      } catch (_) {
+        setSave("Nie udało się skopiować automatycznie. Zaznacz link i skopiuj ręcznie.", false);
+      }
     });
     byId("logout-btn").addEventListener("click", logout);
     byId("refresh-admin").addEventListener("click", loadAdminUsers);
