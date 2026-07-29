@@ -3,277 +3,1314 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Czarna Perła — Panel</title>
+  <meta name="description" content="Czarna Perła — automatyczny system tradingowy SMC i True CVD">
+  <title>Czarna Perła — Panel Multi-Giełdowy</title>
   <style>
     :root {
       --bg: #07090d;
       --panel: rgba(15, 20, 29, .88);
-      --text: #f4f6f8;
-      --gold: #f3a63b;
-      --green: #10d49a;
-      --red: #ff6262;
+      --panel2: rgba(10, 14, 21, .91);
       --line: rgba(111, 126, 148, .30);
+      --line-soft: rgba(255,255,255,.08);
+      --text: #f4f6f8;
+      --muted: #aeb7c5;
+      --gold: #f3a63b;
+      --gold-bright: #ffbd57;
+      --green: #10d49a;
+      --blue: #35a9ee;
+      --amber: #f6ba4b;
+      --red: #ff6262;
+      --shadow: 0 24px 70px rgba(0,0,0,.40);
     }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
-      margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg); color: var(--text);
-      display: flex; flex-direction: column; align-items: center;
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      line-height: 1.6;
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(circle at 50% 12%, rgba(243,166,59,.05), transparent 36%),
+        linear-gradient(180deg, rgba(5,8,12,.38), rgba(5,8,12,.64)),
+        url("./4UEg7.jpg");
+      background-position: center top;
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      overflow-x: hidden;
     }
-    .container { width: 100%; max-width: 800px; }
-    .card {
-      background: var(--panel); border: 1px solid var(--line);
-      border-radius: 12px; padding: 24px; margin-bottom: 20px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    }
-    h1, h2, h3 { color: var(--gold); margin-top: 0; }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    a { color: inherit; }
+    :focus-visible { outline: 3px solid rgba(243,166,59,.5); outline-offset: 2px; }
+    .container { width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 24px; }
     .hidden { display: none !important; }
-    label { display: block; margin-top: 15px; font-size: 14px; font-weight: bold; color: #aeb7c5;}
-    input {
-      width: 100%; padding: 12px; margin-top: 5px; box-sizing: border-box;
-      background: rgba(0,0,0,0.5); border: 1px solid var(--line); color: white; border-radius: 6px;
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--line-soft);
+      background: linear-gradient(180deg, rgba(7,9,13,.82), rgba(7,9,13,.68));
+      backdrop-filter: blur(14px) saturate(125%);
     }
-    input:focus { border-color: var(--gold); outline: none; }
+    .header-inner {
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .brand {
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 2px 0;
+      font-size: 27px;
+      font-weight: 900;
+      letter-spacing: .09em;
+      white-space: nowrap;
+    }
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(243,166,59,.40);
+      border-radius: 12px;
+      background: linear-gradient(145deg, rgba(243,166,59,.18), rgba(77,41,103,.48));
+      box-shadow: 0 8px 24px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.12);
+      font-size: 22px;
+      line-height: 1;
+    }
+    .brand-copy { line-height: 1; }
+    .brand strong { color: var(--gold); }
+    nav { display: flex; gap: 10px; }
+    .nav-btn {
+      min-height: 38px;
+      padding: 8px 16px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    .nav-btn:hover { color: white; background: rgba(255,255,255,.05); }
+    .nav-btn.active { color: var(--gold); border-color: rgba(243,166,59,.55); background: rgba(243,166,59,.09); }
+    .nav-btn.admin { color: var(--red); }
+
+    .page { display: none; }
+    .page.active { display: block; }
+    .hero {
+      min-height: 535px;
+      padding: 92px 0 78px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      border-bottom: 1px solid var(--line-soft);
+      background:
+        radial-gradient(ellipse at 50% 48%, rgba(7,10,15,.60) 0%, rgba(7,10,15,.42) 48%, rgba(7,10,15,.14) 100%);
+    }
+    .badges { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
+    .badge {
+      padding: 8px 16px;
+      border: 1px solid var(--green);
+      border-radius: 999px;
+      background: rgba(7,27,24,.58);
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 750;
+      backdrop-filter: blur(8px);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .badge-gold {
+      border-color: rgba(243,166,59,.82);
+      background: rgba(45,29,8,.62);
+      color: #ffd28f;
+      box-shadow: 0 0 26px rgba(243,166,59,.12), inset 0 1px 0 rgba(255,255,255,.07);
+    }
+    .hero h1 {
+      width: 100%;
+      max-width: 1080px;
+      margin: 38px auto 20px;
+      padding: .08em .16em .20em;
+      overflow: visible;
+      font-size: clamp(38px, 4.1vw, 60px);
+      line-height: 1.2;
+      letter-spacing: -.025em;
+      background: linear-gradient(110deg, #fff 10%, #ffd59b 58%, var(--gold));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+      text-shadow: none;
+    }
+    .hero p {
+      max-width: 790px;
+      margin: 0 auto;
+      color: #d0d6df;
+      font-size: 18px;
+      line-height: 1.55;
+      text-shadow: 0 2px 4px rgba(0,0,0,.8);
+    }
+    .hero-actions { margin-top: 30px; display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
+    .hero-login {
+      min-height: 48px;
+      margin-top: 38px;
+      display: grid;
+      place-items: center;
+    }
     .btn {
-      width: 100%; padding: 14px; margin-top: 20px; font-weight: bold; border: none; border-radius: 6px;
-      background: var(--gold); color: black; cursor: pointer; font-size: 16px;
+      min-height: 46px;
+      padding: 0 19px;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .15s ease, background .15s ease;
     }
-    .btn:hover { filter: brightness(1.1); }
-    .btn-red { background: var(--red); color: white; }
-    .btn-small { width: auto; padding: 8px 12px; margin: 2px; font-size: 12px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
-    th, td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; }
-    th { color: var(--gold); }
-    .status-ok { color: var(--green); font-weight: bold; }
-    .status-err { color: var(--red); font-weight: bold; }
+    .btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn:disabled { cursor: not-allowed; opacity: .45; }
+    .btn-gold { background: var(--gold); color: #171009; }
+    .btn-blue { background: var(--blue); color: #06151e; }
+    .btn-outline { border-color: #46505e; background: rgba(255,255,255,.05); color: white; }
+    .btn-red { border-color: rgba(255,98,98,.5); background: rgba(255,98,98,.08); color: var(--red); }
+    .btn-small { min-height: 35px; padding: 0 11px; font-size: 12px; }
+
+    .section { padding: 76px 0; }
+    .section.alt {
+      border-top: 1px solid var(--line-soft);
+      border-bottom: 1px solid var(--line-soft);
+      background: transparent;
+      backdrop-filter: none;
+    }
+    .section-head { max-width: 780px; margin: 0 auto 42px; text-align: center; }
+    .eyebrow { color: var(--gold); font-size: 12px; font-weight: 850; letter-spacing: .18em; }
+    .section-head h2 { margin: 10px 0 12px; font-size: clamp(30px, 4vw, 46px); line-height: 1.1; letter-spacing: -.04em; }
+    .section-head p { margin: 0; color: var(--muted); }
+    .grid { display: grid; gap: 18px; }
+    .exchange-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .proof-grid, .pricing-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .feature-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px) saturate(115%);
+    }
+    .exchange-card { min-height: 315px; padding: 22px; display: flex; flex-direction: column; border-top-width: 3px; }
+    .exchange-card.live { border-top-color: var(--green); }
+    .exchange-card.test { border-top-color: var(--blue); }
+    .exchange-card.beta { border-top-color: var(--amber); }
+    .exchange-card.blocked { border-top-color: var(--red); }
+    .exchange-top { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+    .exchange-top h3 { margin: 0; font-size: 22px; }
+    .exchange-top small, .exchange-card p { color: var(--muted); }
+    .status {
+      flex: 0 0 auto;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .04em;
+      background: rgba(255,255,255,.06);
+    }
+    .exchange-meta { margin: 8px 0 18px; padding: 12px; border-radius: 9px; background: rgba(0,0,0,.22); color: #d6dbe2; font-size: 12px; }
+    .exchange-card .btn { width: 100%; margin-top: auto; }
+    .proof-card { padding: 28px; border-top: 4px solid var(--green); }
+    .proof-top { display: flex; justify-content: space-between; gap: 15px; color: var(--muted); font-size: 13px; }
+    .proof-top strong { color: white; font-size: 18px; }
+    .winrate { display: block; margin: 18px 0; text-align: center; color: var(--green); font-size: 46px; font-weight: 900; }
+    .proof-stats { display: flex; justify-content: space-around; padding: 14px; border-radius: 10px; background: rgba(0,0,0,.28); }
+    .feature-card { padding: 28px; }
+    .feature-card h3 { margin: 8px 0; }
+    .feature-card p { margin: 0; color: var(--muted); }
+    .pricing-section { position: relative; }
+    .pricing-section::before {
+      content: "";
+      position: absolute;
+      inset: 8% 18% 0;
+      z-index: -1;
+      border-radius: 50%;
+      background: rgba(243,166,59,.08);
+      filter: blur(90px);
+      pointer-events: none;
+    }
+    .pricing-grid { gap: 24px; align-items: stretch; }
+    .pricing-card {
+      position: relative;
+      min-height: 520px;
+      padding: 34px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-color: rgba(119,133,154,.36);
+      background:
+        linear-gradient(155deg, rgba(24,30,42,.94), rgba(12,16,23,.90));
+      transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+    }
+    .pricing-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(243,166,59,.48);
+      box-shadow: 0 28px 80px rgba(0,0,0,.48);
+    }
+    .pricing-card.featured {
+      border-color: rgba(243,166,59,.78);
+      background:
+        radial-gradient(circle at 90% 0, rgba(243,166,59,.18), transparent 30%),
+        linear-gradient(155deg, rgba(27,31,39,.96), rgba(15,18,24,.92));
+      box-shadow: 0 28px 80px rgba(0,0,0,.46), 0 0 42px rgba(243,166,59,.08);
+    }
+    .pricing-ribbon {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+      padding: 6px 10px;
+      border: 1px solid rgba(243,166,59,.46);
+      border-radius: 999px;
+      background: rgba(243,166,59,.12);
+      color: #ffd18b;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .10em;
+      text-transform: uppercase;
+    }
+    .plan-icon {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 24px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 13px;
+      background: rgba(255,255,255,.05);
+      font-size: 23px;
+    }
+    .pricing-card h3 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+    .pricing-card > p { min-height: 52px; margin: 14px 0 0; color: var(--muted); }
+    .price-row { display: flex; align-items: flex-end; gap: 10px; margin: 22px 0 4px; }
+    .price { font-size: 54px; line-height: 1; font-weight: 950; color: var(--gold-bright); letter-spacing: -.045em; }
+    .price-note { padding-bottom: 5px; color: var(--muted); font-size: 13px; }
+    .old-price { margin-top: 4px; color: #778190; font-size: 14px; }
+    .old-price s { margin-right: 7px; }
+    .save-pill { color: var(--green); font-weight: 800; }
+    .pricing-card ul {
+      margin: 26px 0 30px;
+      padding: 22px 0 0;
+      border-top: 1px solid var(--line-soft);
+      list-style: none;
+      color: #dce2e9;
+    }
+    .pricing-card li { position: relative; margin: 12px 0; padding-left: 26px; }
+    .pricing-card li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--green);
+      font-weight: 900;
+    }
+    .pricing-card .btn { width: 100%; margin-top: auto; }
+    .warning { margin-top: 28px; padding: 15px; border: 1px solid rgba(246,186,75,.35); border-radius: 10px; background: rgba(246,186,75,.07); color: #e9d4a5; font-size: 13px; }
+
+    .dashboard, .admin-page { padding: 42px 0 80px; }
+    .dashboard-head {
+      margin-bottom: 24px;
+      padding: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+    }
+    .dashboard-head h2 { margin: 0; }
+    .dashboard-head p { margin: 4px 0 0; color: var(--muted); }
+    .connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 13px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(0,0,0,.25);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+    .dot.ok { background: var(--green); box-shadow: 0 0 12px var(--green); }
+    .dot.err { background: var(--red); box-shadow: 0 0 12px var(--red); }
+    .dashboard-grid { display: grid; grid-template-columns: 1.8fr 1fr; gap: 22px; align-items: start; }
+    .panel { padding: 24px; margin-bottom: 22px; }
+    .panel h3 { margin: 0 0 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line-soft); }
+    .login-box { padding: 28px; text-align: center; }
+    .login-box p { color: var(--muted); }
+    #telegram-widget { min-height: 48px; display: grid; place-items: center; }
+    .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px; }
+    .full { grid-column: 1 / -1; }
+    label { display: block; color: var(--muted); font-size: 12px; font-weight: 700; }
+    input, select {
+      width: 100%;
+      margin-top: 5px;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(0,0,0,.38);
+      color: white;
+    }
+    input:focus, select:focus { border-color: var(--gold); outline: none; }
+    .form-note { color: var(--muted); font-size: 12px; }
+    .save-status { min-height: 24px; margin-top: 12px; font-size: 13px; font-weight: 700; }
+    .save-status.ok { color: var(--green); }
+    .save-status.err { color: var(--red); }
+    .info-row { display: flex; justify-content: space-between; gap: 15px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 13px; }
+    .info-row span:first-child { color: var(--muted); }
+    .instructions ol { margin: 15px 0; padding-left: 22px; }
+    .instructions li { margin: 9px 0; color: #d6dbe2; }
+    .doc-link { color: var(--blue); }
+    .admin-shell {
+      padding: 0;
+      overflow: hidden;
+      border-color: rgba(255,79,93,.82);
+      background:
+        radial-gradient(circle at 0 0, rgba(255,78,93,.07), transparent 28%),
+        rgba(14,18,27,.92);
+      box-shadow: 0 30px 90px rgba(0,0,0,.45), 0 0 0 1px rgba(255,78,93,.03);
+    }
+    .admin-hero {
+      padding: 26px 28px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .admin-title-wrap { display: flex; align-items: center; gap: 14px; }
+    .admin-emblem {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border: 1px solid rgba(255,98,98,.32);
+      border-radius: 11px;
+      background: rgba(116,39,85,.36);
+      font-size: 21px;
+    }
+    .admin-hero h2 { margin: 0; font-size: clamp(21px, 2.5vw, 27px); line-height: 1.2; }
+    .admin-hero p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .admin-status-wrap { min-height: 36px; padding: 0 28px; }
+    .admin-table-wrap { overflow-x: auto; padding: 0 24px 18px; }
+    .admin-table { min-width: 980px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 15px 14px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: middle; }
+    th {
+      color: #8994a4;
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .admin-table tbody tr { transition: background .16s ease; }
+    .admin-table tbody tr:hover { background: rgba(255,255,255,.025); }
+    .admin-table tbody tr:last-child td { border-bottom: 0; }
+    .admin-id { color: #edf1f5; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .admin-name-input {
+      width: 150px;
+      min-width: 150px;
+      margin: 0;
+      padding: 9px 10px;
+      background: rgba(3,6,11,.64);
+    }
+    .account-meta { display: block; margin-top: 6px; color: #7f8998; font-size: 10px; line-height: 1.35; }
+    .account-meta strong { color: #aeb8c6; font-weight: 750; }
+    .license-cell { white-space: nowrap; }
+    .switch {
+      position: relative;
+      width: 46px;
+      height: 24px;
+      display: inline-block;
+      margin: 0;
+      color: inherit;
+      vertical-align: middle;
+    }
+    .switch input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .switch-track {
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 999px;
+      background: #2a303b;
+      cursor: pointer;
+      transition: background .18s ease, box-shadow .18s ease;
+    }
+    .switch-track::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #f7f9fb;
+      box-shadow: 0 2px 6px rgba(0,0,0,.35);
+      transition: transform .18s ease;
+    }
+    .switch input:checked + .switch-track { background: #08bd8e; }
+    .switch.admin-switch input:checked + .switch-track { background: var(--gold); }
+    .switch input:checked + .switch-track::after { transform: translateX(22px); }
+    .switch input:focus-visible + .switch-track { outline: 3px solid rgba(243,166,59,.45); outline-offset: 2px; }
+    .switch input:disabled + .switch-track { cursor: not-allowed; opacity: .45; }
+    .save-name { white-space: nowrap; }
+
+    footer { padding: 36px 0; border-top: 1px solid var(--line-soft); background: rgba(7,9,13,.38); backdrop-filter: blur(5px); color: var(--muted); text-align: center; font-size: 12px; }
+    dialog {
+      width: min(650px, calc(100% - 30px));
+      max-height: 80vh;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: #11151d;
+      color: white;
+      box-shadow: var(--shadow);
+    }
+    dialog::backdrop { background: rgba(0,0,0,.83); backdrop-filter: blur(6px); }
+    .modal-head, .modal-body, .modal-foot { padding: 20px 22px; }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
+    .modal-head h2 { margin: 0; font-size: 18px; }
+    .modal-body { color: #d1d7df; font-size: 13px; }
+    .modal-body h3 { color: var(--gold); }
+    .modal-foot { border-top: 1px solid var(--line); text-align: right; }
+
+    @media (max-width: 900px) {
+      .exchange-grid, .feature-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .dashboard-grid { grid-template-columns: 1fr; }
+      .pricing-card { min-height: 500px; padding: 28px; }
+    }
+    @media (max-width: 680px) {
+      body { background-attachment: scroll; }
+      .container { padding: 0 14px; }
+      header { position: relative; padding: 12px 0 10px; }
+      .header-inner { align-items: flex-start; flex-direction: column; gap: 10px; }
+      .brand { gap: 9px; font-size: 21px; }
+      .brand-mark { width: 34px; height: 34px; border-radius: 10px; font-size: 18px; }
+      nav { width: 100%; overflow-x: auto; }
+      .nav-btn { white-space: nowrap; padding: 0 10px; }
+      .hero { min-height: auto; padding: 54px 0 58px; }
+      .hero h1 { max-width: 100%; font-size: clamp(32px, 9.5vw, 42px); line-height: 1.08; }
+      .exchange-grid, .proof-grid, .feature-grid, .pricing-grid, .form-grid { grid-template-columns: 1fr; }
+      .full { grid-column: auto; }
+      .dashboard-head { align-items: flex-start; flex-direction: column; }
+      .exchange-top { flex-direction: column; }
+      .pricing-card { min-height: 0; padding: 25px; }
+      .pricing-ribbon { position: static; align-self: flex-start; margin-bottom: 18px; }
+      .price { font-size: 48px; }
+      .admin-page { padding-top: 22px; }
+      .admin-hero { padding: 20px; align-items: flex-start; flex-direction: column; }
+      .admin-status-wrap { padding: 0 20px; }
+      .admin-table-wrap { padding: 0 10px 12px; }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Czarna Perła</h1>
-    
-    <!-- LOGOWANIE -->
-    <div id="login-panel" class="card">
-      <h2>Logowanie do panelu</h2>
-      <p style="color: #aeb7c5;">Wpisz swoje Telegram ID, aby uzyskać dostęp do ustawień.</p>
-      <input type="number" id="login-id" placeholder="np. 123456789">
-      <button class="btn" onclick="login()">Wejdź do panelu</button>
+  <header>
+    <div class="container header-inner">
+      <button class="brand" data-page="landing" aria-label="Czarna Perła — strona główna">
+        <span class="brand-mark" aria-hidden="true">🏴‍☠️</span>
+        <span class="brand-copy">CZARNA <strong>PERŁA</strong></span>
+      </button>
+      <nav aria-label="Główna nawigacja">
+        <button class="nav-btn active" data-page="landing">Strona główna</button>
+        <button class="nav-btn" data-page="dashboard">Panel inwestora</button>
+        <button id="admin-nav" class="nav-btn admin hidden" data-page="admin">Mostek kapitański</button>
+      </nav>
     </div>
+  </header>
 
-    <!-- PANEL INWESTORA -->
-    <div id="dashboard-panel" class="card hidden">
-      <h2>Panel Inwestora</h2>
-      <p>Witaj, <strong id="dash-name" style="color: var(--gold);"></strong>!</p>
-      <p style="color: #aeb7c5;">Plan: <span id="dash-plan" style="color: white;"></span></p>
-      <p style="color: #aeb7c5;">Ważność do: <span id="dash-sub" style="color: white;"></span></p>
-      <p style="color: #aeb7c5;">Status API: <span id="dash-api"></span></p>
-      
-      <hr style="border: 0; border-top: 1px solid var(--line); margin: 20px 0;">
-      
-      <h3>Ustawienia Bitget</h3>
-      <label>API Key
-        <input type="text" id="api-key" placeholder="Wklej API Key z Bitget">
-      </label>
-      <label>API Secret
-        <input type="password" id="api-secret" placeholder="Wklej API Secret">
-      </label>
-      <label>Passphrase
-        <input type="password" id="api-passphrase" placeholder="Wklej Passphrase">
-      </label>
-      <div style="display: flex; gap: 15px;">
-        <div style="flex: 1;">
-          <label>Dźwignia (x)
-            <input type="number" id="leverage" placeholder="20">
-          </label>
+  <main id="landing" class="page active">
+    <section class="hero">
+      <div class="container">
+        <div class="badges">
+          <span class="badge badge-gold">🌐 Panel przygotowany na 7 giełd</span>
+          <span class="badge">WinRate &gt; 80% na rynku rzeczywistym</span>
+          <span class="badge">SMC + True CVD + ochrona kapitału</span>
         </div>
-        <div style="flex: 1;">
-          <label>Margin na pozycję (USDT)
-            <input type="number" id="margin" step="0.1" placeholder="4.0">
-          </label>
+        <h1>Twój kapitał pod pełną kontrolą algorytmu</h1>
+        <p>Czarna Perła analizuje rynek wspólnie, ale każde konto wykonuje zlecenia przez bezpieczny adapter wybranej giełdy. Maksymalnie 10 pozycji na konto, kontrola trybu one-way/net i automatyczne zarządzanie TP oraz SL.</p>
+        <div id="telegram-widget-hero" class="hero-login" aria-label="Logowanie przez Telegram"></div>
+      </div>
+    </section>
+
+    <section class="section alt">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">DOWODY SKUTECZNOŚCI</div>
+          <h2>Wyniki z realnych kont</h2>
+          <p>Historia nie gwarantuje przyszłych rezultatów, ale pokazuje rzeczywiste działanie systemu.</p>
+        </div>
+        <div class="grid proof-grid">
+          <article class="card proof-card">
+            <div class="proof-top"><strong>👤 Kolega_Damian</strong><span>Start: 01.06.2026</span></div>
+            <span class="winrate">84,48%</span>
+            <div class="proof-stats"><span>49 ✅ zyskownych</span><span>9 ❌ stratnych</span></div>
+          </article>
+          <article class="card proof-card">
+            <div class="proof-top"><strong>👤 Kolega_AREK</strong><span>Start: 19.06.2026</span></div>
+            <span class="winrate">93,10%</span>
+            <div class="proof-stats"><span>27 ✅ zyskownych</span><span>2 ❌ stratne</span></div>
+          </article>
         </div>
       </div>
-      
-      <button class="btn" onclick="saveSettings()">Zapisz i podłącz API</button>
-      <button class="btn btn-red" onclick="logout()" style="margin-top: 10px;">Wyloguj się</button>
-    </div>
+    </section>
 
-    <!-- MOSTEK KAPITAŃSKI (ADMIN) -->
-    <div id="admin-panel" class="card hidden">
-      <h2>Mostek Kapitański</h2>
-      <button class="btn btn-small" onclick="loadUsers()" style="margin-bottom: 10px;">Odśwież listę użytkowników</button>
-      <div style="overflow-x: auto;">
-        <table>
-          <thead>
-            <tr>
-              <th>ID Telegram</th>
-              <th>Imię w panelu</th>
-              <th>Ważność licencji</th>
-              <th>Status Bota</th>
-              <th>Uprawnienia</th>
-            </tr>
-          </thead>
-          <tbody id="admin-tbody"></tbody>
-        </table>
+    <section id="exchanges" class="section">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">OBSŁUGIWANE GIEŁDY</div>
+          <h2>Siedem adapterów — uczciwe statusy gotowości</h2>
+          <p>Bitget działa LIVE. Nowe giełdy są uruchamiane dopiero po bezpiecznym teście konta. MEXC pozostaje zablokowany dla prawdziwych zleceń.</p>
+        </div>
+        <div id="exchange-cards" class="grid exchange-grid"></div>
       </div>
-    </div>
+    </section>
 
-  </div>
+    <section class="section alt">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">ARCHITEKTURA CZARNEJ PERŁY</div>
+          <h2>Szybkie wejście, realizacja i wyjście</h2>
+        </div>
+        <div class="grid feature-grid">
+          <article class="card feature-card"><div>🌊</div><h3>SMC + True CVD</h3><p>Trend HTF, FVG, knot, OTE, sweep i rzeczywisty napływ transakcji składają się na jeden scoring.</p></article>
+          <article class="card feature-card"><div>⚡</div><h3>Wejście hybrydowe</h3><p>Najlepszy sygnał może uruchomić część FAST, a pozostała część czeka na kontrolowany retest.</p></article>
+          <article class="card feature-card"><div>🛡️</div><h3>Zarządzanie ryzykiem</h3><p>TP1 zamyka 25%, SL przechodzi na +0,30%, TP2 zamyka 50%, a runner 25% prowadzi trailing 0,40%.</p></article>
+          <article class="card feature-card"><div>🧭</div><h3>Fail-closed</h3><p>Brak potwierdzenia trybu pozycji, dziennego PnL lub zlecenia ochronnego blokuje handel zamiast zgadywać.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section pricing-section">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">DOSTĘP DO SYSTEMU</div>
+          <h2>Wybierz model współpracy</h2>
+          <p>Najpierw poznaj system na własnym koncie albo wybierz pełny rok z priorytetową konfiguracją.</p>
+        </div>
+        <div class="grid pricing-grid">
+          <article class="card pricing-card">
+            <span class="pricing-ribbon">30 dni na start</span>
+            <div class="plan-icon" aria-hidden="true">📱</div>
+            <h3>Pakiet testowy</h3>
+            <div class="price-row"><span class="price">0 $</span><span class="price-note">pierwszy miesiąc</span></div>
+            <p>Poznaj działanie Czarnej Perły bez opłaty startowej. Następnie 50 $ miesięcznie przez kolejne trzy miesiące.</p>
+            <ul>
+              <li>Jedna wybrana obsługiwana giełda</li>
+              <li>Pełne raporty i alerty Telegram</li>
+              <li>Konfiguracja ochrony kapitału</li>
+              <li>Kapitał przez cały czas pozostaje na Twoim koncie</li>
+            </ul>
+            <button class="btn btn-blue" data-terms>Aktywuj pakiet testowy</button>
+          </article>
+          <article class="card pricing-card featured">
+            <span class="pricing-ribbon">Najlepsza wartość</span>
+            <div class="plan-icon" aria-hidden="true">💎</div>
+            <h3>Pakiet roczny</h3>
+            <div class="price-row"><span class="price">800 $</span><span class="price-note">za 12 miesięcy</span></div>
+            <div class="old-price"><s>1200 $</s><span class="save-pill">Oszczędzasz 400 $</span></div>
+            <p>Pełna roczna licencja z priorytetowym uruchomieniem, kontrolą adaptera i wsparciem technicznym.</p>
+            <ul>
+              <li>Konfiguracja konta i wybranej giełdy</li>
+              <li>Test połączenia, uprawnień i zabezpieczeń</li>
+              <li>Priorytetowe wsparcie techniczne</li>
+              <li>Pomoc przy migracji między obsługiwanymi giełdami</li>
+            </ul>
+            <button class="btn btn-gold" data-terms>Zarezerwuj pakiet roczny</button>
+          </article>
+        </div>
+        <div class="warning">⚠️ Handel kontraktami i dźwignią wiąże się z wysokim ryzykiem utraty kapitału. Wyniki historyczne nie gwarantują wyników przyszłych.</div>
+      </div>
+    </section>
+  </main>
+
+  <main id="dashboard" class="page dashboard">
+    <div class="container">
+      <section class="card dashboard-head">
+        <div><h2>Panel inwestora</h2><p id="welcome-text">Zaloguj się przez Telegram, aby zarządzać połączeniem.</p></div>
+        <div>
+          <span class="connection"><i id="connection-dot" class="dot"></i><span id="connection-text">Oczekuje na logowanie</span></span>
+          <button id="logout-btn" class="btn btn-red btn-small hidden">Wyloguj</button>
+        </div>
+      </section>
+
+      <section id="login-panel" class="card login-box">
+        <h3>Bezpieczne logowanie Telegram</h3>
+        <p>Po zalogowaniu serwer weryfikuje podpis Telegram i tworzy chronioną sesję.</p>
+        <div id="telegram-widget"></div>
+      </section>
+
+      <section id="dashboard-content" class="dashboard-grid hidden">
+        <div>
+          <form id="exchange-form" class="card panel">
+            <h3>Ustawienia handlowe</h3>
+            <div class="form-grid">
+              <label class="full">Giełda
+                <select id="exchange-select"></select>
+              </label>
+              <label>API Key
+                <input id="api-key" required autocomplete="off" placeholder="Wklej API Key">
+              </label>
+              <label>API Secret
+                <input id="api-secret" required type="password" autocomplete="new-password" placeholder="Wklej API Secret">
+              </label>
+              <label id="passphrase-wrap">Passphrase
+                <input id="api-passphrase" type="password" autocomplete="new-password" placeholder="Wklej Passphrase">
+              </label>
+              <label>Tryb margin
+                <select id="margin-mode"><option value="isolated">Isolated</option><option value="cross">Cross</option></select>
+              </label>
+              <label>Margin na pozycję (USDT)
+                <input id="margin" required type="number" min="0.1" step="0.1" value="4">
+              </label>
+              <label>Dźwignia
+                <input id="leverage" required type="number" min="1" max="100" step="1" value="20">
+              </label>
+              <label>Limit dziennego ryzyka (USDT)
+                <input id="max-risk" required type="number" min="0.1" step="0.1" value="20">
+              </label>
+              <div class="full form-note">Klucze muszą mieć wyłącznie odczyt oraz Futures/Trade. Uprawnienia Withdraw i Transfer pozostaw wyłączone.</div>
+              <button class="btn btn-gold full" type="submit">Zapisz i sprawdź połączenie</button>
+            </div>
+            <div id="save-status" class="save-status" role="status"></div>
+          </form>
+          <article id="instruction-card" class="card panel instructions">
+            <h3 id="instruction-title">Instrukcja podłączenia</h3>
+            <p id="instruction-lead" class="form-note"></p>
+            <ol id="instruction-list"></ol>
+            <a id="docs-link" class="doc-link" target="_blank" rel="noopener noreferrer">Oficjalna dokumentacja API ↗</a>
+          </article>
+        </div>
+        <aside>
+          <article class="card panel">
+            <h3>Twoja licencja</h3>
+            <div class="info-row"><span>Plan</span><strong id="plan-value">Brak danych</strong></div>
+            <div class="info-row"><span>Ważność</span><strong id="license-value">Brak danych</strong></div>
+            <div class="info-row"><span>Giełda</span><strong id="exchange-value">Brak danych</strong></div>
+            <div class="info-row"><span>Weryfikacja</span><strong id="verify-value">Brak danych</strong></div>
+          </article>
+          <article class="card panel">
+            <h3>Ochrona kapitału</h3>
+            <div class="info-row"><span>Maks. pozycji</span><strong>10</strong></div>
+            <div class="info-row"><span>TP1</span><strong>25%</strong></div>
+            <div class="info-row"><span>SL po TP1</span><strong>+0,30%</strong></div>
+            <div class="info-row"><span>TP2</span><strong>50%</strong></div>
+            <div class="info-row"><span>Runner</span><strong>25% / 0,40%</strong></div>
+          </article>
+        </aside>
+      </section>
+    </div>
+  </main>
+
+  <main id="admin" class="page admin-page">
+    <div class="container">
+      <section class="card admin-shell">
+        <div class="admin-hero">
+          <div class="admin-title-wrap">
+            <span class="admin-emblem" aria-hidden="true">🏴‍☠️</span>
+            <div>
+              <h2>Mostek Kapitański <span style="color:#cdd3dc;font-weight:650">(Zarządzanie Załogą)</span></h2>
+              <p>Kontrola dostępu, licencji i aktywności kont użytkowników.</p>
+            </div>
+          </div>
+          <button id="refresh-admin" class="btn btn-outline btn-small">Odśwież dane</button>
+        </div>
+        <div class="admin-status-wrap"><div id="admin-status" class="save-status" role="status"></div></div>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>Telegram ID</th><th>Przypisane imię</th><th>Data dołączenia</th><th>Ważność abonamentu</th><th>Bot ON/OFF</th><th>Admin ON/OFF</th><th>Akcje</th></tr></thead>
+            <tbody id="admin-users"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer><div class="container">© 2026 Czarna Perła • System analizy ilościowej • <button class="nav-btn" data-terms>Regulamin i ryzyko</button></div></footer>
+
+  <dialog id="terms-dialog">
+    <div class="modal-head"><h2>Regulamin i wyłączenie odpowiedzialności</h2><button id="close-terms" class="btn btn-outline btn-small">Zamknij</button></div>
+    <div class="modal-body">
+      <h3>Charakter systemu</h3><p>Czarna Perła jest oprogramowaniem analitycznym i wykonawczym. Nie stanowi indywidualnej porady inwestycyjnej ani gwarancji zysku.</p>
+      <h3>Ryzyko</h3><p>Kontrakty, kryptowaluty i dźwignia mogą prowadzić do szybkiej utraty części lub całości kapitału. Użytkownik sam ustala margin i akceptuje ryzyko.</p>
+      <h3>Klucze API</h3><p>Klucze powinny mieć wyłącznie uprawnienia Read i Futures/Trade. Nigdy nie wolno nadawać uprawnień do wypłat ani transferów.</p>
+    </div>
+    <div class="modal-foot"><button id="accept-terms" class="btn btn-gold">Rozumiem i akceptuję</button></div>
+  </dialog>
 
   <script>
-    // Zmień poniższy URL na IP swojego serwera, jeśli strona HTML leży na innym hostingu (np. GitHubie).
-    // Jeżeli otwierasz ten plik bezpośrednio, możesz wpisać swój publiczny adres IP np. "http://62.131.59.133:8000"
-    const API_URL = "http://127.0.0.1:8000"; 
-    
-    let currentUserId = null;
-    let isAdmin = false;
+    "use strict";
+
+    /*
+      Jeżeli API działa pod innym adresem, zmień tylko poniższą linię.
+      Bez końcowego ukośnika.
+    */
+    const API_BASE_URL = "https://czarnaperla.duckdns.org";
+    const TELEGRAM_BOT = "czarna_perla_auth_bot";
+
+    const EXCHANGES = [
+      {id:"bitget",name:"Bitget",market:"USDT Futures",status:"live",label:"LIVE",selectable:true,passphrase:true,mode:"One-way",fields:"API Key + API Secret + Passphrase",description:"Natywna obsługa wejść, SL, TP, trailing stopu i dziennego PnL.",docs:"https://www.bitget.com/api-doc/common/signature",steps:["Utwórz oddzielny klucz API dla Czarnej Perły.","Włącz odczyt konta i handel Futures; wyłącz wypłaty oraz transfery.","Dodaj IP serwera, zapisz Passphrase i ustaw USDT Futures na One-way.","Wklej trzy dane do formularza i rozpocznij test minimalnym marginem."]},
+      {id:"binanceusdm",name:"Binance",market:"USD-M Futures",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:false,mode:"One-way",fields:"API Key + API Secret",description:"Adapter gotowy; każde konto przechodzi smoke test i minimalny canary.",docs:"https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info",steps:["Utwórz oddzielny klucz w API Management.","Włącz Read i Enable Futures; wyłącz Withdraw oraz Transfer.","Dodaj IP serwera i ustaw Position Mode na One-way.","Wklej API Key i API Secret; system wykona kontrolny odczyt."]},
+      {id:"bybit",name:"Bybit",market:"Linear USDT",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:false,mode:"One-way",fields:"API Key + API Secret",description:"Kontrakty linear z kontrolą trybu pozycji i dziennego PnL.",docs:"https://bybit-exchange.github.io/docs/v5/intro",steps:["Utwórz System-generated API Key.","Nadaj Read oraz Contract/Derivatives Trade; wyłącz Withdraw.","Ogranicz klucz adresem IP serwera i ustaw One-way.","Wklej API Key i API Secret, a następnie poczekaj na test konta."]},
+      {id:"okx",name:"OKX",market:"USDT Perpetual SWAP",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:true,mode:"Net",fields:"API Key + API Secret + Passphrase",description:"Obsługa SWAP; wymagane są trzy dane API i tryb pozycji Net.",docs:"https://www.okx.com/docs-v5/en/",steps:["Utwórz klucz z uprawnieniami Read oraz Trade.","Wyłącz wypłaty, dodaj IP serwera i zapisz Passphrase.","Dla USDT SWAP ustaw Position Mode na Net.","Wklej API Key, API Secret i Passphrase."]},
+      {id:"gate",name:"Gate",market:"USDT Perpetual",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:false,mode:"Single / One-way",fields:"API Key + API Secret",description:"USDT perpetual z natywnym rozliczaniem zamkniętych pozycji.",docs:"https://www.gate.com/docs/developers/apiv4/en/",steps:["Utwórz osobny klucz APIv4.","Nadaj Futures Read-Write; wyłącz wypłaty i transfery.","Dodaj IP, wybierz rozliczenie USDT oraz Single/One-way.","Wklej API Key i API Secret."]},
+      {id:"bitunix",name:"Bitunix",market:"USDT Futures",status:"beta",label:"BETA — RĘCZNA AKTYWACJA",selectable:true,passphrase:false,mode:"One-way",fields:"API Key + API Secret",description:"Adapter gotowy; pierwsze konto wymaga kontroli księgowania opłat.",docs:"https://www.bitunix.com/api-docs/futures/common/introduction.html",steps:["Utwórz klucz Futures z odczytem i handlem; wyłącz wypłaty.","Dodaj IP serwera i ustaw One-way.","Zapisz klucze; konto otrzyma status oczekiwania BETA.","Pierwszy test wykonaj minimalnym marginem."]},
+      {id:"mexc",name:"MEXC",market:"Futures / Shadow",status:"blocked",label:"LIVE ZABLOKOWANY",selectable:false,passphrase:false,mode:"Shadow",fields:"Nie wprowadzaj kluczy",description:"Dane mogą być obserwowane, lecz prawdziwe zlecenia są wyłączone fail-closed.",docs:"https://mexcdevelop.github.io/apidocs/contract_v1_en/",steps:["MEXC pozostaje wyłącznie planowanym rozszerzeniem.","Nie wprowadzaj kluczy API i nie uruchamiaj handlu LIVE.","Shadow nie oznacza zgody na prawdziwe zlecenia.","Połączenie zostanie udostępnione po pełnej walidacji."]}
+    ];
+
+    const state = {
+      page: "landing",
+      telegramUser: null,
+      dashboard: null,
+      csrf: "",
+      session: sessionStorage.getItem("cp_session") || "",
+      isAdmin: false,
+      isSuperAdmin: false,
+      multiExchange: false,
+      capabilities: {}
+    };
 
     const byId = id => document.getElementById(id);
+    const exchangeById = id => EXCHANGES.find(item => item.id === id) || EXCHANGES[0];
 
-    async function login() {
-      const id = byId("login-id").value.trim();
-      if (!id) return alert("Podaj prawidłowe Telegram ID!");
+    function apiHeaders(extra) {
+      const headers = Object.assign({Accept:"application/json"}, extra || {});
+      if (state.session) headers["X-Session-Token"] = state.session;
+      return headers;
+    }
 
+    function clearSensitiveFields() {
+      ["api-key","api-secret","api-passphrase"].forEach(id => {
+        const input = byId(id);
+        if (input) input.value = "";
+      });
+    }
+
+    function clearSessionState() {
+      state.telegramUser = null;
+      state.dashboard = null;
+      state.csrf = "";
+      state.session = "";
+      state.isAdmin = false;
+      state.isSuperAdmin = false;
+      sessionStorage.removeItem("cp_session");
+      byId("admin-nav").classList.add("hidden");
+      clearSensitiveFields();
+    }
+
+    function setText(id, value) {
+      const node = byId(id);
+      if (node) node.textContent = value == null ? "" : String(value);
+    }
+
+    function showPage(name) {
+      if (name === "admin" && !state.isAdmin) return;
+      document.querySelectorAll(".page").forEach(page => page.classList.toggle("active", page.id === name));
+      document.querySelectorAll(".nav-btn[data-page]").forEach(btn => btn.classList.toggle("active", btn.dataset.page === name));
+      state.page = name;
+      if (name === "dashboard") ensureTelegramWidget();
+      if (name === "admin") loadAdminUsers();
+      window.scrollTo({top:0, behavior:"smooth"});
+    }
+
+    function statusLabel(item) {
+      const cap = state.capabilities[item.id];
+      if (!cap) return item.label;
+      if (cap.status === "live") return "LIVE";
+      if (cap.status === "canary_required") return "LIVE PO CANARY";
+      if (cap.status === "manual_beta") return "BETA — RĘCZNA AKTYWACJA";
+      if (cap.status === "live_blocked") return "LIVE ZABLOKOWANY";
+      return String(cap.status || item.label).replaceAll("_"," ").toUpperCase();
+    }
+
+    function canSelect(item) {
+      if (!item.selectable || item.id === "mexc") return false;
+      if (!state.multiExchange) return item.id === "bitget";
+      const cap = state.capabilities[item.id];
+      return Boolean(cap && cap.enabled && cap.status !== "live_blocked");
+    }
+
+    function renderExchangeCards() {
+      const host = byId("exchange-cards");
+      host.replaceChildren();
+      EXCHANGES.forEach(item => {
+        const card = document.createElement("article");
+        card.className = "card exchange-card " + item.status;
+        const top = document.createElement("div");
+        top.className = "exchange-top";
+        const title = document.createElement("div");
+        const h = document.createElement("h3");
+        h.textContent = item.name;
+        const market = document.createElement("small");
+        market.textContent = item.market;
+        title.append(h, market);
+        const chip = document.createElement("span");
+        chip.className = "status";
+        chip.textContent = statusLabel(item);
+        top.append(title, chip);
+        const desc = document.createElement("p");
+        desc.textContent = item.description;
+        const meta = document.createElement("div");
+        meta.className = "exchange-meta";
+        meta.textContent = item.fields + " • tryb " + item.mode;
+        const button = document.createElement("button");
+        button.className = "btn btn-outline";
+        button.textContent = item.id === "mexc" ? "LIVE zablokowany — zobacz instrukcję" : "Podłącz w panelu inwestora";
+        button.addEventListener("click", () => {
+          showPage("dashboard");
+          byId("exchange-select").value = item.id;
+          updateSelectedExchange();
+          setTimeout(() => byId("instruction-card").scrollIntoView({behavior:"smooth"}), 50);
+        });
+        card.append(top, desc, meta, button);
+        host.append(card);
+      });
+    }
+
+    function renderExchangeSelect() {
+      const select = byId("exchange-select");
+      const current = select.value || "bitget";
+      select.replaceChildren();
+      EXCHANGES.forEach(item => {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = item.name + " — " + statusLabel(item);
+        option.disabled = !canSelect(item);
+        select.append(option);
+      });
+      select.value = EXCHANGES.some(x => x.id === current && canSelect(x)) ? current : "bitget";
+      updateSelectedExchange();
+    }
+
+    function updateSelectedExchange() {
+      const item = exchangeById(byId("exchange-select").value);
+      byId("passphrase-wrap").classList.toggle("hidden", !item.passphrase);
+      setText("instruction-title", "Instrukcja podłączenia: " + item.name);
+      setText("instruction-lead", item.description + " Wymagane dane: " + item.fields + ".");
+      const list = byId("instruction-list");
+      list.replaceChildren();
+      item.steps.forEach(step => {
+        const li = document.createElement("li");
+        li.textContent = step;
+        list.append(li);
+      });
+      byId("docs-link").href = item.docs;
+    }
+
+    async function readJson(response) {
+      const type = response.headers.get("content-type") || "";
+      if (!type.includes("application/json")) throw new Error("Serwer zwrócił nieprawidłową odpowiedź (" + response.status + ").");
+      const data = await response.json();
+      if (!response.ok) {
+        const error = new Error(data.message || data.detail || "Błąd HTTP " + response.status);
+        error.status = response.status;
+        throw error;
+      }
+      return data;
+    }
+
+    async function loadCapabilities() {
       try {
-        const res = await fetch(`${API_URL}/api/dashboard/${id}`);
-        const data = await res.json();
+        const response = await fetch(API_BASE_URL + "/api/capabilities", {credentials:"include", headers:{Accept:"application/json"}});
+        const data = await readJson(response);
+        state.multiExchange = data.multi_exchange === true;
+        state.capabilities = data.exchanges || {};
+      } catch (_) {
+        state.multiExchange = false;
+        state.capabilities = {};
+      }
+      renderExchangeCards();
+      renderExchangeSelect();
+    }
 
-        if (data.status === "success") {
-          currentUserId = data.telegram_id;
-          isAdmin = data.is_admin;
+    function ensureTelegramWidget() {
+      if (state.telegramUser) return;
+      ["telegram-widget-hero","telegram-widget"].forEach(id => {
+        const host = byId(id);
+        if (!host || host.querySelector("script, iframe")) return;
+        const script = document.createElement("script");
+        script.async = true;
+        script.src = "https://telegram.org/js/telegram-widget.js?22";
+        script.dataset.telegramLogin = TELEGRAM_BOT;
+        script.dataset.size = "large";
+        script.dataset.radius = "8";
+        script.dataset.onauth = "onTelegramAuth(user)";
+        script.dataset.requestAccess = "write";
+        host.append(script);
+      });
+    }
 
-          byId("login-panel").classList.add("hidden");
-          byId("dashboard-panel").classList.remove("hidden");
+    window.onTelegramAuth = async function(user) {
+      clearSessionState();
+      state.telegramUser = user;
+      setConnection("loading", "Weryfikacja Telegram…");
+      try {
+        const response = await fetch(API_BASE_URL + "/api/auth/telegram", {
+          method:"POST",
+          credentials:"include",
+          headers:apiHeaders({"Content-Type":"application/json"}),
+          body:JSON.stringify(user)
+        });
+        const auth = await readJson(response);
+        state.session = String(auth.session_token || "");
+        if (state.session) sessionStorage.setItem("cp_session", state.session);
+        state.csrf = String(auth.csrf_token || "");
+        await loadDashboard();
+        showPage("dashboard");
+      } catch (error) {
+        clearSessionState();
+        ["telegram-widget-hero","telegram-widget"].forEach(id => byId(id).replaceChildren());
+        setConnection("error", error.message || "Nie udało się zalogować.");
+        setTimeout(ensureTelegramWidget, 100);
+      }
+    };
 
-          byId("dash-name").textContent = data.custom_name || data.username;
-          byId("dash-plan").textContent = data.plan_name;
-          byId("dash-sub").textContent = data.subscription_end_date;
-          
-          if (data.api_connected) {
-            byId("dash-api").textContent = "✅ Aktywne (Podłączono)";
-            byId("dash-api").className = "status-ok";
-          } else {
-            byId("dash-api").textContent = "❌ Brak podłączonych kluczy";
-            byId("dash-api").className = "status-err";
-          }
+    async function loadDashboard() {
+      const response = await fetch(API_BASE_URL + "/api/dashboard/me", {
+        credentials:"include",
+        headers:apiHeaders()
+      });
+      const data = await readJson(response);
+      state.dashboard = data;
+      state.telegramUser = state.telegramUser || {id:String(data.telegram_id)};
+      state.isAdmin = data.is_admin === true;
+      state.isSuperAdmin = data.is_superadmin === true;
+      byId("admin-nav").classList.toggle("hidden", !state.isAdmin);
+      byId("login-panel").classList.add("hidden");
+      byId("dashboard-content").classList.remove("hidden");
+      byId("logout-btn").classList.remove("hidden");
+      setText("welcome-text", "Witaj, " + (data.custom_name || data.username || "Inwestor") + ".");
+      setText("plan-value", data.plan_name || "Brak aktywnego planu");
+      setText("license-value", formatTimeLeft(data.subscription_end_date));
+      setText("exchange-value", exchangeById(data.exchange).name);
+      setText("verify-value", verificationLabel(data.verification_status));
+      if (data.margin != null) byId("margin").value = data.margin;
+      if (data.leverage != null) byId("leverage").value = data.leverage;
+      if (data.max_risk != null) byId("max-risk").value = data.max_risk;
+      if (data.margin_mode) byId("margin-mode").value = data.margin_mode;
+      if (data.exchange && exchangeById(data.exchange)) byId("exchange-select").value = data.exchange;
+      updateSelectedExchange();
+      setConnection("success", data.api_connected ? "API połączone" : "Zalogowano — brak kluczy API");
+    }
 
-          byId("leverage").value = data.leverage || 20;
-          byId("margin").value = data.margin || 4.0;
-
-          if (isAdmin) {
-            byId("admin-panel").classList.remove("hidden");
-            loadUsers();
-          }
-        } else {
-          alert("Nie udało się pobrać danych z bazy.");
-        }
-      } catch (err) {
-        alert("Błąd połączenia. Upewnij się, że serwer Pythona (uvicorn) działa.");
+    async function restoreSession() {
+      if (!state.session) return false;
+      try {
+        const response = await fetch(API_BASE_URL + "/api/auth/session", {
+          method:"POST",
+          credentials:"include",
+          headers:apiHeaders()
+        });
+        const restored = await readJson(response);
+        state.csrf = String(restored.csrf_token || "");
+        await loadDashboard();
+        return true;
+      } catch (_) {
+        clearSessionState();
+        return false;
       }
     }
 
-    function logout() {
-      currentUserId = null;
-      isAdmin = false;
-      byId("login-id").value = "";
-      byId("login-panel").classList.remove("hidden");
-      byId("dashboard-panel").classList.add("hidden");
-      byId("admin-panel").classList.add("hidden");
-      
-      byId("api-key").value = "";
-      byId("api-secret").value = "";
-      byId("api-passphrase").value = "";
+    function setConnection(kind, text) {
+      const dot = byId("connection-dot");
+      dot.className = "dot" + (kind === "success" ? " ok" : kind === "error" ? " err" : "");
+      setText("connection-text", text);
     }
 
-    async function saveSettings() {
+    function setSave(text, ok) {
+      const box = byId("save-status");
+      box.textContent = text;
+      box.className = "save-status " + (ok ? "ok" : "err");
+    }
+
+    function formatTimeLeft(value) {
+      if (!value) return "Brak danych";
+      const end = new Date(value);
+      if (Number.isNaN(end.getTime())) return String(value);
+      if (end.getFullYear() >= 2099) return "Bezterminowa";
+      const days = Math.ceil((end.getTime() - Date.now()) / 86400000);
+      return days > 0 ? days + " dni (do " + end.toLocaleDateString("pl-PL") + ")" : "Wygasła";
+    }
+
+    function verificationLabel(value) {
+      const labels = {verified:"LIVE zweryfikowane",canary_required:"Wymagany canary",canary_verified:"Canary zatwierdzony",manual_beta:"Walidacja BETA",manual_verified:"BETA zatwierdzona",live_blocked:"LIVE zablokowany",not_configured:"Nie skonfigurowano"};
+      return labels[value] || String(value || "Oczekuje").replaceAll("_"," ");
+    }
+
+    function adminDate(value, fallback) {
+      const text = String(value || "").trim();
+      if (!text) return fallback;
+      return text
+        .replace("T", " ")
+        .replace(/\.\d+(?:Z|[+-]\d{2}:?\d{2})?$/, "")
+        .replace(/Z$/, "");
+    }
+
+    byId("exchange-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!state.telegramUser || !state.csrf) {
+        setSave("Zaloguj się ponownie przez Telegram, aby otrzymać bezpieczny token zapisu.", false);
+        return;
+      }
+      const item = exchangeById(byId("exchange-select").value);
+      if (!canSelect(item)) {
+        setSave("Handel LIVE na tej giełdzie jest zablokowany.", false);
+        return;
+      }
+      const key = byId("api-key").value.trim();
+      const secret = byId("api-secret").value.trim();
+      const passphrase = byId("api-passphrase").value.trim();
+      if (!key || !secret || (item.passphrase && !passphrase)) {
+        setSave("Uzupełnij wszystkie wymagane dane API.", false);
+        return;
+      }
+      const leverage = Number(byId("leverage").value);
+      const margin = Number(byId("margin").value);
+      const maxRisk = Number(byId("max-risk").value);
+      if (
+        !Number.isInteger(leverage) || leverage < 1 || leverage > 100
+        || !Number.isFinite(margin) || margin <= 0
+        || !Number.isFinite(maxRisk) || maxRisk <= 0
+      ) {
+        setSave("Sprawdź margin, dźwignię i limit ryzyka.", false);
+        return;
+      }
       const payload = {
-        telegram_id: currentUserId,
-        api_key: byId("api-key").value.trim(),
-        api_secret: byId("api-secret").value.trim(),
-        api_passphrase: byId("api-passphrase").value.trim(),
-        leverage: parseInt(byId("leverage").value) || 20,
-        margin: parseFloat(byId("margin").value) || 4.0
+        telegram_id:String(state.telegramUser.id),
+        exchange:item.id,
+        api_key:key,
+        api_secret:secret,
+        api_passphrase:item.passphrase ? passphrase : "",
+        api_uid:"",
+        subaccount:"",
+        margin_mode:byId("margin-mode").value,
+        leverage:leverage,
+        margin:margin,
+        max_risk:maxRisk
       };
-
+      setSave("Sprawdzam połączenie z " + item.name + "…", true);
       try {
-        const res = await fetch(`${API_URL}/api/save_settings`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
+        const response = await fetch(API_BASE_URL + "/api/save_settings", {
+          method:"POST",
+          credentials:"include",
+          headers:apiHeaders({"Content-Type":"application/json","X-CSRF-Token":state.csrf}),
+          body:JSON.stringify(payload)
         });
-        const data = await res.json();
-        alert(data.message || "Zapisano pomyślnie.");
-        login(); // Szybkie odświeżenie danych z serwera
-      } catch (err) {
-        alert("Błąd podczas zapisywania danych do API.");
+        const result = await readJson(response);
+        byId("api-key").value = "";
+        byId("api-secret").value = "";
+        byId("api-passphrase").value = "";
+        await loadDashboard();
+        setSave(result.message || item.name + ": ustawienia zapisane i przekazane do weryfikacji.", true);
+      } catch (error) {
+        setSave(error.message || "Serwer odrzucił ustawienia.", false);
       }
-    }
+    });
 
-    async function loadUsers() {
+    async function logout() {
       try {
-        const res = await fetch(`${API_URL}/api/admin/users`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ admin_id: currentUserId })
-        });
-        const data = await res.json();
-
-        if (data.status === "success") {
-          const tbody = byId("admin-tbody");
-          tbody.innerHTML = "";
-          data.users.forEach(u => {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-              <td style="font-family: monospace;">${u.telegram_id}</td>
-              <td>
-                <input type="text" id="name-${u.telegram_id}" value="${u.custom_name}" style="width: 120px; padding: 6px; margin: 0;">
-                <button class="btn-small" onclick="updateName(${u.telegram_id})">Zapisz</button>
-              </td>
-              <td style="color: #aeb7c5;">${u.sub_end}</td>
-              <td>
-                <button class="btn-small ${u.bot_active ? 'btn-red' : ''}" onclick="toggleBot(${u.telegram_id}, ${!u.bot_active})">
-                  ${u.bot_active ? 'Wyłącz bota' : 'Włącz bota'}
-                </button>
-              </td>
-              <td>
-                <button class="btn-small ${u.is_admin ? 'btn-red' : ''}" onclick="toggleAdmin(${u.telegram_id}, ${!u.is_admin})">
-                  ${u.is_admin ? 'Zabierz Admina' : 'Nadaj Admina'}
-                </button>
-              </td>
-            `;
-            tbody.appendChild(tr);
+        if (state.csrf) {
+          const response = await fetch(API_BASE_URL + "/api/auth/logout", {
+            method:"POST",
+            credentials:"include",
+            headers:apiHeaders({"X-CSRF-Token":state.csrf})
           });
+          await readJson(response);
         }
-      } catch (err) {
-        alert("Błąd przy ładowaniu listy z bazy danych.");
+      } catch (error) {
+        setConnection("error", error.message || "Nie udało się wylogować. Spróbuj ponownie.");
+        return;
+      }
+      clearSessionState();
+      byId("login-panel").classList.remove("hidden");
+      byId("dashboard-content").classList.add("hidden");
+      byId("logout-btn").classList.add("hidden");
+      ["telegram-widget-hero","telegram-widget"].forEach(id => byId(id).replaceChildren());
+      setConnection("idle","Oczekuje na logowanie");
+      ensureTelegramWidget();
+      showPage("landing");
+    }
+
+    async function adminRequest(path, payload) {
+      if (!state.isAdmin || !state.telegramUser || !state.csrf) throw new Error("Brak bezpiecznej sesji administratora.");
+      const response = await fetch(API_BASE_URL + path, {
+        method:"POST",
+        credentials:"include",
+        headers:apiHeaders({"Content-Type":"application/json","X-CSRF-Token":state.csrf}),
+        body:JSON.stringify(Object.assign({admin_id:String(state.telegramUser.id)}, payload || {}))
+      });
+      return readJson(response);
+    }
+
+    async function loadAdminUsers() {
+      if (!state.isAdmin) return;
+      setText("admin-status","Pobieranie użytkowników…");
+      try {
+        const data = await adminRequest("/api/admin/users",{});
+        renderAdminUsers(Array.isArray(data.users) ? data.users : []);
+        setText("admin-status","");
+      } catch (error) {
+        setText("admin-status",error.message || "Błąd pobierania użytkowników.");
       }
     }
 
-    async function toggleBot(targetUser, isActive) {
-      await fetch(`${API_URL}/api/admin/toggle_bot`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ admin_id: currentUserId, target_user: targetUser, active: isActive })
+    function renderAdminUsers(users) {
+      const body = byId("admin-users");
+      body.replaceChildren();
+      if (!users.length) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 7;
+        cell.textContent = "Brak użytkowników do wyświetlenia.";
+        cell.style.textAlign = "center";
+        cell.style.color = "var(--muted)";
+        row.append(cell);
+        body.append(row);
+        return;
+      }
+      users.forEach(user => {
+        const row = document.createElement("tr");
+        const id = String(user.telegram_id);
+        const idCell = document.createElement("td");
+        idCell.className = "admin-id";
+        idCell.textContent = id;
+
+        const nameCell = document.createElement("td");
+        const nameInput = document.createElement("input");
+        nameInput.className = "admin-name-input";
+        nameInput.value = user.custom_name || "";
+        nameInput.setAttribute("aria-label", "Przypisane imię dla konta " + id);
+        const accountMeta = document.createElement("span");
+        accountMeta.className = "account-meta";
+        const knownExchange = EXCHANGES.find(item => item.id === user.exchange);
+        const exchangeName = knownExchange ? knownExchange.name : (user.exchange ? String(user.exchange) : "Giełda nieustawiona");
+        accountMeta.textContent = exchangeName + " • " + verificationLabel(user.verification_status);
+        nameCell.append(nameInput, accountMeta);
+
+        const joinCell = document.createElement("td");
+        joinCell.textContent = adminDate(user.join_date, "Przed aktualizacją");
+
+        const licenseCell = document.createElement("td");
+        licenseCell.className = "license-cell";
+        licenseCell.textContent = adminDate(user.sub_end, "Brak danych");
+
+        const botCell = document.createElement("td");
+        const originalName = user.custom_name || "";
+        const originalBot = Boolean(user.bot_active);
+        const originalAdmin = Boolean(user.is_admin);
+        const botLabel = document.createElement("label");
+        botLabel.className = "switch";
+        const botToggle = document.createElement("input");
+        botToggle.type = "checkbox";
+        botToggle.checked = originalBot;
+        botToggle.setAttribute("aria-label", "Bot ON/OFF dla konta " + id);
+        const botTrack = document.createElement("span");
+        botTrack.className = "switch-track";
+        botLabel.append(botToggle, botTrack);
+        botCell.append(botLabel);
+
+        const adminCell = document.createElement("td");
+        const adminLabel = document.createElement("label");
+        adminLabel.className = "switch admin-switch";
+        const adminToggle = document.createElement("input");
+        adminToggle.type = "checkbox";
+        adminToggle.checked = originalAdmin;
+        adminToggle.disabled = !state.isSuperAdmin;
+        adminToggle.setAttribute("aria-label", "Admin ON/OFF dla konta " + id);
+        adminToggle.title = state.isSuperAdmin ? "" : "Zmiana roli wymaga uprawnień superadministratora";
+        const adminTrack = document.createElement("span");
+        adminTrack.className = "switch-track";
+        adminLabel.append(adminToggle, adminTrack);
+        adminCell.append(adminLabel);
+
+        const actionCell = document.createElement("td");
+        const save = document.createElement("button");
+        save.className = "btn btn-gold btn-small save-name";
+        save.textContent = "Zapisz imię";
+        save.addEventListener("click", async () => {
+          save.disabled = true;
+          const previousLabel = save.textContent;
+          save.textContent = "Zapisuję…";
+          try {
+            let changed = 0;
+            const nextName = nameInput.value.trim();
+            if (nextName && nextName !== originalName) {
+              await adminRequest("/api/admin/update_name",{target_user:id,custom_name:nextName});
+              changed += 1;
+            }
+            if (botToggle.checked !== originalBot) {
+              await adminRequest("/api/admin/toggle_bot",{target_user:id,active:botToggle.checked});
+              changed += 1;
+            }
+            if (state.isSuperAdmin && adminToggle.checked !== originalAdmin) {
+              await adminRequest("/api/admin/toggle_admin",{target_user:id,is_admin:adminToggle.checked});
+              changed += 1;
+            }
+            setText("admin-status",changed ? "Zapisano zmiany dla " + id + "." : "Brak nowych zmian dla " + id + ".");
+            if (changed) await loadAdminUsers();
+          } catch (error) {
+            setText("admin-status",error.message || "Błąd zapisu.");
+          } finally {
+            save.disabled = false;
+            save.textContent = previousLabel;
+          }
+        });
+        actionCell.append(save);
+        row.append(idCell,nameCell,joinCell,licenseCell,botCell,adminCell,actionCell);
+        body.append(row);
       });
-      loadUsers();
     }
 
-    async function toggleAdmin(targetUser, isAdminRole) {
-      await fetch(`${API_URL}/api/admin/toggle_admin`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ admin_id: currentUserId, target_user: targetUser, is_admin: isAdminRole })
-      });
-      loadUsers();
+    document.addEventListener("click", event => {
+      const pageButton = event.target.closest("[data-page]");
+      if (pageButton) showPage(pageButton.dataset.page);
+      const scrollButton = event.target.closest("[data-scroll]");
+      if (scrollButton) byId(scrollButton.dataset.scroll).scrollIntoView({behavior:"smooth"});
+      if (event.target.closest("[data-terms]")) byId("terms-dialog").showModal();
+    });
+    byId("exchange-select").addEventListener("change", () => {
+      clearSensitiveFields();
+      updateSelectedExchange();
+    });
+    byId("logout-btn").addEventListener("click", logout);
+    byId("refresh-admin").addEventListener("click", loadAdminUsers);
+    byId("close-terms").addEventListener("click", () => byId("terms-dialog").close());
+    byId("accept-terms").addEventListener("click", () => byId("terms-dialog").close());
+
+    async function bootstrap() {
+      renderExchangeCards();
+      renderExchangeSelect();
+      await loadCapabilities();
+      const restored = await restoreSession();
+      if (!restored) ensureTelegramWidget();
     }
 
-    async function updateName(targetUser) {
-      const name = byId(`name-${targetUser}`).value;
-      await fetch(`${API_URL}/api/admin/update_name`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ admin_id: currentUserId, target_user: targetUser, custom_name: name })
-      });
-      alert("Imię zaktualizowane poprawnie!");
-    }
+    bootstrap();
   </script>
 </body>
 </html>
