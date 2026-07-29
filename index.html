@@ -1233,6 +1233,26 @@
         botTrack.className = "switch-track";
         botLabel.append(botToggle, botTrack);
         botCell.append(botLabel);
+        botToggle.addEventListener("change", async () => {
+          const requestedState = botToggle.checked;
+          botToggle.disabled = true;
+          try {
+            await adminRequest("/api/admin/toggle_bot", {
+              target_user: id,
+              active: requestedState
+            });
+            setText(
+              "admin-status",
+              (requestedState ? "Włączono" : "Wyłączono") + " bota dla " + id + "."
+            );
+            await loadAdminUsers();
+          } catch (error) {
+            botToggle.checked = !requestedState;
+            setText("admin-status", error.message || "Nie udało się zmienić statusu bota.");
+          } finally {
+            botToggle.disabled = false;
+          }
+        });
 
         const adminCell = document.createElement("td");
         const adminLabel = document.createElement("label");
@@ -1240,13 +1260,36 @@
         const adminToggle = document.createElement("input");
         adminToggle.type = "checkbox";
         adminToggle.checked = originalAdmin;
-        adminToggle.disabled = !state.isSuperAdmin;
+        const protectedSuperAdmin = Boolean(user.is_superadmin);
+        adminToggle.disabled = !state.isSuperAdmin || protectedSuperAdmin;
         adminToggle.setAttribute("aria-label", "Admin ON/OFF dla konta " + id);
-        adminToggle.title = state.isSuperAdmin ? "" : "Zmiana roli wymaga uprawnień superadministratora";
+        adminToggle.title = protectedSuperAdmin
+          ? "Konto właściciela jest chronione przed odebraniem uprawnień"
+          : (state.isSuperAdmin ? "" : "Zmiana roli wymaga uprawnień właściciela");
         const adminTrack = document.createElement("span");
         adminTrack.className = "switch-track";
         adminLabel.append(adminToggle, adminTrack);
         adminCell.append(adminLabel);
+        adminToggle.addEventListener("change", async () => {
+          const requestedState = adminToggle.checked;
+          adminToggle.disabled = true;
+          try {
+            await adminRequest("/api/admin/toggle_admin", {
+              target_user: id,
+              is_admin: requestedState
+            });
+            setText(
+              "admin-status",
+              (requestedState ? "Nadano" : "Odebrano") + " rolę administratora dla " + id + "."
+            );
+            await loadAdminUsers();
+          } catch (error) {
+            adminToggle.checked = !requestedState;
+            setText("admin-status", error.message || "Nie udało się zmienić roli administratora.");
+          } finally {
+            adminToggle.disabled = !state.isSuperAdmin || protectedSuperAdmin;
+          }
+        });
 
         const actionCell = document.createElement("td");
         const save = document.createElement("button");
@@ -1257,22 +1300,14 @@
           const previousLabel = save.textContent;
           save.textContent = "Zapisuję…";
           try {
-            let changed = 0;
             const nextName = nameInput.value.trim();
             if (nextName && nextName !== originalName) {
               await adminRequest("/api/admin/update_name",{target_user:id,custom_name:nextName});
-              changed += 1;
+              setText("admin-status", "Zapisano imię dla " + id + ".");
+              await loadAdminUsers();
+            } else {
+              setText("admin-status", "Brak nowego imienia dla " + id + ".");
             }
-            if (botToggle.checked !== originalBot) {
-              await adminRequest("/api/admin/toggle_bot",{target_user:id,active:botToggle.checked});
-              changed += 1;
-            }
-            if (state.isSuperAdmin && adminToggle.checked !== originalAdmin) {
-              await adminRequest("/api/admin/toggle_admin",{target_user:id,is_admin:adminToggle.checked});
-              changed += 1;
-            }
-            setText("admin-status",changed ? "Zapisano zmiany dla " + id + "." : "Brak nowych zmian dla " + id + ".");
-            if (changed) await loadAdminUsers();
           } catch (error) {
             setText("admin-status",error.message || "Błąd zapisu.");
           } finally {
