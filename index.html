@@ -3,2200 +3,277 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Czarna Perła — automatyczny system tradingowy SMC i True CVD">
-  <title>Czarna Perła — Panel Multi-Giełdowy</title>
+  <title>Czarna Perła — Panel</title>
   <style>
     :root {
       --bg: #07090d;
       --panel: rgba(15, 20, 29, .88);
-      --panel2: rgba(10, 14, 21, .91);
-      --line: rgba(111, 126, 148, .30);
-      --line-soft: rgba(255,255,255,.08);
       --text: #f4f6f8;
-      --muted: #aeb7c5;
       --gold: #f3a63b;
-      --gold-bright: #ffbd57;
       --green: #10d49a;
-      --blue: #35a9ee;
-      --amber: #f6ba4b;
       --red: #ff6262;
-      --shadow: 0 24px 70px rgba(0,0,0,.40);
+      --line: rgba(111, 126, 148, .30);
     }
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
     body {
-      margin: 0;
-      min-height: 100vh;
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-      -webkit-font-smoothing: antialiased;
-      text-rendering: optimizeLegibility;
-      line-height: 1.6;
-      background-color: #101923;
-      background-image:
-        radial-gradient(circle at 50% 12%, rgba(243,166,59,.05), transparent 36%),
-        linear-gradient(180deg, rgba(5,8,12,.38), rgba(5,8,12,.64)),
-        url("./4UEg7.jpg");
-      background-position: center top;
-      background-size: max(96vw, 149vh) auto;
-      background-repeat: no-repeat;
-      background-attachment: fixed;
-      overflow-x: hidden;
+      margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg); color: var(--text);
+      display: flex; flex-direction: column; align-items: center;
     }
-    button, input, select { font: inherit; }
-    button { color: inherit; }
-    a { color: inherit; }
-    :focus-visible { outline: 3px solid rgba(243,166,59,.5); outline-offset: 2px; }
-    .container { width: 100%; max-width: 1100px; margin: 0 auto; padding: 0 24px; }
-    .hidden { display: none !important; }
-
-    header {
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      padding: 16px 0;
-      border-bottom: 1px solid var(--line-soft);
-      background: linear-gradient(180deg, rgba(7,9,13,.82), rgba(7,9,13,.68));
-      backdrop-filter: blur(14px) saturate(125%);
-    }
-    .header-inner {
-      min-height: 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-    }
-    .brand {
-      border: 0;
-      background: transparent;
-      cursor: pointer;
-      color: white;
-      display: inline-flex;
-      align-items: center;
-      gap: 12px;
-      padding: 2px 0;
-      font-size: 27px;
-      font-weight: 900;
-      letter-spacing: .09em;
-      white-space: nowrap;
-    }
-    .brand-mark {
-      width: 40px;
-      height: 40px;
-      display: grid;
-      place-items: center;
-      border: 1px solid rgba(243,166,59,.40);
-      border-radius: 12px;
-      background: linear-gradient(145deg, rgba(243,166,59,.18), rgba(77,41,103,.48));
-      box-shadow: 0 8px 24px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.12);
-      font-size: 22px;
-      line-height: 1;
-    }
-    .brand-copy { line-height: 1; }
-    .brand strong { color: var(--gold); }
-    nav { display: flex; gap: 10px; }
-    .nav-btn {
-      min-height: 38px;
-      padding: 8px 16px;
-      border: 1px solid transparent;
-      border-radius: 6px;
-      background: transparent;
-      color: var(--muted);
-      font-size: 14px;
-      font-weight: 750;
-      cursor: pointer;
-    }
-    .nav-btn:hover { color: white; background: rgba(255,255,255,.05); }
-    .nav-btn.active { color: var(--gold); border-color: rgba(243,166,59,.55); background: rgba(243,166,59,.09); }
-    .nav-btn.admin { color: var(--red); }
-
-    .page { display: none; }
-    .page.active { display: block; }
-    .hero {
-      min-height: 535px;
-      padding: 92px 0 78px;
-      display: grid;
-      place-items: center;
-      text-align: center;
-      border-bottom: 1px solid var(--line-soft);
-      background:
-        radial-gradient(ellipse at 50% 48%, rgba(7,10,15,.60) 0%, rgba(7,10,15,.42) 48%, rgba(7,10,15,.14) 100%);
-    }
-    .badges { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
-    .badge {
-      padding: 8px 16px;
-      border: 1px solid var(--green);
-      border-radius: 999px;
-      background: rgba(7,27,24,.58);
-      color: var(--green);
-      font-size: 13px;
-      font-weight: 750;
-      backdrop-filter: blur(8px);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
-    }
-    .badge-gold {
-      border-color: rgba(243,166,59,.82);
-      background: rgba(45,29,8,.62);
-      color: #ffd28f;
-      box-shadow: 0 0 26px rgba(243,166,59,.12), inset 0 1px 0 rgba(255,255,255,.07);
-    }
-    .hero h1 {
-      width: 100%;
-      max-width: 1080px;
-      margin: 38px auto 20px;
-      padding: .08em .16em .20em;
-      overflow: visible;
-      font-size: clamp(38px, 4.1vw, 60px);
-      line-height: 1.2;
-      letter-spacing: -.025em;
-      background: linear-gradient(110deg, #fff 10%, #ffd59b 58%, var(--gold));
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-      color: transparent;
-      text-shadow: none;
-    }
-    .hero p {
-      max-width: 790px;
-      margin: 0 auto;
-      color: #d0d6df;
-      font-size: 18px;
-      line-height: 1.55;
-      text-shadow: 0 2px 4px rgba(0,0,0,.8);
-    }
-    .hero-actions { margin-top: 30px; display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
-    .hero-login {
-      min-height: 48px;
-      margin-top: 38px;
-      display: grid;
-      place-items: center;
-    }
-    .btn {
-      min-height: 46px;
-      padding: 0 19px;
-      border: 1px solid transparent;
-      border-radius: 9px;
-      font-weight: 800;
-      cursor: pointer;
-      transition: transform .15s ease, background .15s ease;
-    }
-    .btn:hover:not(:disabled) { transform: translateY(-1px); }
-    .btn:disabled { cursor: not-allowed; opacity: .45; }
-    .btn-gold { background: var(--gold); color: #171009; }
-    .btn-blue { background: var(--blue); color: #06151e; }
-    .btn-outline { border-color: #46505e; background: rgba(255,255,255,.05); color: white; }
-    .btn-red { border-color: rgba(255,98,98,.5); background: rgba(255,98,98,.08); color: var(--red); }
-    .btn-small { min-height: 35px; padding: 0 11px; font-size: 12px; }
-
-    .section { padding: 76px 0; }
-    .section.alt {
-      border-top: 1px solid var(--line-soft);
-      border-bottom: 1px solid var(--line-soft);
-      background: transparent;
-      backdrop-filter: none;
-    }
-    .section-head { max-width: 780px; margin: 0 auto 42px; text-align: center; }
-    .eyebrow { color: var(--gold); font-size: 12px; font-weight: 850; letter-spacing: .18em; }
-    .section-head h2 { margin: 10px 0 12px; font-size: clamp(30px, 4vw, 46px); line-height: 1.1; letter-spacing: -.04em; }
-    .section-head p { margin: 0; color: var(--muted); }
-    .grid { display: grid; gap: 18px; }
-    .exchange-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
-    .proof-grid, .pricing-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-    .feature-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .container { width: 100%; max-width: 800px; }
     .card {
-      border: 1px solid var(--line);
-      border-radius: 15px;
-      background: var(--panel);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(14px) saturate(115%);
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 12px; padding: 24px; margin-bottom: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
-    .exchange-card { min-height: 315px; padding: 22px; display: flex; flex-direction: column; border-top-width: 3px; }
-    .exchange-card.live { border-top-color: var(--green); }
-    .exchange-card.test { border-top-color: var(--blue); }
-    .exchange-card.beta { border-top-color: var(--amber); }
-    .exchange-card.blocked { border-top-color: var(--red); }
-    .exchange-top { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
-    .exchange-top h3 { margin: 0; font-size: 22px; }
-    .exchange-top small, .exchange-card p { color: var(--muted); }
-    .status {
-      flex: 0 0 auto;
-      padding: 5px 9px;
-      border-radius: 999px;
-      font-size: 10px;
-      font-weight: 850;
-      letter-spacing: .04em;
-      background: rgba(255,255,255,.06);
+    h1, h2, h3 { color: var(--gold); margin-top: 0; }
+    .hidden { display: none !important; }
+    label { display: block; margin-top: 15px; font-size: 14px; font-weight: bold; color: #aeb7c5;}
+    input {
+      width: 100%; padding: 12px; margin-top: 5px; box-sizing: border-box;
+      background: rgba(0,0,0,0.5); border: 1px solid var(--line); color: white; border-radius: 6px;
     }
-    .exchange-meta { margin: 8px 0 18px; padding: 12px; border-radius: 9px; background: rgba(0,0,0,.22); color: #d6dbe2; font-size: 12px; }
-    .exchange-card .btn { width: 100%; margin-top: auto; }
-    .proof-card { padding: 28px; border-top: 4px solid var(--green); }
-    .proof-top { display: flex; justify-content: space-between; gap: 15px; color: var(--muted); font-size: 13px; }
-    .proof-top strong { color: white; font-size: 18px; }
-    .winrate { display: block; margin: 18px 0; text-align: center; color: var(--green); font-size: 46px; font-weight: 900; }
-    .proof-stats { display: flex; justify-content: space-around; padding: 14px; border-radius: 10px; background: rgba(0,0,0,.28); }
-    .feature-card { padding: 28px; }
-    .feature-card h3 { margin: 8px 0; }
-    .feature-card p { margin: 0; color: var(--muted); }
-    .pricing-section { position: relative; }
-    .pricing-section::before {
-      content: "";
-      position: absolute;
-      inset: 8% 18% 0;
-      z-index: -1;
-      border-radius: 50%;
-      background: rgba(243,166,59,.08);
-      filter: blur(90px);
-      pointer-events: none;
+    input:focus { border-color: var(--gold); outline: none; }
+    .btn {
+      width: 100%; padding: 14px; margin-top: 20px; font-weight: bold; border: none; border-radius: 6px;
+      background: var(--gold); color: black; cursor: pointer; font-size: 16px;
     }
-    .pricing-grid { gap: 24px; align-items: stretch; }
-    .pricing-card {
-      position: relative;
-      min-height: 520px;
-      padding: 34px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      border-color: rgba(119,133,154,.36);
-      background:
-        linear-gradient(155deg, rgba(24,30,42,.94), rgba(12,16,23,.90));
-      transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
-    }
-    .pricing-card:hover {
-      transform: translateY(-4px);
-      border-color: rgba(243,166,59,.48);
-      box-shadow: 0 28px 80px rgba(0,0,0,.48);
-    }
-    .pricing-card.featured {
-      border-color: rgba(243,166,59,.78);
-      background:
-        radial-gradient(circle at 90% 0, rgba(243,166,59,.18), transparent 30%),
-        linear-gradient(155deg, rgba(27,31,39,.96), rgba(15,18,24,.92));
-      box-shadow: 0 28px 80px rgba(0,0,0,.46), 0 0 42px rgba(243,166,59,.08);
-    }
-    .pricing-ribbon {
-      position: absolute;
-      top: 18px;
-      right: 18px;
-      padding: 6px 10px;
-      border: 1px solid rgba(243,166,59,.46);
-      border-radius: 999px;
-      background: rgba(243,166,59,.12);
-      color: #ffd18b;
-      font-size: 10px;
-      font-weight: 900;
-      letter-spacing: .10em;
-      text-transform: uppercase;
-    }
-    .plan-icon {
-      width: 46px;
-      height: 46px;
-      display: grid;
-      place-items: center;
-      margin-bottom: 24px;
-      border: 1px solid rgba(255,255,255,.10);
-      border-radius: 13px;
-      background: rgba(255,255,255,.05);
-      font-size: 23px;
-    }
-    .pricing-card h3 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
-    .pricing-card > p { min-height: 52px; margin: 14px 0 0; color: var(--muted); }
-    .price-row { display: flex; align-items: flex-end; gap: 10px; margin: 22px 0 4px; }
-    .price { font-size: 54px; line-height: 1; font-weight: 950; color: var(--gold-bright); letter-spacing: -.045em; }
-    .price-note { padding-bottom: 5px; color: var(--muted); font-size: 13px; }
-    .old-price { margin-top: 4px; color: #778190; font-size: 14px; }
-    .old-price s { margin-right: 7px; }
-    .save-pill { color: var(--green); font-weight: 800; }
-    .pricing-card ul {
-      margin: 26px 0 30px;
-      padding: 22px 0 0;
-      border-top: 1px solid var(--line-soft);
-      list-style: none;
-      color: #dce2e9;
-    }
-    .pricing-card li { position: relative; margin: 12px 0; padding-left: 26px; }
-    .pricing-card li::before {
-      content: "✓";
-      position: absolute;
-      left: 0;
-      color: var(--green);
-      font-weight: 900;
-    }
-    .pricing-card .btn { width: 100%; margin-top: auto; }
-    .warning { margin-top: 28px; padding: 15px; border: 1px solid rgba(246,186,75,.35); border-radius: 10px; background: rgba(246,186,75,.07); color: #e9d4a5; font-size: 13px; }
-
-    .dashboard, .admin-page { padding: 42px 0 80px; }
-    .dashboard-head {
-      margin-bottom: 24px;
-      padding: 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 18px;
-    }
-    .dashboard-head h2 { margin: 0; }
-    .dashboard-head p { margin: 4px 0 0; color: var(--muted); }
-    .connection {
-      display: inline-flex;
-      align-items: center;
-      gap: 9px;
-      padding: 8px 13px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: rgba(0,0,0,.25);
-      font-size: 12px;
-      font-weight: 800;
-    }
-    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
-    .dot.ok { background: var(--green); box-shadow: 0 0 12px var(--green); }
-    .dot.err { background: var(--red); box-shadow: 0 0 12px var(--red); }
-    .dashboard-grid { display: grid; grid-template-columns: 1.8fr 1fr; gap: 22px; align-items: start; }
-    .panel { padding: 24px; margin-bottom: 22px; }
-    .panel h3 { margin: 0 0 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line-soft); }
-    .accounts-panel { margin-bottom: 22px; padding: 24px; }
-    .accounts-panel-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 16px;
-      margin-bottom: 14px;
-    }
-    .accounts-panel-head h3 { margin: 0 0 4px; }
-    .accounts-panel-head p { margin: 0; color: var(--muted); font-size: 12px; }
-    .accounts-summary {
-      flex: 0 0 auto;
-      padding: 6px 11px;
-      border: 1px solid rgba(16,212,154,.35);
-      border-radius: 999px;
-      color: var(--green);
-      font-size: 11px;
-      font-weight: 850;
-    }
-    .accounts-table-wrap { overflow-x: auto; }
-    .accounts-table { min-width: 820px; }
-    .accounts-table tbody tr:hover { background: rgba(255,255,255,.025); }
-    .muted-cell { color: var(--muted); font-size: 11px; }
-    .table-btn {
-      padding: 7px 11px;
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      background: rgba(255,255,255,.04);
-      color: white;
-      cursor: pointer;
-      font-size: 11px;
-      font-weight: 800;
-    }
-    .table-btn:hover { border-color: var(--gold); color: var(--gold); }
-    .login-box { padding: 28px; text-align: center; }
-    .login-box p { color: var(--muted); }
-    #telegram-widget { min-height: 48px; display: grid; place-items: center; }
-    .steps {
-      margin: 0 0 22px;
-      padding: 0;
-      display: grid;
-      grid-template-columns: repeat(3,minmax(0,1fr));
-      list-style: none;
-      overflow: hidden;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: rgba(13,17,25,.88);
-    }
-    .steps li {
-      min-height: 68px;
-      padding: 14px 18px;
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 800;
-      border-right: 1px solid var(--line-soft);
-    }
-    .steps li:last-child { border-right: 0; }
-    .steps li.active { color: #fff; background: rgba(243,166,59,.08); }
-    .steps li span {
-      width: 30px;
-      height: 30px;
-      display: grid;
-      place-items: center;
-      flex: 0 0 auto;
-      border: 1px solid var(--line);
-      border-radius: 50%;
-      color: var(--gold);
-      background: rgba(0,0,0,.32);
-    }
-    .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px; }
-    .full { grid-column: 1 / -1; }
-    label { display: block; color: var(--muted); font-size: 12px; font-weight: 700; }
-    input, select {
-      width: 100%;
-      margin-top: 5px;
-      padding: 11px 12px;
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      background: rgba(0,0,0,.38);
-      color: white;
-    }
-    input:focus, select:focus { border-color: var(--gold); outline: none; }
-    .password-field { position: relative; display: block; margin-top: 5px; }
-    .password-field input { margin-top: 0; padding-right: 70px; }
-    .password-field button {
-      position: absolute;
-      top: 50%;
-      right: 8px;
-      transform: translateY(-50%);
-      padding: 5px 7px;
-      border: 0;
-      background: transparent;
-      color: var(--gold);
-      cursor: pointer;
-      font-size: 11px;
-      font-weight: 850;
-    }
-    .advanced-toggle {
-      width: 100%;
-      padding: 11px 12px;
-      border: 1px dashed var(--line);
-      border-radius: 7px;
-      background: rgba(255,255,255,.025);
-      color: #dce2ea;
-      cursor: pointer;
-      font-weight: 800;
-      text-align: left;
-    }
-    .advanced-fields {
-      padding: 14px;
-      border: 1px solid var(--line-soft);
-      border-radius: 8px;
-      background: rgba(0,0,0,.18);
-    }
-    .form-safety {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .form-safety span {
-      padding: 6px 9px;
-      border: 1px solid rgba(16,212,154,.28);
-      border-radius: 999px;
-      color: var(--green);
-      background: rgba(16,212,154,.06);
-      font-size: 10px;
-      font-weight: 800;
-    }
-    .exchange-alert {
-      padding: 12px 13px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: rgba(255,255,255,.025);
-      color: #d7dde5;
-      font-size: 12px;
-      line-height: 1.55;
-    }
-    .form-note { color: var(--muted); font-size: 12px; }
-    .save-status { min-height: 24px; margin-top: 12px; font-size: 13px; font-weight: 700; }
-    .save-status.ok { color: var(--green); }
-    .save-status.err { color: var(--red); }
-    .info-row { display: flex; justify-content: space-between; gap: 15px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 13px; }
-    .info-row span:first-child { color: var(--muted); }
-    .profile-kicker {
-      display: block;
-      margin-bottom: 5px;
-      color: var(--gold);
-      font-size: 10px;
-      font-weight: 900;
-      letter-spacing: .12em;
-    }
-    .safety-list { margin: 0; padding-left: 22px; color: #d6dbe2; font-size: 13px; }
-    .safety-list li { margin: 9px 0; }
-    .referral-value {
-      margin: 12px 0;
-      padding: 11px;
-      overflow-wrap: anywhere;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: rgba(0,0,0,.3);
-      color: var(--gold);
-      font: 11px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
-    }
-    .referral-stats {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin: 14px 0;
-    }
-    .referral-stat {
-      padding: 12px 10px;
-      border: 1px solid var(--line-soft);
-      border-radius: 9px;
-      background: rgba(0,0,0,.20);
-      text-align: center;
-    }
-    .referral-stat strong {
-      display: block;
-      color: var(--green);
-      font-size: 20px;
-      line-height: 1.2;
-    }
-    .referral-stat span {
-      color: var(--muted);
-      font-size: 11px;
-    }
-    .instructions ol { margin: 15px 0; padding-left: 22px; }
-    .instructions li { margin: 9px 0; color: #d6dbe2; }
-    .doc-link { color: var(--blue); }
-    .instruction-tabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 7px;
-      margin-bottom: 16px;
-    }
-    .instruction-tabs button {
-      padding: 7px 10px;
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      background: rgba(0,0,0,.22);
-      color: var(--muted);
-      cursor: pointer;
-      font-size: 11px;
-      font-weight: 800;
-    }
-    .instruction-tabs button.active {
-      border-color: var(--gold);
-      color: var(--gold);
-      background: rgba(243,166,59,.07);
-    }
-    .admin-shell {
-      padding: 0;
-      overflow: hidden;
-      border-color: rgba(255,79,93,.82);
-      background:
-        radial-gradient(circle at 0 0, rgba(255,78,93,.07), transparent 28%),
-        rgba(14,18,27,.92);
-      box-shadow: 0 30px 90px rgba(0,0,0,.45), 0 0 0 1px rgba(255,78,93,.03);
-    }
-    .admin-hero {
-      padding: 26px 28px 22px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 20px;
-      border-bottom: 1px solid var(--line-soft);
-    }
-    .admin-title-wrap { display: flex; align-items: center; gap: 14px; }
-    .admin-emblem {
-      width: 42px;
-      height: 42px;
-      display: grid;
-      place-items: center;
-      flex: 0 0 auto;
-      border: 1px solid rgba(255,98,98,.32);
-      border-radius: 11px;
-      background: rgba(116,39,85,.36);
-      font-size: 21px;
-    }
-    .admin-hero h2 { margin: 0; font-size: clamp(21px, 2.5vw, 27px); line-height: 1.2; }
-    .admin-hero p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
-    .admin-status-wrap { min-height: 36px; padding: 0 28px; }
-    .admin-table-wrap { overflow-x: auto; padding: 0 24px 18px; }
-    .admin-table { min-width: 1460px; }
-    .rollout-card {
-      margin-bottom: 22px;
-      padding: 24px;
-      border-color: rgba(243,166,59,.38);
-    }
-    .rollout-card h3 { margin: 0 0 5px; }
-    .rollout-warning {
-      margin: 0 0 18px;
-      padding: 11px 13px;
-      border: 1px solid rgba(246,186,75,.25);
-      border-radius: 8px;
-      background: rgba(246,186,75,.055);
-      color: #d9c59c;
-      font-size: 12px;
-    }
-    .rollout-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit,minmax(235px,1fr));
-      gap: 12px;
-    }
-    .rollout-item {
-      padding: 15px;
-      border: 1px solid var(--line);
-      border-radius: 9px;
-      background: rgba(0,0,0,.22);
-    }
-    .rollout-item-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      align-items: center;
-      margin-bottom: 11px;
-    }
-    .rollout-item-head span {
-      color: var(--gold);
-      font-size: 10px;
-      font-weight: 900;
-      text-align: right;
-    }
-    .rollout-item label { margin-top: 9px; }
-    .rollout-item input, .rollout-item select { margin-top: 4px; padding: 8px 9px; font-size: 11px; }
-    .rollout-item .table-btn { width: 100%; margin-top: 11px; }
-    .rollout-item p { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
-    .approval-controls {
-      min-width: 230px;
-      display: grid;
-      gap: 7px;
-    }
-    .approval-controls input, .approval-controls select {
-      min-width: 215px;
-      margin: 0;
-      padding: 8px;
-      font-size: 11px;
-    }
-    .approval-controls .table-btn { white-space: normal; }
-    .admin-exchange-name { white-space: nowrap; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { padding: 15px 14px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: middle; }
-    th {
-      color: #8994a4;
-      font-size: 11px;
-      font-weight: 850;
-      letter-spacing: .04em;
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-    .admin-table tbody tr { transition: background .16s ease; }
-    .admin-table tbody tr:hover { background: rgba(255,255,255,.025); }
-    .admin-table tbody tr:last-child td { border-bottom: 0; }
-    .admin-id { color: #edf1f5; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
-    .admin-name-input {
-      width: 150px;
-      min-width: 150px;
-      margin: 0;
-      padding: 9px 10px;
-      background: rgba(3,6,11,.64);
-    }
-    .account-meta { display: block; margin-top: 6px; color: #7f8998; font-size: 10px; line-height: 1.35; }
-    .account-meta strong { color: #aeb8c6; font-weight: 750; }
-    .license-cell { white-space: nowrap; }
-    .switch {
-      position: relative;
-      width: 46px;
-      height: 24px;
-      display: inline-block;
-      margin: 0;
-      color: inherit;
-      vertical-align: middle;
-    }
-    .switch input {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      margin: 0;
-      opacity: 0;
-      pointer-events: none;
-    }
-    .switch-track {
-      position: absolute;
-      inset: 0;
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: 999px;
-      background: #2a303b;
-      cursor: pointer;
-      transition: background .18s ease, box-shadow .18s ease;
-    }
-    .switch-track::after {
-      content: "";
-      position: absolute;
-      top: 3px;
-      left: 3px;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: #f7f9fb;
-      box-shadow: 0 2px 6px rgba(0,0,0,.35);
-      transition: transform .18s ease;
-    }
-    .switch input:checked + .switch-track { background: #08bd8e; }
-    .switch.admin-switch input:checked + .switch-track { background: var(--gold); }
-    .switch input:checked + .switch-track::after { transform: translateX(22px); }
-    .switch input:focus-visible + .switch-track { outline: 3px solid rgba(243,166,59,.45); outline-offset: 2px; }
-    .switch input:disabled + .switch-track { cursor: not-allowed; opacity: .45; }
-    .save-name { white-space: nowrap; }
-
-    footer { padding: 36px 0; border-top: 1px solid var(--line-soft); background: rgba(7,9,13,.38); backdrop-filter: blur(5px); color: var(--muted); text-align: center; font-size: 12px; }
-    dialog {
-      width: min(650px, calc(100% - 30px));
-      max-height: 80vh;
-      padding: 0;
-      border: 1px solid var(--line);
-      border-radius: 15px;
-      background: #11151d;
-      color: white;
-      box-shadow: var(--shadow);
-    }
-    dialog::backdrop { background: rgba(0,0,0,.83); backdrop-filter: blur(6px); }
-    .modal-head, .modal-body, .modal-foot { padding: 20px 22px; }
-    .modal-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
-    .modal-head h2 { margin: 0; font-size: 18px; }
-    .modal-body { color: #d1d7df; font-size: 13px; }
-    .modal-body h3 { color: var(--gold); }
-    .modal-foot { border-top: 1px solid var(--line); text-align: right; }
-
-    @media (max-width: 900px) {
-      .exchange-grid, .feature-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-      .dashboard-grid { grid-template-columns: 1fr; }
-      .pricing-card { min-height: 500px; padding: 28px; }
-    }
-    @media (max-width: 680px) {
-      body { background-attachment: scroll; }
-      .container { padding: 0 14px; }
-      header { position: relative; padding: 12px 0 10px; }
-      .header-inner { align-items: flex-start; flex-direction: column; gap: 10px; }
-      .brand { gap: 9px; font-size: 21px; }
-      .brand-mark { width: 34px; height: 34px; border-radius: 10px; font-size: 18px; }
-      nav { width: 100%; overflow-x: auto; }
-      .nav-btn { white-space: nowrap; padding: 0 10px; }
-      .hero { min-height: auto; padding: 54px 0 58px; }
-      .hero h1 { max-width: 100%; font-size: clamp(32px, 9.5vw, 42px); line-height: 1.08; }
-      .exchange-grid, .proof-grid, .feature-grid, .pricing-grid, .form-grid { grid-template-columns: 1fr; }
-      .full { grid-column: auto; }
-      .steps { grid-template-columns: 1fr; }
-      .steps li { min-height: 54px; border-right: 0; border-bottom: 1px solid var(--line-soft); }
-      .steps li:last-child { border-bottom: 0; }
-      .dashboard-head { align-items: flex-start; flex-direction: column; }
-      .exchange-top { flex-direction: column; }
-      .pricing-card { min-height: 0; padding: 25px; }
-      .pricing-ribbon { position: static; align-self: flex-start; margin-bottom: 18px; }
-      .price { font-size: 48px; }
-      .admin-page { padding-top: 22px; }
-      .admin-hero { padding: 20px; align-items: flex-start; flex-direction: column; }
-      .admin-status-wrap { padding: 0 20px; }
-      .admin-table-wrap { padding: 0 10px 12px; }
-    }
+    .btn:hover { filter: brightness(1.1); }
+    .btn-red { background: var(--red); color: white; }
+    .btn-small { width: auto; padding: 8px 12px; margin: 2px; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+    th, td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; }
+    th { color: var(--gold); }
+    .status-ok { color: var(--green); font-weight: bold; }
+    .status-err { color: var(--red); font-weight: bold; }
   </style>
 </head>
 <body>
-  <header>
-    <div class="container header-inner">
-      <button class="brand" data-page="landing" aria-label="Czarna Perła — strona główna">
-        <span class="brand-mark" aria-hidden="true">🏴‍☠️</span>
-        <span class="brand-copy">CZARNA <strong>PERŁA</strong></span>
-      </button>
-      <nav aria-label="Główna nawigacja">
-        <button class="nav-btn active" data-page="landing">Strona główna</button>
-        <button class="nav-btn" data-page="dashboard">Panel inwestora</button>
-        <button id="admin-nav" class="nav-btn admin hidden" data-page="admin">Mostek kapitański</button>
-      </nav>
+  <div class="container">
+    <h1>Czarna Perła</h1>
+    
+    <!-- LOGOWANIE -->
+    <div id="login-panel" class="card">
+      <h2>Logowanie do panelu</h2>
+      <p style="color: #aeb7c5;">Wpisz swoje Telegram ID, aby uzyskać dostęp do ustawień.</p>
+      <input type="number" id="login-id" placeholder="np. 123456789">
+      <button class="btn" onclick="login()">Wejdź do panelu</button>
     </div>
-  </header>
 
-  <main id="landing" class="page active">
-    <section class="hero">
-      <div class="container">
-        <div class="badges">
-          <span class="badge badge-gold">🌐 Panel przygotowany na 7 giełd</span>
-          <span class="badge">WinRate &gt; 80% na rynku rzeczywistym</span>
-          <span class="badge">SMC + True CVD + ochrona kapitału</span>
+    <!-- PANEL INWESTORA -->
+    <div id="dashboard-panel" class="card hidden">
+      <h2>Panel Inwestora</h2>
+      <p>Witaj, <strong id="dash-name" style="color: var(--gold);"></strong>!</p>
+      <p style="color: #aeb7c5;">Plan: <span id="dash-plan" style="color: white;"></span></p>
+      <p style="color: #aeb7c5;">Ważność do: <span id="dash-sub" style="color: white;"></span></p>
+      <p style="color: #aeb7c5;">Status API: <span id="dash-api"></span></p>
+      
+      <hr style="border: 0; border-top: 1px solid var(--line); margin: 20px 0;">
+      
+      <h3>Ustawienia Bitget</h3>
+      <label>API Key
+        <input type="text" id="api-key" placeholder="Wklej API Key z Bitget">
+      </label>
+      <label>API Secret
+        <input type="password" id="api-secret" placeholder="Wklej API Secret">
+      </label>
+      <label>Passphrase
+        <input type="password" id="api-passphrase" placeholder="Wklej Passphrase">
+      </label>
+      <div style="display: flex; gap: 15px;">
+        <div style="flex: 1;">
+          <label>Dźwignia (x)
+            <input type="number" id="leverage" placeholder="20">
+          </label>
         </div>
-        <h1>Twój kapitał pod pełną kontrolą algorytmu</h1>
-        <p>Czarna Perła analizuje rynek wspólnie, ale każde konto wykonuje zlecenia przez bezpieczny adapter wybranej giełdy. Maksymalnie 10 pozycji na konto, kontrola trybu one-way/net i automatyczne zarządzanie TP oraz SL.</p>
-        <div id="telegram-widget-hero" class="hero-login" aria-label="Logowanie przez Telegram"></div>
-      </div>
-    </section>
-
-    <section class="section alt">
-      <div class="container">
-        <div class="section-head">
-          <div class="eyebrow">DOWODY SKUTECZNOŚCI</div>
-          <h2>Wyniki z realnych kont</h2>
-          <p>Historia nie gwarantuje przyszłych rezultatów, ale pokazuje rzeczywiste działanie systemu.</p>
-        </div>
-        <div class="grid proof-grid">
-          <article class="card proof-card">
-            <div class="proof-top"><strong>👤 Kolega_Damian</strong><span>Start: 01.06.2026</span></div>
-            <span class="winrate">84,48%</span>
-            <div class="proof-stats"><span>49 ✅ zyskownych</span><span>9 ❌ stratnych</span></div>
-          </article>
-          <article class="card proof-card">
-            <div class="proof-top"><strong>👤 Kolega_AREK</strong><span>Start: 19.06.2026</span></div>
-            <span class="winrate">93,10%</span>
-            <div class="proof-stats"><span>27 ✅ zyskownych</span><span>2 ❌ stratne</span></div>
-          </article>
+        <div style="flex: 1;">
+          <label>Margin na pozycję (USDT)
+            <input type="number" id="margin" step="0.1" placeholder="4.0">
+          </label>
         </div>
       </div>
-    </section>
-
-    <section id="exchanges" class="section">
-      <div class="container">
-        <div class="section-head">
-          <div class="eyebrow">OBSŁUGIWANE GIEŁDY</div>
-          <h2>Siedem adapterów — uczciwe statusy gotowości</h2>
-          <p>Bitget działa LIVE. Nowe giełdy są uruchamiane dopiero po bezpiecznym teście konta. MEXC pozostaje zablokowany dla prawdziwych zleceń.</p>
-        </div>
-        <div id="exchange-cards" class="grid exchange-grid"></div>
-      </div>
-    </section>
-
-    <section class="section alt">
-      <div class="container">
-        <div class="section-head">
-          <div class="eyebrow">ARCHITEKTURA CZARNEJ PERŁY</div>
-          <h2>Szybkie wejście, realizacja i wyjście</h2>
-        </div>
-        <div class="grid feature-grid">
-          <article class="card feature-card"><div>🌊</div><h3>SMC + True CVD</h3><p>Trend HTF, FVG, knot, OTE, sweep i rzeczywisty napływ transakcji składają się na jeden scoring.</p></article>
-          <article class="card feature-card"><div>⚡</div><h3>Wejście hybrydowe</h3><p>Najlepszy sygnał może uruchomić część FAST, a pozostała część czeka na kontrolowany retest.</p></article>
-          <article class="card feature-card"><div>🛡️</div><h3>Zarządzanie ryzykiem</h3><p>TP1 zamyka 25%, SL przechodzi na +0,30%, TP2 zamyka 50%, a runner 25% prowadzi trailing 0,40%.</p></article>
-          <article class="card feature-card"><div>🧭</div><h3>Fail-closed</h3><p>Brak potwierdzenia trybu pozycji, dziennego PnL lub zlecenia ochronnego blokuje handel zamiast zgadywać.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section pricing-section">
-      <div class="container">
-        <div class="section-head">
-          <div class="eyebrow">DOSTĘP DO SYSTEMU</div>
-          <h2>Wybierz model współpracy</h2>
-          <p>Najpierw poznaj system na własnym koncie albo wybierz pełny rok z priorytetową konfiguracją.</p>
-        </div>
-        <div class="grid pricing-grid">
-          <article class="card pricing-card">
-            <span class="pricing-ribbon">30 dni na start</span>
-            <div class="plan-icon" aria-hidden="true">📱</div>
-            <h3>Pakiet testowy</h3>
-            <div class="price-row"><span class="price">0 $</span><span class="price-note">pierwszy miesiąc</span></div>
-            <p>Poznaj działanie Czarnej Perły bez opłaty startowej. Następnie 50 $ miesięcznie przez kolejne trzy miesiące.</p>
-            <ul>
-              <li>Jedna wybrana obsługiwana giełda</li>
-              <li>Pełne raporty i alerty Telegram</li>
-              <li>Konfiguracja ochrony kapitału</li>
-              <li>Kapitał przez cały czas pozostaje na Twoim koncie</li>
-            </ul>
-            <button class="btn btn-blue" data-terms>Aktywuj pakiet testowy</button>
-          </article>
-          <article class="card pricing-card featured">
-            <span class="pricing-ribbon">Najlepsza wartość</span>
-            <div class="plan-icon" aria-hidden="true">💎</div>
-            <h3>Pakiet roczny</h3>
-            <div class="price-row"><span class="price">800 $</span><span class="price-note">za 12 miesięcy</span></div>
-            <div class="old-price"><s>1200 $</s><span class="save-pill">Oszczędzasz 400 $</span></div>
-            <p>Pełna roczna licencja z priorytetowym uruchomieniem, kontrolą adaptera i wsparciem technicznym.</p>
-            <ul>
-              <li>Konfiguracja konta i wybranej giełdy</li>
-              <li>Test połączenia, uprawnień i zabezpieczeń</li>
-              <li>Priorytetowe wsparcie techniczne</li>
-              <li>Pomoc przy migracji między obsługiwanymi giełdami</li>
-            </ul>
-            <button class="btn btn-gold" data-terms>Zarezerwuj pakiet roczny</button>
-          </article>
-        </div>
-        <div class="warning">⚠️ Handel kontraktami i dźwignią wiąże się z wysokim ryzykiem utraty kapitału. Wyniki historyczne nie gwarantują wyników przyszłych.</div>
-      </div>
-    </section>
-  </main>
-
-  <main id="dashboard" class="page dashboard">
-    <div class="container">
-      <section class="card dashboard-head">
-        <div><h2>Panel inwestora</h2><p id="welcome-text">Zaloguj się przez Telegram, aby zarządzać połączeniem.</p></div>
-        <div>
-          <span class="connection"><i id="connection-dot" class="dot"></i><span id="connection-text">Oczekuje na logowanie</span></span>
-          <button id="logout-btn" class="btn btn-red btn-small hidden">Wyloguj</button>
-        </div>
-      </section>
-
-      <section id="login-panel" class="card login-box">
-        <h3>Bezpieczne logowanie Telegram</h3>
-        <p>Po zalogowaniu serwer weryfikuje podpis Telegram i tworzy chronioną sesję.</p>
-        <div id="telegram-widget"></div>
-      </section>
-
-      <ol id="connection-steps" class="steps hidden" aria-label="Etapy podłączenia giełdy">
-        <li class="active"><span>1</span>Wybierz lub dodaj giełdę</li>
-        <li><span>2</span>Utwórz bezpieczny klucz</li>
-        <li><span>3</span>Zapisz i zweryfikuj</li>
-      </ol>
-
-      <section id="accounts-panel" class="card accounts-panel hidden">
-        <div class="accounts-panel-head">
-          <div>
-            <h3>Twoje połączenia giełdowe</h3>
-            <p>Każda giełda ma własne klucze, margin, dźwignię i niezależny przełącznik ON/OFF.</p>
-          </div>
-          <span id="accounts-summary" class="accounts-summary">0 ON / 0 skonfigurowanych</span>
-        </div>
-        <div class="accounts-table-wrap">
-          <table class="accounts-table">
-            <thead><tr><th>Giełda</th><th>Stan</th><th>Weryfikacja</th><th>Margin / lewar / ryzyko</th><th>Tryb</th><th>ON/OFF</th><th>Ustawienia</th></tr></thead>
-            <tbody id="exchange-accounts"></tbody>
-          </table>
-        </div>
-        <div id="accounts-status" class="save-status" role="status"></div>
-      </section>
-
-      <section id="dashboard-content" class="dashboard-grid hidden">
-        <div>
-          <form id="exchange-form" class="card panel">
-            <h3>Ustawienia handlowe</h3>
-            <div class="form-grid">
-              <label class="full">Giełda
-                <select id="exchange-select"></select>
-              </label>
-              <label>API Key
-                <input id="api-key" required autocomplete="off" placeholder="Wklej API Key">
-              </label>
-              <label>API Secret
-                <span class="password-field">
-                  <input id="api-secret" required type="password" autocomplete="new-password" placeholder="Wklej API Secret">
-                  <button type="button" data-toggle-secret="api-secret" aria-label="Pokaż API Secret">Pokaż</button>
-                </span>
-              </label>
-              <label id="passphrase-wrap">Passphrase
-                <span class="password-field">
-                  <input id="api-passphrase" type="password" autocomplete="new-password" placeholder="Wklej Passphrase">
-                  <button type="button" data-toggle-secret="api-passphrase" aria-label="Pokaż Passphrase">Pokaż</button>
-                </span>
-              </label>
-              <label>Tryb margin
-                <select id="margin-mode"><option value="isolated">Isolated</option><option value="cross">Cross</option></select>
-              </label>
-              <label>Margin na pozycję (USDT)
-                <input id="margin" required type="number" min="1" max="1000" step="0.1" value="4">
-              </label>
-              <label>Dźwignia
-                <input id="leverage" required type="number" min="1" max="100" step="1" value="20">
-              </label>
-              <label>Limit dziennego ryzyka (USDT)
-                <input id="max-risk" required type="number" min="1" max="1000" step="0.1" value="20">
-              </label>
-              <button id="advanced-toggle" class="advanced-toggle full" type="button" aria-expanded="false">+ Ustawienia zaawansowane</button>
-              <div id="advanced-fields" class="advanced-fields form-grid full hidden">
-                <label>UID API (opcjonalnie)
-                  <input id="api-uid" autocomplete="off" placeholder="Tylko jeśli wymaga go giełda">
-                </label>
-                <label>Subaccount (opcjonalnie)
-                  <input id="subaccount" autocomplete="off" placeholder="Nazwa subkonta">
-                </label>
-              </div>
-              <div class="form-safety full">
-                <span>✓ Brak Withdrawal</span><span>✓ Whitelist IP</span><span>✓ One-way / Net</span>
-              </div>
-              <div id="exchange-isolation-note" class="exchange-alert full">Zapis dotyczy wyłącznie wybranej giełdy i nie zmienia żadnego innego połączenia.</div>
-              <div class="full form-note">Klucze muszą mieć wyłącznie odczyt oraz Futures/Trade. Uprawnienia Withdraw i Transfer pozostaw wyłączone.</div>
-              <button class="btn btn-gold full" type="submit">Zapisz i sprawdź połączenie</button>
-            </div>
-            <div id="save-status" class="save-status" role="status"></div>
-          </form>
-          <article id="instruction-card" class="card panel instructions">
-            <h3 id="instruction-title">Instrukcja podłączenia</h3>
-            <div id="instruction-tabs" class="instruction-tabs" role="tablist" aria-label="Instrukcje giełd"></div>
-            <p id="instruction-lead" class="form-note"></p>
-            <ol id="instruction-list"></ol>
-            <a id="docs-link" class="doc-link" target="_blank" rel="noopener noreferrer">Oficjalna dokumentacja API ↗</a>
-          </article>
-        </div>
-        <aside>
-          <article class="card panel">
-            <span class="profile-kicker">TWÓJ PROFIL</span>
-            <h3>Status konta</h3>
-            <div class="info-row"><span>Plan</span><strong id="plan-value">Brak danych</strong></div>
-            <div class="info-row"><span>Skonfigurowane giełdy</span><strong id="profile-configured">0</strong></div>
-            <div class="info-row"><span>Włączone / LIVE</span><strong id="profile-live">0 / 0</strong></div>
-            <div class="info-row"><span>Edytujesz teraz</span><strong id="exchange-value">Brak danych</strong></div>
-            <div class="info-row"><span>Status wybranej</span><strong id="verify-value">Brak danych</strong></div>
-            <div class="info-row"><span>Margin / dźwignia</span><strong id="profile-params">4 USDT / 20x</strong></div>
-            <div class="info-row"><span>Limit ryzyka</span><strong id="profile-risk">20 USDT</strong></div>
-            <div class="info-row"><span>Status rozliczenia</span><strong id="billing-status">Brak danych</strong></div>
-            <div class="info-row"><span>Ważność licencji</span><strong id="license-value">Brak danych</strong></div>
-          </article>
-          <article class="card panel">
-            <span class="profile-kicker">ZANIM ZAPISZESZ</span>
-            <h3>5 zasad bezpieczeństwa</h3>
-            <ol class="safety-list">
-              <li>Osobny klucz tylko dla Czarnej Perły.</li>
-              <li>Wyłącznie Read + Futures/Trade.</li>
-              <li>Withdrawal i transfery zawsze OFF.</li>
-              <li>Whitelist adresu IP serwera.</li>
-              <li>Pierwszy test minimalnym marginem.</li>
-            </ol>
-          </article>
-          <article class="card panel">
-            <span class="profile-kicker">PROGRAM POLECEŃ</span>
-            <h3>Twój link</h3>
-            <div id="referral-value" class="referral-value">Dostępny po zalogowaniu</div>
-            <div class="referral-stats">
-              <div class="referral-stat"><strong id="referral-count">0</strong><span>Poleconych</span></div>
-              <div class="referral-stat"><strong id="referral-commission">0,00 USDT</strong><span>Suma prowizji</span></div>
-            </div>
-            <button id="copy-referral" class="btn btn-outline btn-small" type="button" disabled>Kopiuj link</button>
-          </article>
-          <article class="card panel">
-            <h3>Ochrona kapitału</h3>
-            <div class="info-row"><span>Maks. pozycji</span><strong>10</strong></div>
-            <div class="info-row"><span>TP1</span><strong>25%</strong></div>
-            <div class="info-row"><span>SL po TP1</span><strong>+0,30%</strong></div>
-            <div class="info-row"><span>TP2</span><strong>50%</strong></div>
-            <div class="info-row"><span>Runner</span><strong>25% / 0,40%</strong></div>
-          </article>
-        </aside>
-      </section>
+      
+      <button class="btn" onclick="saveSettings()">Zapisz i podłącz API</button>
+      <button class="btn btn-red" onclick="logout()" style="margin-top: 10px;">Wyloguj się</button>
     </div>
-  </main>
 
-  <main id="admin" class="page admin-page">
-    <div class="container">
-      <section id="rollout-card" class="card rollout-card">
-        <span class="profile-kicker">GLOBALNY ROLLOUT</span>
-        <h3>Zwolnienie adaptera do LIVE</h3>
-        <p class="rollout-warning">Ten przycisk nie wykonuje testu. Użyj go wyłącznie po realnym canary, sprawdzeniu zleceń ochronnych i dziennego PnL.</p>
-        <div id="rollout-grid" class="rollout-grid"></div>
-        <div id="rollout-status" class="save-status" role="status"></div>
-      </section>
-      <section class="card admin-shell">
-        <div class="admin-hero">
-          <div class="admin-title-wrap">
-            <span class="admin-emblem" aria-hidden="true">🏴‍☠️</span>
-            <div>
-              <h2>Mostek Kapitański <span style="color:#cdd3dc;font-weight:650">(Zarządzanie Załogą)</span></h2>
-              <p>Kontrola dostępu, licencji i aktywności kont użytkowników.</p>
-            </div>
-          </div>
-          <button id="refresh-admin" class="btn btn-outline btn-small">Odśwież dane</button>
-        </div>
-        <div class="admin-status-wrap"><div id="admin-status" class="save-status" role="status"></div></div>
-        <div class="admin-table-wrap">
-          <table class="admin-table">
-            <thead><tr><th>Telegram ID</th><th>Przypisane imię</th><th>Licencja</th><th>Bot</th><th>Admin</th><th>Giełda</th><th>Weryfikacja</th><th>Giełda ON/OFF</th><th>Aktywacja LIVE</th><th>Akcja</th></tr></thead>
-            <tbody id="admin-users"></tbody>
-          </table>
-        </div>
-      </section>
+    <!-- MOSTEK KAPITAŃSKI (ADMIN) -->
+    <div id="admin-panel" class="card hidden">
+      <h2>Mostek Kapitański</h2>
+      <button class="btn btn-small" onclick="loadUsers()" style="margin-bottom: 10px;">Odśwież listę użytkowników</button>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID Telegram</th>
+              <th>Imię w panelu</th>
+              <th>Ważność licencji</th>
+              <th>Status Bota</th>
+              <th>Uprawnienia</th>
+            </tr>
+          </thead>
+          <tbody id="admin-tbody"></tbody>
+        </table>
+      </div>
     </div>
-  </main>
 
-  <footer><div class="container">© 2026 Czarna Perła • System analizy ilościowej • <button class="nav-btn" data-terms>Regulamin i ryzyko</button></div></footer>
-
-  <dialog id="terms-dialog">
-    <div class="modal-head"><h2>Regulamin i wyłączenie odpowiedzialności</h2><button id="close-terms" class="btn btn-outline btn-small">Zamknij</button></div>
-    <div class="modal-body">
-      <h3>Charakter systemu</h3><p>Czarna Perła jest oprogramowaniem analitycznym i wykonawczym. Nie stanowi indywidualnej porady inwestycyjnej ani gwarancji zysku.</p>
-      <h3>Ryzyko</h3><p>Kontrakty, kryptowaluty i dźwignia mogą prowadzić do szybkiej utraty części lub całości kapitału. Użytkownik sam ustala margin i akceptuje ryzyko.</p>
-      <h3>Klucze API</h3><p>Klucze powinny mieć wyłącznie uprawnienia Read i Futures/Trade. Nigdy nie wolno nadawać uprawnień do wypłat ani transferów.</p>
-    </div>
-    <div class="modal-foot"><button id="accept-terms" class="btn btn-gold">Rozumiem i akceptuję</button></div>
-  </dialog>
+  </div>
 
   <script>
-    "use strict";
-
-    /*
-      Jeżeli API działa pod innym adresem, zmień tylko poniższą linię.
-      Bez końcowego ukośnika.
-    */
-    const API_BASE_URL = "https://czarnaperla.duckdns.org";
-    const TELEGRAM_BOT = "czarna_perla_auth_bot";
-
-    const EXCHANGES = [
-      {id:"bitget",name:"Bitget",market:"USDT Futures",status:"live",label:"LIVE",selectable:true,passphrase:true,mode:"One-way",fields:"API Key + API Secret + Passphrase",description:"Natywna obsługa wejść, SL, TP, trailing stopu i dziennego PnL.",docs:"https://www.bitget.com/api-doc/common/signature",steps:["Utwórz oddzielny klucz API dla Czarnej Perły.","Włącz odczyt konta i handel Futures; wyłącz wypłaty oraz transfery.","Dodaj IP serwera, zapisz Passphrase i ustaw USDT Futures na One-way.","Wklej trzy dane do formularza i rozpocznij test minimalnym marginem."]},
-      {id:"binanceusdm",name:"Binance",market:"USD-M Futures",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:false,mode:"One-way",fields:"API Key + API Secret",description:"Adapter gotowy; każde konto przechodzi smoke test i minimalny canary.",docs:"https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info",steps:["Utwórz oddzielny klucz w API Management.","Włącz Read i Enable Futures; wyłącz Withdraw oraz Transfer.","Dodaj IP serwera i ustaw Position Mode na One-way.","Wklej API Key i API Secret; system wykona kontrolny odczyt."]},
-      {id:"bybit",name:"Bybit",market:"Linear USDT",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:false,mode:"One-way",fields:"API Key + API Secret",description:"Kontrakty linear z kontrolą trybu pozycji i dziennego PnL.",docs:"https://bybit-exchange.github.io/docs/v5/intro",steps:["Utwórz System-generated API Key.","Nadaj Read oraz Contract/Derivatives Trade; wyłącz Withdraw.","Ogranicz klucz adresem IP serwera i ustaw One-way.","Wklej API Key i API Secret, a następnie poczekaj na test konta."]},
-      {id:"okx",name:"OKX",market:"USDT Perpetual SWAP",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:true,mode:"Net",fields:"API Key + API Secret + Passphrase",description:"Obsługa SWAP; wymagane są trzy dane API i tryb pozycji Net.",docs:"https://www.okx.com/docs-v5/en/",steps:["Utwórz klucz z uprawnieniami Read oraz Trade.","Wyłącz wypłaty, dodaj IP serwera i zapisz Passphrase.","Dla USDT SWAP ustaw Position Mode na Net.","Wklej API Key, API Secret i Passphrase."]},
-      {id:"gate",name:"Gate",market:"USDT Perpetual",status:"test",label:"LIVE PO CANARY",selectable:true,passphrase:false,mode:"Single / One-way",fields:"API Key + API Secret",description:"USDT perpetual z natywnym rozliczaniem zamkniętych pozycji.",docs:"https://www.gate.com/docs/developers/apiv4/en/",steps:["Utwórz osobny klucz APIv4.","Nadaj Futures Read-Write; wyłącz wypłaty i transfery.","Dodaj IP, wybierz rozliczenie USDT oraz Single/One-way.","Wklej API Key i API Secret."]},
-      {id:"bitunix",name:"Bitunix",market:"USDT Futures",status:"beta",label:"BETA — RĘCZNA AKTYWACJA",selectable:true,passphrase:false,mode:"One-way",fields:"API Key + API Secret",description:"Adapter gotowy; pierwsze konto wymaga kontroli księgowania opłat.",docs:"https://www.bitunix.com/api-docs/futures/common/introduction.html",steps:["Utwórz klucz Futures z odczytem i handlem; wyłącz wypłaty.","Dodaj IP serwera i ustaw One-way.","Zapisz klucze; konto otrzyma status oczekiwania BETA.","Pierwszy test wykonaj minimalnym marginem."]},
-      {id:"mexc",name:"MEXC",market:"Futures / Shadow",status:"blocked",label:"LIVE ZABLOKOWANY",selectable:false,passphrase:false,mode:"Shadow",fields:"Nie wprowadzaj kluczy",description:"Dane mogą być obserwowane, lecz prawdziwe zlecenia są wyłączone fail-closed.",docs:"https://mexcdevelop.github.io/apidocs/contract_v1_en/",steps:["MEXC pozostaje wyłącznie planowanym rozszerzeniem.","Nie wprowadzaj kluczy API i nie uruchamiaj handlu LIVE.","Shadow nie oznacza zgody na prawdziwe zlecenia.","Połączenie zostanie udostępnione po pełnej walidacji."]}
-    ];
-
-    const state = {
-      page: "landing",
-      telegramUser: null,
-      dashboard: null,
-      csrf: "",
-      session: sessionStorage.getItem("cp_session") || "",
-      isAdmin: false,
-      isSuperAdmin: false,
-      multiExchange: false,
-      capabilities: {},
-      accounts: [],
-      togglingExchange: "",
-      instructionExchange: "bitget"
-    };
+    // Zmień poniższy URL na IP swojego serwera, jeśli strona HTML leży na innym hostingu (np. GitHubie).
+    // Jeżeli otwierasz ten plik bezpośrednio, możesz wpisać swój publiczny adres IP np. "http://62.131.59.133:8000"
+    const API_URL = "http://127.0.0.1:8000"; 
+    
+    let currentUserId = null;
+    let isAdmin = false;
 
     const byId = id => document.getElementById(id);
-    const exchangeById = id => EXCHANGES.find(item => item.id === id) || EXCHANGES[0];
 
-    function normalizeExchangeAccounts(data) {
-      if (!data) return [];
-      const source = Array.isArray(data.exchange_accounts)
-        ? data.exchange_accounts
-        : Array.isArray(data.accounts)
-          ? data.accounts
-          : null;
-      if (source) {
-        const unique = new Map();
-        source.forEach(account => {
-          if (!account || !EXCHANGES.some(item => item.id === account.exchange)) return;
-          unique.set(account.exchange, account);
-        });
-        if (unique.size) return Array.from(unique.values());
-      }
-      const fallbackExchange = EXCHANGES.some(item => item.id === data.exchange)
-        ? data.exchange
-        : "bitget";
-      const configured = data.credentials_configured === true
-        || data.api_connected === true
-        || Boolean(data.verification_status && data.verification_status !== "not_configured");
-      if (!configured) return [];
-      return [{
-        exchange:fallbackExchange,
-        is_selected:true,
-        is_enabled:Boolean(data.api_connected),
-        live_trading_enabled:Boolean(data.api_connected),
-        credentials_configured:Boolean(data.credentials_configured == null ? data.api_connected : data.credentials_configured),
-        api_connected:Boolean(data.api_connected),
-        verification_status:data.verification_status || (data.api_connected ? "verified" : "not_configured"),
-        leverage:data.leverage,
-        margin:data.margin,
-        max_risk:data.max_risk,
-        margin_mode:data.margin_mode
-      }];
-    }
+    async function login() {
+      const id = byId("login-id").value.trim();
+      if (!id) return alert("Podaj prawidłowe Telegram ID!");
 
-    function accountStateLabel(account) {
-      if (!account.credentials_configured) return "Brak kluczy";
-      if (!account.is_enabled) return "Wyłączona";
-      if (account.api_connected) return "Aktywna LIVE";
-      if (!account.live_trading_enabled) return "Oczekuje na dopuszczenie LIVE";
-      return "Włączona — oczekuje na połączenie";
-    }
-
-    function apiHeaders(extra) {
-      const headers = Object.assign({Accept:"application/json"}, extra || {});
-      if (state.session) headers["X-Session-Token"] = state.session;
-      return headers;
-    }
-
-    function clearSensitiveFields() {
-      ["api-key","api-secret","api-passphrase","api-uid","subaccount"].forEach(id => {
-        const input = byId(id);
-        if (input) input.value = "";
-      });
-    }
-
-    function clearSessionState() {
-      state.telegramUser = null;
-      state.dashboard = null;
-      state.csrf = "";
-      state.session = "";
-      state.isAdmin = false;
-      state.isSuperAdmin = false;
-      state.accounts = [];
-      state.togglingExchange = "";
-      sessionStorage.removeItem("cp_session");
-      byId("admin-nav").classList.add("hidden");
-      byId("accounts-panel").classList.add("hidden");
-      byId("connection-steps").classList.add("hidden");
-      clearSensitiveFields();
-    }
-
-    function setText(id, value) {
-      const node = byId(id);
-      if (node) node.textContent = value == null ? "" : String(value);
-    }
-
-    function showPage(name) {
-      if (name === "admin" && !state.isAdmin) return;
-      document.querySelectorAll(".page").forEach(page => page.classList.toggle("active", page.id === name));
-      document.querySelectorAll(".nav-btn[data-page]").forEach(btn => btn.classList.toggle("active", btn.dataset.page === name));
-      state.page = name;
-      if (name === "dashboard") ensureTelegramWidget();
-      if (name === "admin") {
-        renderRolloutControls();
-        loadAdminUsers();
-      }
-      window.scrollTo({top:0, behavior:"smooth"});
-    }
-
-    function statusLabel(item) {
-      const cap = state.capabilities[item.id];
-      if (!cap) return item.label;
-      if (cap.status === "live") return "LIVE";
-      if (cap.status === "canary_required") return "LIVE PO CANARY";
-      if (cap.status === "manual_beta") return "BETA — RĘCZNA AKTYWACJA";
-      if (cap.status === "live_blocked") return "LIVE ZABLOKOWANY";
-      return String(cap.status || item.label).replaceAll("_"," ").toUpperCase();
-    }
-
-    function canSelect(item) {
-      if (!item.selectable || item.id === "mexc") return false;
-      if (!state.multiExchange) return item.id === "bitget";
-      const cap = state.capabilities[item.id];
-      return Boolean(cap && cap.enabled && cap.status !== "live_blocked");
-    }
-
-    function renderExchangeCards() {
-      const host = byId("exchange-cards");
-      host.replaceChildren();
-      EXCHANGES.forEach(item => {
-        const card = document.createElement("article");
-        card.className = "card exchange-card " + item.status;
-        const top = document.createElement("div");
-        top.className = "exchange-top";
-        const title = document.createElement("div");
-        const h = document.createElement("h3");
-        h.textContent = item.name;
-        const market = document.createElement("small");
-        market.textContent = item.market;
-        title.append(h, market);
-        const chip = document.createElement("span");
-        chip.className = "status";
-        chip.textContent = statusLabel(item);
-        top.append(title, chip);
-        const desc = document.createElement("p");
-        desc.textContent = item.description;
-        const meta = document.createElement("div");
-        meta.className = "exchange-meta";
-        meta.textContent = item.fields + " • tryb " + item.mode;
-        const button = document.createElement("button");
-        button.className = "btn btn-outline";
-        button.textContent = item.id === "mexc" ? "LIVE zablokowany — zobacz instrukcję" : "Podłącz w panelu inwestora";
-        button.addEventListener("click", () => {
-          showPage("dashboard");
-          byId("exchange-select").value = item.id;
-          updateSelectedExchange();
-          setTimeout(() => byId("instruction-card").scrollIntoView({behavior:"smooth"}), 50);
-        });
-        card.append(top, desc, meta, button);
-        host.append(card);
-      });
-    }
-
-    function renderExchangeSelect() {
-      const select = byId("exchange-select");
-      const current = select.value || "bitget";
-      select.replaceChildren();
-      EXCHANGES.forEach(item => {
-        const option = document.createElement("option");
-        option.value = item.id;
-        option.textContent = item.name + " — " + statusLabel(item);
-        option.disabled = !canSelect(item);
-        select.append(option);
-      });
-      select.value = EXCHANGES.some(x => x.id === current && canSelect(x)) ? current : "bitget";
-      updateSelectedExchange();
-      renderInstructionTabs();
-    }
-
-    function renderInstructionTabs() {
-      const host = byId("instruction-tabs");
-      if (!host) return;
-      host.replaceChildren();
-      EXCHANGES.forEach(item => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.setAttribute("role", "tab");
-        button.setAttribute("aria-selected", String(state.instructionExchange === item.id));
-        button.classList.toggle("active", state.instructionExchange === item.id);
-        button.textContent = item.name;
-        button.addEventListener("click", () => {
-          state.instructionExchange = item.id;
-          renderInstructionTabs();
-          renderInstructionContent(item.id);
-        });
-        host.append(button);
-      });
-    }
-
-    function renderInstructionContent(exchangeId) {
-      const item = exchangeById(exchangeId);
-      setText("instruction-title", "Instrukcja podłączenia: " + item.name);
-      setText("instruction-lead", item.description + " Wymagane dane: " + item.fields + ".");
-      const list = byId("instruction-list");
-      list.replaceChildren();
-      item.steps.forEach(step => {
-        const li = document.createElement("li");
-        li.textContent = step;
-        list.append(li);
-      });
-      byId("docs-link").href = item.docs;
-    }
-
-    function refreshProfileSummary() {
-      const selectedId = byId("exchange-select").value || "bitget";
-      const item = exchangeById(selectedId);
-      const selectedAccount = state.accounts.find(account => account.exchange === selectedId);
-      const enabled = state.accounts.filter(account => account.is_enabled).length;
-      const connected = state.accounts.filter(account => account.api_connected).length;
-      setText("profile-configured", state.accounts.length);
-      setText("profile-live", enabled + " / " + connected);
-      setText("exchange-value", item.name);
-      setText("verify-value", selectedAccount
-        ? verificationLabel(selectedAccount.verification_status)
-        : "Nowa konfiguracja");
-      setText("profile-params", (byId("margin").value || "—") + " USDT / " + (byId("leverage").value || "—") + "x");
-      setText("profile-risk", (byId("max-risk").value || "—") + " USDT");
-      setText("exchange-isolation-note", "Zapis dotyczy wyłącznie konta " + item.name + ". Nie wyłącza, nie nadpisuje ani nie przełącza żadnej innej giełdy.");
-    }
-
-    function updateSelectedExchange() {
-      const item = exchangeById(byId("exchange-select").value);
-      byId("passphrase-wrap").classList.toggle("hidden", !item.passphrase);
-      state.instructionExchange = item.id;
-      renderInstructionTabs();
-      renderInstructionContent(item.id);
-      refreshProfileSummary();
-    }
-
-    function useAccountSettings(exchangeId) {
-      const account = state.accounts.find(item => item.exchange === exchangeId);
-      if (!account) return;
-      if (account.margin != null) byId("margin").value = account.margin;
-      if (account.leverage != null) byId("leverage").value = account.leverage;
-      if (account.max_risk != null) byId("max-risk").value = account.max_risk;
-      if (account.margin_mode) byId("margin-mode").value = account.margin_mode;
-    }
-
-    function selectExchangeForEditing(exchangeId) {
-      if (!EXCHANGES.some(item => item.id === exchangeId)) return;
-      byId("exchange-select").value = exchangeId;
-      clearSensitiveFields();
-      updateSelectedExchange();
-      useAccountSettings(exchangeId);
-      refreshProfileSummary();
-      byId("exchange-form").scrollIntoView({behavior:"smooth", block:"start"});
-    }
-
-    function renderExchangeAccounts() {
-      const body = byId("exchange-accounts");
-      body.replaceChildren();
-      const enabled = state.accounts.filter(account => account.is_enabled).length;
-      const connected = state.accounts.filter(account => account.api_connected).length;
-      setText("accounts-summary", connected + " LIVE / " + enabled + " ON / " + state.accounts.length + " skonfigurowanych");
-      refreshProfileSummary();
-      if (!state.accounts.length) {
-        const row = document.createElement("tr");
-        const cell = document.createElement("td");
-        cell.colSpan = 7;
-        cell.textContent = "Nie zapisano jeszcze żadnej giełdy. Wybierz ją w formularzu poniżej.";
-        cell.style.color = "var(--muted)";
-        row.append(cell);
-        body.append(row);
-        return;
-      }
-      state.accounts.forEach(account => {
-        const item = exchangeById(account.exchange);
-        const row = document.createElement("tr");
-
-        const exchangeCell = document.createElement("td");
-        const name = document.createElement("strong");
-        name.textContent = item.name;
-        const market = document.createElement("span");
-        market.className = "muted-cell";
-        market.textContent = item.market;
-        exchangeCell.append(name, document.createElement("br"), market);
-
-        const stateCell = document.createElement("td");
-        stateCell.textContent = accountStateLabel(account);
-        const verifyCell = document.createElement("td");
-        verifyCell.textContent = verificationLabel(account.verification_status);
-        const paramsCell = document.createElement("td");
-        paramsCell.textContent = (account.margin == null ? "—" : account.margin) + " USDT / "
-          + (account.leverage == null ? "—" : account.leverage) + "x / ryzyko "
-          + (account.max_risk == null ? "—" : account.max_risk) + " USDT";
-        const modeCell = document.createElement("td");
-        modeCell.textContent = account.margin_mode === "cross" ? "Cross" : "Isolated";
-
-        const toggleCell = document.createElement("td");
-        const toggleLabel = document.createElement("label");
-        toggleLabel.className = "switch";
-        const toggle = document.createElement("input");
-        toggle.type = "checkbox";
-        toggle.checked = Boolean(account.is_enabled);
-        toggle.disabled = !account.credentials_configured || state.togglingExchange === account.exchange;
-        toggle.setAttribute("aria-label", (toggle.checked ? "Wyłącz " : "Włącz ") + item.name);
-        const track = document.createElement("span");
-        track.className = "switch-track";
-        toggleLabel.append(toggle, track);
-        toggleCell.append(toggleLabel);
-        toggle.addEventListener("change", () => toggleExchangeAccount(account, toggle.checked));
-
-        const editCell = document.createElement("td");
-        const edit = document.createElement("button");
-        edit.type = "button";
-        edit.className = "table-btn";
-        edit.textContent = "Edytuj osobno";
-        edit.addEventListener("click", () => selectExchangeForEditing(account.exchange));
-        editCell.append(edit);
-
-        row.append(exchangeCell, stateCell, verifyCell, paramsCell, modeCell, toggleCell, editCell);
-        body.append(row);
-      });
-    }
-
-    async function toggleExchangeAccount(account, enabled) {
-      if (!state.telegramUser || !state.csrf) {
-        setText("accounts-status", "Zaloguj się ponownie przez Telegram.");
-        return;
-      }
-      state.togglingExchange = account.exchange;
-      renderExchangeAccounts();
-      setText("accounts-status", (enabled ? "Włączam " : "Wyłączam ") + exchangeById(account.exchange).name + "…");
       try {
-        const response = await fetch(API_BASE_URL + "/api/exchange_accounts/" + encodeURIComponent(account.exchange) + "/toggle", {
-          method:"POST",
-          credentials:"include",
-          headers:apiHeaders({"Content-Type":"application/json","X-CSRF-Token":state.csrf}),
-          body:JSON.stringify({enabled:Boolean(enabled)})
-        });
-        const result = await readJson(response);
-        await loadDashboard();
-        setText("accounts-status", result.message || (exchangeById(account.exchange).name + " została " + (enabled ? "włączona." : "wyłączona.")));
-      } catch (error) {
-        setText("accounts-status", error.message || "Nie udało się zmienić stanu giełdy.");
-      } finally {
-        state.togglingExchange = "";
-        renderExchangeAccounts();
-      }
-    }
+        const res = await fetch(`${API_URL}/api/dashboard/${id}`);
+        const data = await res.json();
 
-    async function readJson(response) {
-      const type = response.headers.get("content-type") || "";
-      if (!type.includes("application/json")) throw new Error("Serwer zwrócił nieprawidłową odpowiedź (" + response.status + ").");
-      const data = await response.json();
-      if (!response.ok) {
-        const error = new Error(data.message || data.detail || "Błąd HTTP " + response.status);
-        error.status = response.status;
-        throw error;
-      }
-      return data;
-    }
+        if (data.status === "success") {
+          currentUserId = data.telegram_id;
+          isAdmin = data.is_admin;
 
-    async function loadCapabilities() {
-      try {
-        const response = await fetch(API_BASE_URL + "/api/capabilities", {credentials:"include", headers:{Accept:"application/json"}});
-        const data = await readJson(response);
-        state.multiExchange = data.multi_exchange === true;
-        state.capabilities = data.exchanges || {};
-      } catch (_) {
-        state.multiExchange = false;
-        state.capabilities = {};
-      }
-      renderExchangeCards();
-      renderExchangeSelect();
-      renderRolloutControls();
-    }
+          byId("login-panel").classList.add("hidden");
+          byId("dashboard-panel").classList.remove("hidden");
 
-    function ensureTelegramWidget() {
-      if (state.telegramUser) return;
-      ["telegram-widget-hero","telegram-widget"].forEach(id => {
-        const host = byId(id);
-        if (!host || host.querySelector("script, iframe")) return;
-        const script = document.createElement("script");
-        script.async = true;
-        script.src = "https://telegram.org/js/telegram-widget.js?22";
-        script.dataset.telegramLogin = TELEGRAM_BOT;
-        script.dataset.size = "large";
-        script.dataset.radius = "8";
-        script.dataset.onauth = "onTelegramAuth(user)";
-        script.dataset.requestAccess = "write";
-        host.append(script);
-      });
-    }
+          byId("dash-name").textContent = data.custom_name || data.username;
+          byId("dash-plan").textContent = data.plan_name;
+          byId("dash-sub").textContent = data.subscription_end_date;
+          
+          if (data.api_connected) {
+            byId("dash-api").textContent = "✅ Aktywne (Podłączono)";
+            byId("dash-api").className = "status-ok";
+          } else {
+            byId("dash-api").textContent = "❌ Brak podłączonych kluczy";
+            byId("dash-api").className = "status-err";
+          }
 
-    window.onTelegramAuth = async function(user) {
-      clearSessionState();
-      state.telegramUser = user;
-      setConnection("loading", "Weryfikacja Telegram…");
-      try {
-        const response = await fetch(API_BASE_URL + "/api/auth/telegram", {
-          method:"POST",
-          credentials:"include",
-          headers:apiHeaders({"Content-Type":"application/json"}),
-          body:JSON.stringify(user)
-        });
-        const auth = await readJson(response);
-        state.session = String(auth.session_token || "");
-        if (state.session) sessionStorage.setItem("cp_session", state.session);
-        state.csrf = String(auth.csrf_token || "");
-        await loadDashboard();
-        showPage("dashboard");
-      } catch (error) {
-        clearSessionState();
-        ["telegram-widget-hero","telegram-widget"].forEach(id => byId(id).replaceChildren());
-        setConnection("error", error.message || "Nie udało się zalogować.");
-        setTimeout(ensureTelegramWidget, 100);
-      }
-    };
+          byId("leverage").value = data.leverage || 20;
+          byId("margin").value = data.margin || 4.0;
 
-    async function loadDashboard() {
-      const response = await fetch(API_BASE_URL + "/api/dashboard/me", {
-        credentials:"include",
-        headers:apiHeaders()
-      });
-      const data = await readJson(response);
-      state.dashboard = data;
-      state.telegramUser = state.telegramUser || {id:String(data.telegram_id)};
-      state.isSuperAdmin = data.is_superadmin === true;
-      state.isAdmin = data.is_admin === true || state.isSuperAdmin;
-      state.accounts = normalizeExchangeAccounts(data);
-      byId("admin-nav").classList.toggle("hidden", !state.isAdmin);
-      byId("login-panel").classList.add("hidden");
-      byId("dashboard-content").classList.remove("hidden");
-      byId("accounts-panel").classList.remove("hidden");
-      byId("connection-steps").classList.remove("hidden");
-      byId("logout-btn").classList.remove("hidden");
-      setText("welcome-text", "Witaj, " + (data.custom_name || data.username || "Inwestor") + ".");
-      setText("plan-value", data.plan_name || "Brak aktywnego planu");
-      setText("billing-status", data.license_active === true ? "Aktywny" : "Nieaktywny");
-      setText("license-value", formatTimeLeft(data.subscription_end_date));
-      const preferred = state.accounts.find(account => account.is_selected)
-        || state.accounts.find(account => account.exchange === data.exchange)
-        || state.accounts.find(account => account.is_enabled)
-        || state.accounts[0];
-      const preferredExchange = preferred ? preferred.exchange : data.exchange;
-      setText("exchange-value", preferredExchange ? exchangeById(preferredExchange).name : "Brak danych");
-      setText("verify-value", verificationLabel(preferred ? preferred.verification_status : data.verification_status));
-      const referralUrl = data.referral_code
-        ? "https://msliwa610-oss.github.io/czarnaperla-bot/?ref=" + data.referral_code
-        : "";
-      setText("referral-value", referralUrl || "Dostępny po zalogowaniu");
-      setText(
-        "referral-count",
-        Number.isFinite(Number(data.referral_count))
-          ? Math.max(0, Number(data.referral_count))
-          : 0
-      );
-      const referralCommission = Number(data.referral_commission);
-      setText(
-        "referral-commission",
-        (Number.isFinite(referralCommission) ? Math.max(0, referralCommission) : 0)
-          .toLocaleString("pl-PL", {minimumFractionDigits:2, maximumFractionDigits:2})
-          + " USDT"
-      );
-      byId("copy-referral").disabled = !referralUrl;
-      if (preferredExchange && EXCHANGES.some(item => item.id === preferredExchange)) {
-        byId("exchange-select").value = preferredExchange;
-      }
-      if (preferred) useAccountSettings(preferred.exchange);
-      else {
-        if (data.margin != null) byId("margin").value = data.margin;
-        if (data.leverage != null) byId("leverage").value = data.leverage;
-        if (data.max_risk != null) byId("max-risk").value = data.max_risk;
-        if (data.margin_mode) byId("margin-mode").value = data.margin_mode;
-      }
-      renderExchangeAccounts();
-      updateSelectedExchange();
-      refreshProfileSummary();
-      const connected = state.accounts.filter(account => account.api_connected).length;
-      const enabled = state.accounts.filter(account => account.is_enabled).length;
-      setConnection("success", state.accounts.length
-        ? connected + " LIVE / " + enabled + " ON / " + state.accounts.length + " skonfigurowanych"
-        : "Zalogowano — brak kluczy API");
-    }
-
-    async function restoreSession() {
-      try {
-        const response = await fetch(API_BASE_URL + "/api/auth/session", {
-          method:"POST",
-          credentials:"include",
-          headers:apiHeaders()
-        });
-        const restored = await readJson(response);
-        state.csrf = String(restored.csrf_token || "");
-        await loadDashboard();
-        return true;
-      } catch (_) {
-        clearSessionState();
-        return false;
-      }
-    }
-
-    function setConnection(kind, text) {
-      const dot = byId("connection-dot");
-      dot.className = "dot" + (kind === "success" ? " ok" : kind === "error" ? " err" : "");
-      setText("connection-text", text);
-    }
-
-    function setSave(text, ok) {
-      const box = byId("save-status");
-      box.textContent = text;
-      box.className = "save-status " + (ok ? "ok" : "err");
-    }
-
-    function formatTimeLeft(value) {
-      if (!value) return "Brak danych";
-      const end = new Date(value);
-      if (Number.isNaN(end.getTime())) return String(value);
-      if (end.getFullYear() >= 2099) return "Bezterminowa";
-      const days = Math.ceil((end.getTime() - Date.now()) / 86400000);
-      return days > 0 ? days + " dni (do " + end.toLocaleDateString("pl-PL") + ")" : "Wygasła";
-    }
-
-    function verificationLabel(value) {
-      const labels = {verified:"LIVE zweryfikowane",canary_required:"Wymagany canary",canary_verified:"Canary zatwierdzony",manual_beta:"Walidacja BETA",manual_verified:"BETA zatwierdzona",legacy_migrated:"Bitget przeniesiony",live_blocked:"LIVE zablokowany",not_configured:"Nie skonfigurowano"};
-      return labels[value] || String(value || "Oczekuje").replaceAll("_"," ");
-    }
-
-    function adminDate(value, fallback) {
-      const text = String(value || "").trim();
-      if (!text) return fallback;
-      return text
-        .replace("T", " ")
-        .replace(/\.\d+(?:Z|[+-]\d{2}:?\d{2})?$/, "")
-        .replace(/Z$/, "");
-    }
-
-    byId("exchange-form").addEventListener("submit", async event => {
-      event.preventDefault();
-      if (!state.telegramUser || !state.csrf) {
-        setSave("Zaloguj się ponownie przez Telegram, aby otrzymać bezpieczny token zapisu.", false);
-        return;
-      }
-      const item = exchangeById(byId("exchange-select").value);
-      if (!canSelect(item)) {
-        setSave("Handel LIVE na tej giełdzie jest zablokowany.", false);
-        return;
-      }
-      const key = byId("api-key").value.trim();
-      const secret = byId("api-secret").value.trim();
-      const passphrase = byId("api-passphrase").value.trim();
-      if (!key || !secret || (item.passphrase && !passphrase)) {
-        setSave("Uzupełnij wszystkie wymagane dane API.", false);
-        return;
-      }
-      const leverage = Number(byId("leverage").value);
-      const margin = Number(byId("margin").value);
-      const maxRisk = Number(byId("max-risk").value);
-      if (
-        !Number.isInteger(leverage) || leverage < 1 || leverage > 100
-        || !Number.isFinite(margin) || margin < 1 || margin > 1000
-        || !Number.isFinite(maxRisk) || maxRisk < 1 || maxRisk > 1000
-      ) {
-        setSave("Dozwolone zakresy: margin i ryzyko 1–1000 USDT, dźwignia 1–100x.", false);
-        return;
-      }
-      const payload = {
-        telegram_id:String(state.telegramUser.id),
-        exchange:item.id,
-        api_key:key,
-        api_secret:secret,
-        api_passphrase:item.passphrase ? passphrase : "",
-        api_uid:byId("api-uid").value.trim(),
-        subaccount:byId("subaccount").value.trim(),
-        margin_mode:byId("margin-mode").value,
-        leverage:leverage,
-        margin:margin,
-        max_risk:maxRisk
-      };
-      setSave("Sprawdzam połączenie z " + item.name + "…", true);
-      try {
-        const response = await fetch(API_BASE_URL + "/api/save_settings", {
-          method:"POST",
-          credentials:"include",
-          headers:apiHeaders({"Content-Type":"application/json","X-CSRF-Token":state.csrf}),
-          body:JSON.stringify(payload)
-        });
-        const result = await readJson(response);
-        clearSensitiveFields();
-        await loadDashboard();
-        byId("exchange-select").value = item.id;
-        updateSelectedExchange();
-        useAccountSettings(item.id);
-        setSave(result.message || item.name + ": ustawienia zapisane i przekazane do weryfikacji.", true);
-      } catch (error) {
-        setSave(error.message || "Serwer odrzucił ustawienia.", false);
-      }
-    });
-
-    async function logout() {
-      try {
-        if (state.csrf) {
-          const response = await fetch(API_BASE_URL + "/api/auth/logout", {
-            method:"POST",
-            credentials:"include",
-            headers:apiHeaders({"X-CSRF-Token":state.csrf})
-          });
-          await readJson(response);
+          if (isAdmin) {
+            byId("admin-panel").classList.remove("hidden");
+            loadUsers();
+          }
+        } else {
+          alert("Nie udało się pobrać danych z bazy.");
         }
-      } catch (error) {
-        setConnection("error", error.message || "Nie udało się wylogować. Spróbuj ponownie.");
-        return;
+      } catch (err) {
+        alert("Błąd połączenia. Upewnij się, że serwer Pythona (uvicorn) działa.");
       }
-      clearSessionState();
+    }
+
+    function logout() {
+      currentUserId = null;
+      isAdmin = false;
+      byId("login-id").value = "";
       byId("login-panel").classList.remove("hidden");
-      byId("dashboard-content").classList.add("hidden");
-      byId("accounts-panel").classList.add("hidden");
-      byId("logout-btn").classList.add("hidden");
-      ["telegram-widget-hero","telegram-widget"].forEach(id => byId(id).replaceChildren());
-      setConnection("idle","Oczekuje na logowanie");
-      ensureTelegramWidget();
-      showPage("landing");
+      byId("dashboard-panel").classList.add("hidden");
+      byId("admin-panel").classList.add("hidden");
+      
+      byId("api-key").value = "";
+      byId("api-secret").value = "";
+      byId("api-passphrase").value = "";
     }
 
-    async function adminRequest(path, payload) {
-      if (!state.isAdmin || !state.telegramUser || !state.csrf) throw new Error("Brak bezpiecznej sesji administratora.");
-      const response = await fetch(API_BASE_URL + path, {
-        method:"POST",
-        credentials:"include",
-        headers:apiHeaders({"Content-Type":"application/json","X-CSRF-Token":state.csrf}),
-        body:JSON.stringify(Object.assign({admin_id:String(state.telegramUser.id)}, payload || {}))
-      });
-      return readJson(response);
+    async function saveSettings() {
+      const payload = {
+        telegram_id: currentUserId,
+        api_key: byId("api-key").value.trim(),
+        api_secret: byId("api-secret").value.trim(),
+        api_passphrase: byId("api-passphrase").value.trim(),
+        leverage: parseInt(byId("leverage").value) || 20,
+        margin: parseFloat(byId("margin").value) || 4.0
+      };
+
+      try {
+        const res = await fetch(`${API_URL}/api/save_settings`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        alert(data.message || "Zapisano pomyślnie.");
+        login(); // Szybkie odświeżenie danych z serwera
+      } catch (err) {
+        alert("Błąd podczas zapisywania danych do API.");
+      }
     }
 
-    function rolloutStatusLabel(capability) {
-      if (!capability) return "BRAK DANYCH";
-      if (capability.status === "live") return "LIVE";
-      if (capability.status === "canary_required") return "WYMAGA CANARY";
-      if (capability.status === "manual_beta") return "WYMAGA WALIDACJI BETA";
-      if (capability.status === "live_blocked") return "ZABLOKOWANA";
-      if (capability.enabled === false) return "WYŁĄCZONA";
-      return String(capability.status || "BRAK DANYCH").replaceAll("_", " ").toUpperCase();
-    }
+    async function loadUsers() {
+      try {
+        const res = await fetch(`${API_URL}/api/admin/users`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ admin_id: currentUserId })
+        });
+        const data = await res.json();
 
-    function renderRolloutControls() {
-      const host = byId("rollout-grid");
-      if (!host) return;
-      host.replaceChildren();
-      EXCHANGES.filter(item => item.id !== "bitget" && item.id !== "mexc").forEach(item => {
-        const capability = state.capabilities[item.id];
-        const canRelease = Boolean(
-          capability
-          && capability.enabled === true
-          && ["canary_required", "manual_beta"].includes(capability.status)
-        );
-        const card = document.createElement("article");
-        card.className = "rollout-item";
-        const head = document.createElement("div");
-        head.className = "rollout-item-head";
-        const name = document.createElement("strong");
-        name.textContent = item.name;
-        const status = document.createElement("span");
-        status.textContent = rolloutStatusLabel(capability);
-        head.append(name, status);
-        card.append(head);
-
-        if (!canRelease) {
-          const note = document.createElement("p");
-          note.textContent = capability && capability.status === "live"
-            ? "Adapter został już zwolniony."
-            : "Aktywacja globalna nie jest obecnie dostępna.";
-          card.append(note);
-          host.append(card);
-          return;
-        }
-
-        const recordLabel = document.createElement("label");
-        recordLabel.textContent = "ID rekordu zakończonego canary";
-        const recordInput = document.createElement("input");
-        recordInput.type = "number";
-        recordInput.min = "1";
-        recordInput.step = "1";
-        recordInput.placeholder = "np. 42";
-        recordLabel.append(recordInput);
-        card.append(recordLabel);
-
-        let feeSelect = null;
-        if (item.id === "bitunix") {
-          const feeLabel = document.createElement("label");
-          feeLabel.textContent = "Potwierdzona polityka opłat";
-          feeSelect = document.createElement("select");
-          [["deduct_positive","Dodatnią opłatę odejmuj od PnL"],["signed_value","Wartość opłaty ma poprawny znak"]].forEach(([value,label]) => {
-            const option = document.createElement("option");
-            option.value = value;
-            option.textContent = label;
-            feeSelect.append(option);
+        if (data.status === "success") {
+          const tbody = byId("admin-tbody");
+          tbody.innerHTML = "";
+          data.users.forEach(u => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td style="font-family: monospace;">${u.telegram_id}</td>
+              <td>
+                <input type="text" id="name-${u.telegram_id}" value="${u.custom_name}" style="width: 120px; padding: 6px; margin: 0;">
+                <button class="btn-small" onclick="updateName(${u.telegram_id})">Zapisz</button>
+              </td>
+              <td style="color: #aeb7c5;">${u.sub_end}</td>
+              <td>
+                <button class="btn-small ${u.bot_active ? 'btn-red' : ''}" onclick="toggleBot(${u.telegram_id}, ${!u.bot_active})">
+                  ${u.bot_active ? 'Wyłącz bota' : 'Włącz bota'}
+                </button>
+              </td>
+              <td>
+                <button class="btn-small ${u.is_admin ? 'btn-red' : ''}" onclick="toggleAdmin(${u.telegram_id}, ${!u.is_admin})">
+                  ${u.is_admin ? 'Zabierz Admina' : 'Nadaj Admina'}
+                </button>
+              </td>
+            `;
+            tbody.appendChild(tr);
           });
-          feeLabel.append(feeSelect);
-          card.append(feeLabel);
         }
+      } catch (err) {
+        alert("Błąd przy ładowaniu listy z bazy danych.");
+      }
+    }
 
-        const approve = document.createElement("button");
-        approve.type = "button";
-        approve.className = "table-btn";
-        approve.textContent = "Zwolnij globalnie do LIVE";
-        approve.addEventListener("click", async () => {
-          const recordId = Number.parseInt(recordInput.value, 10);
-          if (!Number.isInteger(recordId) || recordId <= 0) {
-            setText("rollout-status", "Podaj poprawne ID zakończonego rekordu canary.");
-            return;
-          }
-          if (!window.confirm("Zwolnić " + item.name + " globalnie do LIVE po sprawdzeniu rekordu " + recordId + "?")) return;
-          approve.disabled = true;
-          try {
-            const payload = {exchange:item.id,canary_record_id:recordId};
-            if (feeSelect) payload.bitunix_fee_policy = feeSelect.value;
-            const result = await adminRequest("/api/admin/approve_exchange_rollout", payload);
-            setText("rollout-status", result.message || item.name + " została zwolniona globalnie do LIVE.");
-            await loadCapabilities();
-            await loadAdminUsers();
-          } catch (error) {
-            setText("rollout-status", error.message || "Nie udało się zwolnić adaptera.");
-          } finally {
-            approve.disabled = false;
-          }
-        });
-        card.append(approve);
-        host.append(card);
+    async function toggleBot(targetUser, isActive) {
+      await fetch(`${API_URL}/api/admin/toggle_bot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ admin_id: currentUserId, target_user: targetUser, active: isActive })
       });
+      loadUsers();
     }
 
-    function normalizeAdminExchangeAccounts(user) {
-      if (!user) return [];
-      const source = Array.isArray(user.exchange_accounts)
-        ? user.exchange_accounts
-        : Array.isArray(user.accounts)
-          ? user.accounts
-          : null;
-      if (source) {
-        const unique = new Map();
-        source.forEach(account => {
-          if (!account || !EXCHANGES.some(item => item.id === account.exchange)) return;
-          unique.set(account.exchange, account);
-        });
-        if (unique.size) return Array.from(unique.values());
-      }
-      const configured = user.credentials_configured === true
-        || user.api_connected === true
-        || Boolean(user.verification_status && user.verification_status !== "not_configured");
-      if (!configured) return [];
-      const exchange = EXCHANGES.some(item => item.id === user.exchange) ? user.exchange : "bitget";
-      return [{
-        exchange:exchange,
-        is_enabled:Boolean(user.bot_active),
-        live_trading_enabled:Boolean(user.api_connected || user.bot_active),
-        credentials_configured:true,
-        api_connected:Boolean(user.api_connected || user.bot_active),
-        verification_status:user.verification_status || "legacy_migrated",
-        leverage:user.leverage,
-        margin:user.margin,
-        max_risk:user.max_risk,
-        margin_mode:user.margin_mode,
-        legacy_fallback:true
-      }];
-    }
-
-    async function loadAdminUsers() {
-      if (!state.isAdmin) return;
-      setText("admin-status","Pobieranie użytkowników…");
-      try {
-        const data = await adminRequest("/api/admin/users",{});
-        renderAdminUsers(Array.isArray(data.users) ? data.users : []);
-        setText("admin-status","");
-      } catch (error) {
-        setText("admin-status",error.message || "Błąd pobierania użytkowników.");
-      }
-    }
-
-    function renderAdminUsers(users) {
-      const body = byId("admin-users");
-      body.replaceChildren();
-      if (!users.length) {
-        const row = document.createElement("tr");
-        const cell = document.createElement("td");
-        cell.colSpan = 10;
-        cell.textContent = "Brak użytkowników do wyświetlenia.";
-        cell.style.textAlign = "center";
-        cell.style.color = "var(--muted)";
-        row.append(cell);
-        body.append(row);
-        return;
-      }
-      users.forEach(user => {
-        const id = String(user.telegram_id);
-        const accounts = normalizeAdminExchangeAccounts(user);
-        const rows = accounts.length ? accounts : [null];
-        const hasAuthoritativeAccounts = (
-          Array.isArray(user.exchange_accounts) && user.exchange_accounts.length > 0
-        ) || (
-          Array.isArray(user.accounts) && user.accounts.length > 0
-        );
-        const nameInput = document.createElement("input");
-        nameInput.className = "admin-name-input";
-        nameInput.value = user.custom_name || "";
-        nameInput.setAttribute("aria-label", "Przypisane imię dla konta " + id);
-        rows.forEach((account, index) => {
-          const row = document.createElement("tr");
-          if (index === 0) {
-            const idCell = document.createElement("td");
-            idCell.className = "admin-id";
-            idCell.rowSpan = rows.length;
-            idCell.textContent = id;
-
-            const nameCell = document.createElement("td");
-            nameCell.rowSpan = rows.length;
-            nameCell.append(nameInput);
-
-            const licenseCell = document.createElement("td");
-            licenseCell.className = "license-cell";
-            licenseCell.rowSpan = rows.length;
-            licenseCell.textContent = adminDate(user.sub_end, "Brak danych");
-            const joined = document.createElement("span");
-            joined.className = "account-meta";
-            joined.textContent = "Dołączenie: " + adminDate(user.join_date, "Przed aktualizacją");
-            licenseCell.append(joined);
-
-            const botCell = document.createElement("td");
-            botCell.rowSpan = rows.length;
-            const botLabel = document.createElement("label");
-            botLabel.className = "switch";
-            const botToggle = document.createElement("input");
-            botToggle.type = "checkbox";
-            botToggle.checked = Boolean(user.bot_active);
-            botToggle.setAttribute("aria-label", "Bot ON/OFF dla konta " + id);
-            const botTrack = document.createElement("span");
-            botTrack.className = "switch-track";
-            botLabel.append(botToggle, botTrack);
-            botCell.append(botLabel);
-            botToggle.addEventListener("change", async () => {
-              botToggle.disabled = true;
-              try {
-                await adminRequest("/api/admin/toggle_bot",{target_user:id,active:botToggle.checked});
-                setText("admin-status","Zmieniono status bota dla " + id + ".");
-                await loadAdminUsers();
-              } catch (error) {
-                botToggle.checked = !botToggle.checked;
-                setText("admin-status",error.message || "Nie udało się zmienić statusu bota.");
-              } finally {
-                botToggle.disabled = false;
-              }
-            });
-
-            const adminCell = document.createElement("td");
-            adminCell.rowSpan = rows.length;
-            const adminLabel = document.createElement("label");
-            adminLabel.className = "switch admin-switch";
-            const adminToggle = document.createElement("input");
-            adminToggle.type = "checkbox";
-            adminToggle.checked = Boolean(user.is_admin || user.is_superadmin);
-            adminToggle.disabled = !state.isSuperAdmin || Boolean(user.is_superadmin);
-            adminToggle.setAttribute("aria-label", "Admin ON/OFF dla konta " + id);
-            adminToggle.title = user.is_superadmin
-              ? "Roli superadministratora nie można wyłączyć w tym panelu"
-              : state.isSuperAdmin ? "" : "Zmiana roli wymaga superadministratora";
-            const adminTrack = document.createElement("span");
-            adminTrack.className = "switch-track";
-            adminLabel.append(adminToggle, adminTrack);
-            adminCell.append(adminLabel);
-            adminToggle.addEventListener("change", async () => {
-              adminToggle.disabled = true;
-              try {
-                await adminRequest("/api/admin/toggle_admin",{target_user:id,is_admin:adminToggle.checked});
-                setText("admin-status","Zmieniono uprawnienia administratora dla " + id + ".");
-                await loadAdminUsers();
-              } catch (error) {
-                adminToggle.checked = !adminToggle.checked;
-                setText("admin-status",error.message || "Nie udało się zmienić uprawnień.");
-              } finally {
-                adminToggle.disabled = !state.isSuperAdmin || Boolean(user.is_superadmin);
-              }
-            });
-
-            row.append(idCell,nameCell,licenseCell,botCell,adminCell);
-          }
-
-          const exchangeCell = document.createElement("td");
-          if (account) {
-            const exchangeItem = exchangeById(account.exchange);
-            const strong = document.createElement("strong");
-            strong.className = "admin-exchange-name";
-            strong.textContent = exchangeItem.name;
-            const meta = document.createElement("span");
-            meta.className = "account-meta";
-            meta.textContent = accountStateLabel(account);
-            exchangeCell.append(strong, meta);
-          } else {
-            exchangeCell.textContent = "Brak konfiguracji";
-            exchangeCell.style.color = "var(--muted)";
-          }
-
-          const verificationCell = document.createElement("td");
-          const verificationStatus = account ? account.verification_status : "not_configured";
-          verificationCell.textContent = verificationLabel(verificationStatus);
-
-          const exchangeToggleCell = document.createElement("td");
-          if (account) {
-            const exchangeLabel = document.createElement("label");
-            exchangeLabel.className = "switch";
-            const exchangeToggle = document.createElement("input");
-            exchangeToggle.type = "checkbox";
-            exchangeToggle.checked = Boolean(account.is_enabled);
-            exchangeToggle.disabled = !hasAuthoritativeAccounts || !account.credentials_configured;
-            exchangeToggle.title = hasAuthoritativeAccounts
-              ? "Niezależny przełącznik " + exchangeById(account.exchange).name
-              : "Legacy Bitget pokazany informacyjnie; migracja API utworzy niezależne konto";
-            const exchangeTrack = document.createElement("span");
-            exchangeTrack.className = "switch-track";
-            exchangeLabel.append(exchangeToggle, exchangeTrack);
-            exchangeToggleCell.append(exchangeLabel);
-            exchangeToggle.addEventListener("change", async () => {
-              exchangeToggle.disabled = true;
-              try {
-                await adminRequest("/api/admin/toggle_exchange",{
-                  target_user:id,
-                  exchange:account.exchange,
-                  active:exchangeToggle.checked
-                });
-                setText("admin-status","Zmieniono " + exchangeById(account.exchange).name + " dla " + id + ".");
-                await loadAdminUsers();
-              } catch (error) {
-                exchangeToggle.checked = !exchangeToggle.checked;
-                setText("admin-status",error.message || "Nie udało się zmienić giełdy.");
-              } finally {
-                exchangeToggle.disabled = !hasAuthoritativeAccounts || !account.credentials_configured;
-              }
-            });
-          } else {
-            exchangeToggleCell.textContent = "—";
-          }
-
-          const approvalCell = document.createElement("td");
-          const approvalRequired = account && ["canary_required","manual_beta"].includes(verificationStatus);
-          if (approvalRequired) {
-            const controls = document.createElement("div");
-            controls.className = "approval-controls";
-            const evidence = document.createElement("input");
-            evidence.placeholder = "Dowód canary / numer logu";
-            evidence.minLength = 8;
-            evidence.maxLength = 512;
-            evidence.setAttribute("aria-label", "Dowód canary " + account.exchange + " dla " + id);
-            controls.append(evidence);
-            let feePolicy = null;
-            if (account.exchange === "bitunix") {
-              feePolicy = document.createElement("select");
-              [["deduct_positive","Opłata dodatnia — odejmij"],["signed_value","Opłata ze znakiem"]].forEach(([value,label]) => {
-                const option = document.createElement("option");
-                option.value = value;
-                option.textContent = label;
-                feePolicy.append(option);
-              });
-              controls.append(feePolicy);
-            }
-            const approve = document.createElement("button");
-            approve.type = "button";
-            approve.className = "table-btn";
-            approve.textContent = "Zatwierdź " + exchangeById(account.exchange).name;
-            approve.disabled = true;
-            evidence.addEventListener("input", () => {
-              approve.disabled = evidence.value.trim().length < 8;
-            });
-            approve.addEventListener("click", async () => {
-              if (!window.confirm("Potwierdzasz zakończony test " + exchangeById(account.exchange).name + " dla konta " + id + "?")) return;
-              approve.disabled = true;
-              try {
-                const payload = {
-                  target_user:id,
-                  exchange:account.exchange,
-                  canary_evidence:evidence.value.trim()
-                };
-                if (feePolicy) payload.bitunix_fee_policy = feePolicy.value;
-                await adminRequest("/api/admin/approve_exchange",payload);
-                setText("admin-status","Zatwierdzono " + exchangeById(account.exchange).name + " dla " + id + ".");
-                await loadAdminUsers();
-              } catch (error) {
-                setText("admin-status",error.message || "Nie udało się zatwierdzić konta.");
-              } finally {
-                approve.disabled = evidence.value.trim().length < 8;
-              }
-            });
-            controls.append(approve);
-            approvalCell.append(controls);
-          } else {
-            approvalCell.textContent = ["canary_verified","manual_verified","verified","legacy_migrated"].includes(verificationStatus)
-              ? "Zatwierdzone"
-              : "—";
-            approvalCell.style.color = "var(--muted)";
-          }
-
-          if (index === 0) {
-            const actionCell = document.createElement("td");
-            actionCell.rowSpan = rows.length;
-            const save = document.createElement("button");
-            save.className = "btn btn-gold btn-small save-name";
-            save.textContent = "Zapisz imię";
-            save.addEventListener("click", async () => {
-              const nextName = nameInput.value.trim();
-              if (!nextName) {
-                setText("admin-status","Imię nie może być puste.");
-                return;
-              }
-              save.disabled = true;
-              try {
-                await adminRequest("/api/admin/update_name",{target_user:id,custom_name:nextName});
-                setText("admin-status","Zapisano imię dla " + id + ".");
-                await loadAdminUsers();
-              } catch (error) {
-                setText("admin-status",error.message || "Błąd zapisu imienia.");
-              } finally {
-                save.disabled = false;
-              }
-            });
-            actionCell.append(save);
-            row.append(exchangeCell,verificationCell,exchangeToggleCell,approvalCell,actionCell);
-          } else {
-            row.append(exchangeCell,verificationCell,exchangeToggleCell,approvalCell);
-          }
-          body.append(row);
-        });
+    async function toggleAdmin(targetUser, isAdminRole) {
+      await fetch(`${API_URL}/api/admin/toggle_admin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ admin_id: currentUserId, target_user: targetUser, is_admin: isAdminRole })
       });
+      loadUsers();
     }
 
-    document.addEventListener("click", event => {
-      const pageButton = event.target.closest("[data-page]");
-      if (pageButton) showPage(pageButton.dataset.page);
-      const scrollButton = event.target.closest("[data-scroll]");
-      if (scrollButton) byId(scrollButton.dataset.scroll).scrollIntoView({behavior:"smooth"});
-      if (event.target.closest("[data-terms]")) byId("terms-dialog").showModal();
-    });
-    byId("exchange-select").addEventListener("change", () => {
-      clearSensitiveFields();
-      updateSelectedExchange();
-      useAccountSettings(byId("exchange-select").value);
-      refreshProfileSummary();
-    });
-    ["margin","leverage","max-risk"].forEach(id => {
-      byId(id).addEventListener("input", refreshProfileSummary);
-    });
-    document.querySelectorAll("[data-toggle-secret]").forEach(button => {
-      button.addEventListener("click", () => {
-        const input = byId(button.dataset.toggleSecret);
-        const show = input.type === "password";
-        input.type = show ? "text" : "password";
-        button.textContent = show ? "Ukryj" : "Pokaż";
-        button.setAttribute("aria-label", (show ? "Ukryj " : "Pokaż ") + (input.id === "api-secret" ? "API Secret" : "Passphrase"));
+    async function updateName(targetUser) {
+      const name = byId(`name-${targetUser}`).value;
+      await fetch(`${API_URL}/api/admin/update_name`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ admin_id: currentUserId, target_user: targetUser, custom_name: name })
       });
-    });
-    byId("advanced-toggle").addEventListener("click", () => {
-      const fields = byId("advanced-fields");
-      const expanded = fields.classList.contains("hidden");
-      fields.classList.toggle("hidden", !expanded);
-      byId("advanced-toggle").setAttribute("aria-expanded", String(expanded));
-      byId("advanced-toggle").textContent = (expanded ? "−" : "+") + " Ustawienia zaawansowane";
-    });
-    byId("copy-referral").addEventListener("click", async () => {
-      const value = byId("referral-value").textContent.trim();
-      if (!value.startsWith("https://")) return;
-      try {
-        await navigator.clipboard.writeText(value);
-        setSave("Link polecający skopiowany.", true);
-      } catch (_) {
-        setSave("Nie udało się skopiować automatycznie. Zaznacz link i skopiuj ręcznie.", false);
-      }
-    });
-    byId("logout-btn").addEventListener("click", logout);
-    byId("refresh-admin").addEventListener("click", loadAdminUsers);
-    byId("close-terms").addEventListener("click", () => byId("terms-dialog").close());
-    byId("accept-terms").addEventListener("click", () => byId("terms-dialog").close());
-
-    async function bootstrap() {
-      renderExchangeCards();
-      renderExchangeSelect();
-      await loadCapabilities();
-      const restored = await restoreSession();
-      if (!restored) ensureTelegramWidget();
+      alert("Imię zaktualizowane poprawnie!");
     }
-
-    bootstrap();
   </script>
 </body>
 </html>
