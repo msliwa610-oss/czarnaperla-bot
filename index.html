@@ -374,6 +374,68 @@
     .save-status.err { color: var(--red); }
     .info-row { display: flex; justify-content: space-between; gap: 15px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 13px; }
     .info-row span:first-child { color: var(--muted); }
+    .connected-exchanges-lead { margin: -6px 0 16px; color: var(--muted); font-size: 12px; }
+    .connected-exchanges-list { display: grid; gap: 11px; }
+    .connected-exchange {
+      padding: 13px;
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: rgba(0,0,0,.22);
+    }
+    .connected-exchange.is-live {
+      border-color: rgba(16,212,154,.32);
+      background: linear-gradient(135deg, rgba(16,212,154,.07), rgba(0,0,0,.22));
+    }
+    .connected-exchange-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .connected-exchange-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 850;
+    }
+    .connected-exchange-name .dot { flex: 0 0 auto; width: 8px; height: 8px; }
+    .connected-exchange-badges { display: flex; justify-content: flex-end; gap: 5px; flex-wrap: wrap; }
+    .account-chip {
+      padding: 3px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 850;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .account-chip.live { border-color: rgba(16,212,154,.38); color: var(--green); }
+    .account-chip.primary { border-color: rgba(243,166,59,.42); color: #ffd08a; }
+    .connected-exchange-status { margin-top: 7px; color: #cdd4dd; font-size: 11px; line-height: 1.45; }
+    .connected-exchange-meta { margin-top: 8px; color: #8994a4; font-size: 10px; }
+    .connected-exchange-action {
+      margin-top: 10px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    .connected-exchanges-empty {
+      padding: 15px;
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
     .instructions ol { margin: 15px 0; padding-left: 22px; }
     .instructions li { margin: 9px 0; color: #d6dbe2; }
     .doc-link { color: var(--blue); }
@@ -621,7 +683,7 @@
             <div class="price-row"><span class="price">0 $</span><span class="price-note">pierwszy miesiąc</span></div>
             <p>Poznaj działanie Czarnej Perły bez opłaty startowej. Następnie 50 $ miesięcznie przez kolejne trzy miesiące.</p>
             <ul>
-              <li>Jedna wybrana obsługiwana giełda</li>
+              <li>Równoległe połączenia obsługiwanych giełd</li>
               <li>Pełne raporty i alerty Telegram</li>
               <li>Konfiguracja ochrony kapitału</li>
               <li>Kapitał przez cały czas pozostaje na Twoim koncie</li>
@@ -636,10 +698,10 @@
             <div class="old-price"><s>1200 $</s><span class="save-pill">Oszczędzasz 400 $</span></div>
             <p>Pełna roczna licencja z priorytetowym uruchomieniem, kontrolą adaptera i wsparciem technicznym.</p>
             <ul>
-              <li>Konfiguracja konta i wybranej giełdy</li>
+              <li>Konfiguracja kont i obsługiwanych giełd</li>
               <li>Test połączenia, uprawnień i zabezpieczeń</li>
               <li>Priorytetowe wsparcie techniczne</li>
-              <li>Pomoc przy migracji między obsługiwanymi giełdami</li>
+              <li>Pomoc przy podłączaniu kolejnych obsługiwanych giełd</li>
             </ul>
             <button class="btn btn-gold" data-terms>Zarezerwuj pakiet roczny</button>
           </article>
@@ -711,8 +773,13 @@
             <h3>Twoja licencja</h3>
             <div class="info-row"><span>Plan</span><strong id="plan-value">Brak danych</strong></div>
             <div class="info-row"><span>Ważność</span><strong id="license-value">Brak danych</strong></div>
-            <div class="info-row"><span>Giełda</span><strong id="exchange-value">Brak danych</strong></div>
-            <div class="info-row"><span>Weryfikacja</span><strong id="verify-value">Brak danych</strong></div>
+            <div class="info-row"><span>Giełdy w panelu</span><strong id="exchange-value">Brak danych</strong></div>
+            <div class="info-row"><span>Połączenia API</span><strong id="verify-value">Brak danych</strong></div>
+          </article>
+          <article class="card panel">
+            <h3>Podłączone giełdy</h3>
+            <p class="connected-exchanges-lead">Każda giełda działa jako osobne konto wykonawcze w ramach jednego panelu.</p>
+            <div id="connected-exchanges" class="connected-exchanges-list" aria-live="polite"></div>
           </article>
           <article class="card panel">
             <h3>Ochrona kapitału</h3>
@@ -792,11 +859,113 @@
       isAdmin: false,
       isSuperAdmin: false,
       multiExchange: false,
-      capabilities: {}
+      capabilities: {},
+      exchangeAccounts: []
     };
 
     const byId = id => document.getElementById(id);
     const exchangeById = id => EXCHANGES.find(item => item.id === id) || EXCHANGES[0];
+    const DEFAULT_RISK_SETTINGS = Object.freeze({margin:4, leverage:20, max_risk:20, margin_mode:"isolated"});
+    const WINDOWS_1252_BYTES = Object.freeze({
+      "€":0x80,"‚":0x82,"ƒ":0x83,"„":0x84,"…":0x85,"†":0x86,"‡":0x87,
+      "ˆ":0x88,"‰":0x89,"Š":0x8A,"‹":0x8B,"Œ":0x8C,"Ž":0x8E,
+      "‘":0x91,"’":0x92,"“":0x93,"”":0x94,"•":0x95,"–":0x96,"—":0x97,
+      "˜":0x98,"™":0x99,"š":0x9A,"›":0x9B,"œ":0x9C,"ž":0x9E,"Ÿ":0x9F
+    });
+
+    function cleanDisplayText(value) {
+      let text = value == null ? "" : String(value);
+      if (/[ÃÂÄÅ]/.test(text) && typeof TextDecoder !== "undefined") {
+        try {
+          const bytes = Uint8Array.from(Array.from(text), char => {
+            if (Object.prototype.hasOwnProperty.call(WINDOWS_1252_BYTES, char)) return WINDOWS_1252_BYTES[char];
+            const code = char.charCodeAt(0);
+            if (code <= 255) return code;
+            throw new Error("Znak spoza Windows-1252");
+          });
+          const decoded = new TextDecoder("utf-8", {fatal:true}).decode(bytes);
+          if (decoded && !decoded.includes("\uFFFD")) text = decoded;
+        } catch (_) {
+          /* Tekst nie jest błędnie zdekodowanym UTF-8 — pozostawiamy go bez zmian. */
+        }
+      }
+      return text
+        .replace(/uprawnie\uFFFD+/gi, "uprawnień")
+        .replace(/WŁ\uFFFD+cz/g, "Włącz")
+        .replace(/wypŁat/g, "wypłat")
+        .replace(/transfer\uFFFD+w/gi, "transferów")
+        .replace(/udaŁo/g, "udało")
+        .normalize("NFC");
+    }
+
+    function asBoolean(value) {
+      return value === true || value === 1 || value === "1";
+    }
+
+    function asFiniteNumber(value, fallback) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function normalizeExchangeAccounts(data) {
+      const source = Array.isArray(data && data.exchange_accounts)
+        ? data.exchange_accounts
+        : Array.isArray(data && data.accounts)
+          ? data.accounts
+          : [];
+      const rows = source.length ? source : (data && data.exchange ? [{
+        exchange:data.exchange,
+        display_name:exchangeById(data.exchange).name,
+        api_connected:data.api_connected,
+        credentials_configured:data.credentials_configured != null ? data.credentials_configured : data.api_connected,
+        verification_status:data.verification_status,
+        verification_message:data.verification_message,
+        is_enabled:data.is_enabled != null ? data.is_enabled : data.api_connected,
+        live_trading_enabled:data.live_trading_enabled != null ? data.live_trading_enabled : data.api_connected,
+        is_primary:true,
+        leverage:data.leverage,
+        margin:data.margin,
+        max_risk:data.max_risk,
+        margin_mode:data.margin_mode
+      }] : []);
+      const unique = new Map();
+      rows.forEach(raw => {
+        if (!raw || typeof raw !== "object") return;
+        const exchange = String(raw.exchange || raw.id || "").trim().toLowerCase();
+        if (!exchange || unique.has(exchange)) return;
+        const known = EXCHANGES.find(item => item.id === exchange);
+        unique.set(exchange, {
+          exchange,
+          display_name:cleanDisplayText(raw.display_name || (known ? known.name : exchange.toUpperCase())),
+          api_connected:asBoolean(raw.api_connected),
+          credentials_configured:asBoolean(raw.credentials_configured),
+          verification_status:String(raw.verification_status || "not_configured"),
+          verification_message:cleanDisplayText(raw.verification_message || ""),
+          is_enabled:asBoolean(raw.is_enabled),
+          live_trading_enabled:asBoolean(raw.live_trading_enabled),
+          is_primary:asBoolean(raw.is_primary),
+          leverage:asFiniteNumber(raw.leverage, DEFAULT_RISK_SETTINGS.leverage),
+          margin:asFiniteNumber(raw.margin, DEFAULT_RISK_SETTINGS.margin),
+          max_risk:asFiniteNumber(raw.max_risk, DEFAULT_RISK_SETTINGS.max_risk),
+          margin_mode:String(raw.margin_mode || DEFAULT_RISK_SETTINGS.margin_mode).toLowerCase()
+        });
+      });
+      return Array.from(unique.values());
+    }
+
+    function accountForExchange(exchange) {
+      return state.exchangeAccounts.find(account => account.exchange === exchange) || null;
+    }
+
+    function accountIsConfigured(account) {
+      return Boolean(account && (
+        account.credentials_configured
+        || account.api_connected
+        || account.is_enabled
+        || account.live_trading_enabled
+        || (account.verification_status && account.verification_status !== "not_configured")
+      ));
+    }
 
     function apiHeaders(extra) {
       const headers = Object.assign({Accept:"application/json"}, extra || {});
@@ -818,14 +987,16 @@
       state.session = "";
       state.isAdmin = false;
       state.isSuperAdmin = false;
+      state.exchangeAccounts = [];
       sessionStorage.removeItem("cp_session");
       byId("admin-nav").classList.add("hidden");
       clearSensitiveFields();
+      renderConnectedExchanges();
     }
 
     function setText(id, value) {
       const node = byId(id);
-      if (node) node.textContent = value == null ? "" : String(value);
+      if (node) node.textContent = cleanDisplayText(value);
     }
 
     function showPage(name) {
@@ -920,6 +1091,89 @@
         list.append(li);
       });
       byId("docs-link").href = item.docs;
+      const account = accountForExchange(item.id);
+      const settings = account || DEFAULT_RISK_SETTINGS;
+      byId("margin").value = asFiniteNumber(settings.margin, DEFAULT_RISK_SETTINGS.margin);
+      byId("leverage").value = asFiniteNumber(settings.leverage, DEFAULT_RISK_SETTINGS.leverage);
+      byId("max-risk").value = asFiniteNumber(settings.max_risk, DEFAULT_RISK_SETTINGS.max_risk);
+      const marginMode = String(settings.margin_mode || DEFAULT_RISK_SETTINGS.margin_mode).toLowerCase();
+      byId("margin-mode").value = marginMode === "cross" ? "cross" : "isolated";
+    }
+
+    function connectedStatusText(account) {
+      if (account.api_connected && account.live_trading_enabled) return "Połączenie API aktywne — handel LIVE włączony.";
+      if (account.api_connected) return "Połączenie API zweryfikowane; handel LIVE oczekuje na aktywację.";
+      if (account.credentials_configured) {
+        return account.verification_message
+          || ("Klucze zapisane — " + verificationLabel(account.verification_status) + ".");
+      }
+      return "Brak zapisanych kluczy API.";
+    }
+
+    function renderConnectedExchanges() {
+      const host = byId("connected-exchanges");
+      if (!host) return;
+      host.replaceChildren();
+      const accounts = state.exchangeAccounts.filter(account => (
+        accountIsConfigured(account) || account.is_enabled || account.live_trading_enabled || account.is_primary
+      ));
+      if (!accounts.length) {
+        const empty = document.createElement("div");
+        empty.className = "connected-exchanges-empty";
+        empty.textContent = "Nie podłączono jeszcze żadnej giełdy.";
+        host.append(empty);
+        return;
+      }
+      accounts.forEach(account => {
+        const row = document.createElement("article");
+        row.className = "connected-exchange" + (account.api_connected ? " is-live" : "");
+
+        const head = document.createElement("div");
+        head.className = "connected-exchange-head";
+        const name = document.createElement("div");
+        name.className = "connected-exchange-name";
+        const dot = document.createElement("i");
+        dot.className = "dot" + (account.api_connected ? " ok" : "");
+        const label = document.createElement("span");
+        label.textContent = account.display_name;
+        name.append(dot, label);
+
+        const badges = document.createElement("div");
+        badges.className = "connected-exchange-badges";
+        if (account.is_primary) {
+          const primary = document.createElement("span");
+          primary.className = "account-chip primary";
+          primary.textContent = "Główna";
+          badges.append(primary);
+        }
+        const live = document.createElement("span");
+        live.className = "account-chip" + (account.live_trading_enabled ? " live" : "");
+        live.textContent = account.live_trading_enabled ? "LIVE" : verificationLabel(account.verification_status);
+        badges.append(live);
+        head.append(name, badges);
+
+        const status = document.createElement("div");
+        status.className = "connected-exchange-status";
+        status.textContent = connectedStatusText(account);
+
+        const meta = document.createElement("div");
+        meta.className = "connected-exchange-meta";
+        meta.textContent = "Margin " + account.margin + " USDT • dźwignia " + account.leverage + "x • "
+          + (account.margin_mode === "cross" ? "Cross" : "Isolated");
+
+        const action = document.createElement("button");
+        action.type = "button";
+        action.className = "connected-exchange-action";
+        action.textContent = "Edytuj ustawienia " + account.display_name;
+        action.addEventListener("click", () => {
+          clearSensitiveFields();
+          byId("exchange-select").value = account.exchange;
+          updateSelectedExchange();
+          byId("exchange-form").scrollIntoView({behavior:"smooth", block:"start"});
+        });
+        row.append(head, status, meta, action);
+        host.append(row);
+      });
     }
 
     async function readJson(response) {
@@ -927,7 +1181,7 @@
       if (!type.includes("application/json")) throw new Error("Serwer zwrócił nieprawidłową odpowiedź (" + response.status + ").");
       const data = await response.json();
       if (!response.ok) {
-        const error = new Error(data.message || data.detail || "Błąd HTTP " + response.status);
+        const error = new Error(cleanDisplayText(data.message || data.detail || "Błąd HTTP " + response.status));
         error.status = response.status;
         throw error;
       }
@@ -990,13 +1244,14 @@
       }
     };
 
-    async function loadDashboard() {
+    async function loadDashboard(preferredExchange) {
       const response = await fetch(API_BASE_URL + "/api/dashboard/me", {
         credentials:"include",
         headers:apiHeaders()
       });
       const data = await readJson(response);
       state.dashboard = data;
+      state.exchangeAccounts = normalizeExchangeAccounts(data);
       state.telegramUser = state.telegramUser || {id:String(data.telegram_id)};
       state.isAdmin = data.is_admin === true;
       state.isSuperAdmin = data.is_superadmin === true;
@@ -1007,15 +1262,43 @@
       setText("welcome-text", "Witaj, " + (data.custom_name || data.username || "Inwestor") + ".");
       setText("plan-value", data.plan_name || "Brak aktywnego planu");
       setText("license-value", formatTimeLeft(data.subscription_end_date));
-      setText("exchange-value", exchangeById(data.exchange).name);
-      setText("verify-value", verificationLabel(data.verification_status));
-      if (data.margin != null) byId("margin").value = data.margin;
-      if (data.leverage != null) byId("leverage").value = data.leverage;
-      if (data.max_risk != null) byId("max-risk").value = data.max_risk;
-      if (data.margin_mode) byId("margin-mode").value = data.margin_mode;
-      if (data.exchange && exchangeById(data.exchange)) byId("exchange-select").value = data.exchange;
+      const configuredAccounts = state.exchangeAccounts.filter(accountIsConfigured);
+      setText(
+        "exchange-value",
+        configuredAccounts.length
+          ? configuredAccounts.map(account => account.display_name).join(" + ")
+          : "Brak podłączonych"
+      );
+      const connectedCount = configuredAccounts.filter(account => account.api_connected).length;
+      setText(
+        "verify-value",
+        configuredAccounts.length
+          ? connectedCount + "/" + configuredAccounts.length + " połączone"
+          : "Brak konfiguracji"
+      );
+      const primaryAccount = state.exchangeAccounts.find(account => account.is_primary);
+      const selectedExchange = String(
+        preferredExchange
+        || (primaryAccount && primaryAccount.exchange)
+        || data.exchange
+        || byId("exchange-select").value
+        || "bitget"
+      ).toLowerCase();
+      if (EXCHANGES.some(item => item.id === selectedExchange && canSelect(item))) {
+        byId("exchange-select").value = selectedExchange;
+      }
       updateSelectedExchange();
-      setConnection("success", data.api_connected ? "API połączone" : "Zalogowano — brak kluczy API");
+      renderConnectedExchanges();
+      if (connectedCount > 0) {
+        setConnection(
+          "success",
+          configuredAccounts.length > 1
+            ? connectedCount + " z " + configuredAccounts.length + " giełd połączone"
+            : configuredAccounts[0].display_name + " — API połączone"
+        );
+      } else {
+        setConnection("success", configuredAccounts.length ? "Zalogowano — API oczekuje na weryfikację" : "Zalogowano — brak kluczy API");
+      }
     }
 
     async function restoreSession() {
@@ -1044,7 +1327,7 @@
 
     function setSave(text, ok) {
       const box = byId("save-status");
-      box.textContent = text;
+      box.textContent = cleanDisplayText(text);
       box.className = "save-status " + (ok ? "ok" : "err");
     }
 
@@ -1125,7 +1408,7 @@
         byId("api-key").value = "";
         byId("api-secret").value = "";
         byId("api-passphrase").value = "";
-        await loadDashboard();
+        await loadDashboard(item.id);
         setSave(result.message || item.name + ": ustawienia zapisane i przekazane do weryfikacji.", true);
       } catch (error) {
         setSave(error.message || "Serwer odrzucił ustawienia.", false);
